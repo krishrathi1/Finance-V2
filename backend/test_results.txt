@@ -1,0 +1,12 @@
+\n--- Testing Connections based on .env ---
+[FAILED] PostgreSQL: Connection failed - password authentication failed for user "ffa"
+[FAILED] Redis: Connection failed - Error 22 connecting to localhost:6379. The remote computer refused the network connection.
+[SUCCESS] Polygon API: Connected successfully (Status: 200)
+[FAILED] Financial Modeling Prep: Authentication failed (Status: 403) - Your API key might be invalid or expired.
+[SUCCESS] News API: Connected successfully (Status: 200)
+[WARNING] Gemini API: Connected but returned status 404. Response: {
+  "error": {
+    "code": 404,
+    "message": "models/gemini-1.5-flash is not found for API version
+[SUCCESS] Yahoo Finance: Connected successfully (Status: 200)
+-------------------------------------------\n

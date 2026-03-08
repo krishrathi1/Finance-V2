@@ -1,0 +1,8 @@
+{
+  "scripts": {
+    "dev": "uvicorn app.main:app --reload"
+  },
+  "dependencies": {
+    "sqlite3": "^5.1.7"
+  }
+}

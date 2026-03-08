@@ -1,0 +1,27 @@
+
+> financial-forensics-frontend@0.1.0 build
+> next build
+
+  Γû▓ Next.js 14.2.31
+  - Environments: .env.local
+
+   Creating an optimized production build ...
+Failed to compile.
+
+./components/sections/price-sidebar.tsx + 9 modules
+Unexpected end of JSON input
+
+./components/ui/tooltip.tsx + 13 modules
+Unexpected end of JSON input
+
+./node_modules/recharts/es6/component/Text.js + 1 modules
+Unexpected end of JSON input
+
+./node_modules/recharts/es6/state/selectors/axisSelectors.js + 85 modules
+Unexpected end of JSON input
+
+./node_modules/framer-motion/dist/es/render/components/motion/proxy.mjs + 249 modules
+Unexpected end of JSON input
+
+
+> Build failed because of webpack errors

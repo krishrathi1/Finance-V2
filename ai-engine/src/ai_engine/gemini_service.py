@@ -1,0 +1,97 @@
+import json
+from typing import Any
+
+import httpx
+
+
+class GeminiService:
+    def __init__(self, api_key: str, model: str = "gemini-1.5-flash") -> None:
+        self.api_key = api_key
+        self.model = model
+        self.base_url = "https://generativelanguage.googleapis.com/v1beta/models"
+        self.timeout = httpx.Timeout(25.0, connect=5.0)
+
+    async def chat(self, symbol: str, question: str, context: dict[str, Any]) -> str:
+        prompt = self._build_chat_prompt(symbol=symbol, question=question, context=context)
+        return await self._generate(prompt)
+
+    async def generate_report(self, symbol: str, context: dict[str, Any]) -> str:
+        prompt = self._build_report_prompt(symbol=symbol, context=context)
+        return await self._generate(prompt)
+
+    async def _generate(self, prompt: str) -> str:
+        url = f"{self.base_url}/{self.model}:generateContent"
+        params = {"key": self.api_key}
+        payload = {"contents": [{"parts": [{"text": prompt}]}]}
+
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            response = await client.post(url, params=params, json=payload)
+            response.raise_for_status()
+            data = response.json()
+
+        candidates = data.get("candidates", [])
+        if not candidates:
+            return "No response generated."
+        parts = candidates[0].get("content", {}).get("parts", [])
+        text = "".join(part.get("text", "") for part in parts)
+        return text.strip() or "No response generated."
+
+    def _build_chat_prompt(self, symbol: str, question: str, context: dict[str, Any]) -> str:
+        compact_context = json.dumps(
+            {
+                "companyName": context.get("companyName"),
+                "symbol": context.get("symbol"),
+                "sector": context.get("sector"),
+                "metrics": context.get("metrics"),
+                "smartScore": context.get("smartScore"),
+                "riskScore": context.get("riskScore"),
+                "technicals": context.get("technicals"),
+                "recentNews": context.get("news", [])[:5],
+                "financials": {
+                    "quarterly": context.get("financials", {}).get("quarterly", [])[:6],
+                    "yearly": context.get("financials", {}).get("yearly", [])[:5],
+                },
+            }
+        )
+        return (
+            "You are Financial Forensics AI, a senior Indian stock market analyst.\n"
+            "Use concise, factual language and avoid investment guarantees.\n"
+            f"Stock symbol: {symbol}\n"
+            f"Question: {question}\n"
+            f"Context JSON: {compact_context}\n\n"
+            "Return:\n"
+            "1) Direct answer\n"
+            "2) Why (financial + technical + sentiment)\n"
+            "3) Key risks\n"
+            "4) Suggested next checks"
+        )
+
+    def _build_report_prompt(self, symbol: str, context: dict[str, Any]) -> str:
+        compact_context = json.dumps(
+            {
+                "companyName": context.get("companyName"),
+                "symbol": context.get("symbol"),
+                "sector": context.get("sector"),
+                "profile": context.get("profile"),
+                "metrics": context.get("metrics"),
+                "riskScore": context.get("riskScore"),
+                "smartScore": context.get("smartScore"),
+                "news": context.get("news", [])[:8],
+                "financials": context.get("financials"),
+                "shareholding": context.get("shareholding"),
+            }
+        )
+        return (
+            "Generate a professional Indian equity research note in markdown.\n"
+            f"Symbol: {symbol}\n"
+            f"Data: {compact_context}\n\n"
+            "Use sections:\n"
+            "1. Company overview\n"
+            "2. Industry and positioning\n"
+            "3. Revenue growth trends\n"
+            "4. Profit trends\n"
+            "5. Risk factors\n"
+            "6. Valuation summary\n"
+            "7. AI investment outlook\n"
+            "Keep it neutral and analytical."
+        )

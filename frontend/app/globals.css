@@ -1,0 +1,70 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: 225 40% 97%;
+  --panel: 225 35% 100%;
+  --border: 226 24% 83%;
+  --text: 226 36% 16%;
+  --muted: 227 15% 44%;
+  --accent: 26 90% 58%;
+  --success: 146 65% 42%;
+  --danger: 4 74% 56%;
+}
+
+.dark {
+  --bg: 228 33% 13%;
+  --panel: 227 33% 18%;
+  --border: 223 29% 30%;
+  --text: 220 35% 95%;
+  --muted: 219 15% 71%;
+  --accent: 29 86% 61%;
+  --success: 146 72% 56%;
+  --danger: 4 81% 61%;
+}
+
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 5rem;
+}
+
+* {
+  @apply border-border;
+}
+
+body {
+  @apply bg-bg text-text antialiased;
+  background-image:
+    radial-gradient(circle at 0% 0%, rgba(255, 166, 72, 0.1) 0, transparent 35%),
+    radial-gradient(circle at 100% 0%, rgba(60, 173, 255, 0.08) 0, transparent 30%);
+}
+
+.glass {
+  backdrop-filter: blur(10px);
+}
+
+.ticker-shell {
+  overflow: hidden;
+  position: relative;
+}
+
+.ticker-track {
+  display: inline-flex;
+  min-width: max-content;
+  white-space: nowrap;
+  animation: ticker-scroll 32s linear infinite;
+}
+
+.ticker-shell:hover .ticker-track {
+  animation-play-state: paused;
+}
+
+@keyframes ticker-scroll {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}

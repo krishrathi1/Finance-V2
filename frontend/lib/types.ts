@@ -1,0 +1,157 @@
+export type PricePoint = {
+  date: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+};
+
+export type DashboardData = {
+  symbol: string;
+  companyName: string;
+  exchange: string;
+  sector: string;
+  profile: {
+    incorporationYear: number;
+    headquarters: string;
+    website: string;
+    description: string;
+    chairman: string;
+    previousName: string;
+  };
+  price: {
+    cmp: number;
+    change: number;
+    changePercent: number;
+    currency: string;
+    fiftyTwoWeekLow: number;
+    fiftyTwoWeekHigh: number;
+    aiTarget: number;
+    history: PricePoint[];
+    intraday?: PricePoint[];
+  };
+  metrics: Record<string, number | null>;
+  smartScore: {
+    score: number;
+    maxScore: number;
+    dimensions: Record<string, number>;
+    label: string;
+    explanation: string;
+  };
+  riskScore: {
+    score: number;
+    maxScore: number;
+    components: Record<string, number>;
+    label: string;
+    explanation: string;
+  };
+  returnsSummary: Array<{ label: string; value: number | null }>;
+  returnsHeatmap: Array<Record<string, number | null>>;
+  technicals: {
+    rsi14: number;
+    macd: number;
+    ema20: number;
+    ema50: number;
+    trend: string;
+    pivotLevels: Record<string, number>;
+  };
+  financials: {
+    quarterly: Array<{ period: string; revenue: number; profit: number }>;
+    quarterlyStandalone?: Array<{ period: string; revenue: number; profit: number }>;
+    quarterlyConsolidated?: Array<{ period: string; revenue: number; profit: number }>;
+    quarterlyDetailedStandalone?: QuarterlyDetailedPoint[];
+    quarterlyDetailedConsolidated?: QuarterlyDetailedPoint[];
+    yearly: Array<{ period: string; revenue: number; profit: number; assets: number; cashFlow: number }>;
+    incomeStatement: Array<Record<string, string | number>>;
+    balanceSheet: Array<Record<string, string | number>>;
+    cashFlow: Array<Record<string, string | number>>;
+  };
+  corporateActions: {
+    boardMeetings: ActionRow[];
+    dividends: ActionRow[];
+    bonusIssues: ActionRow[];
+    stockSplits: ActionRow[];
+    rightsIssues: ActionRow[];
+    agmEgm: ActionRow[];
+    bulkDeals: ActionRow[];
+    blockDeals: ActionRow[];
+    insiderTrades: ActionRow[];
+  };
+  documents: {
+    annualReports: DocRow[];
+    investorPresentations: DocRow[];
+    creditRatings: DocRow[];
+    exchangeFilings: DocRow[];
+  };
+  shareholding: {
+    quarter: string;
+    promoters: number;
+    fii: number;
+    dii: number;
+    public: number;
+  };
+  competitors: Array<{ name: string; marketCap: number; pe: number; pb: number; roe: number }>;
+  news: NewsItem[];
+};
+
+export type ActionRow = {
+  date: string;
+  client: string;
+  orderType: string;
+  agenda?: string;
+  announcementDate?: string;
+  type?: string;
+  exDate?: string;
+  recordDate?: string;
+  dividendAmount?: number | null;
+  dividendPercent?: number | null;
+  bonusRatio?: string;
+  splitRatio?: string;
+  rightsRatio?: string;
+  details?: string;
+  quantity: string | number;
+  price: string | number;
+  exchange: string;
+  transactionType?: string;
+};
+
+export type DocRow = { title: string; url: string };
+
+export type NewsItem = {
+  title: string;
+  source: string;
+  publishedAt: string;
+  url: string;
+  sentimentScore: number;
+  summary: string;
+};
+
+export type QuarterlyDetailedPoint = {
+  period: string;
+  totalRevenue?: number | null;
+  totalRevenueGrowthPct?: number | null;
+  interestEarned?: number | null;
+  otherIncome?: number | null;
+  expenses?: number | null;
+  interestExpended?: number | null;
+  operatingExpenses?: number | null;
+  netInterestIncome?: number | null;
+  niGrowthPct?: number | null;
+  operatingProfit?: number | null;
+  opmPct?: number | null;
+  depreciations?: number | null;
+  profitBeforeTax?: number | null;
+  tax?: number | null;
+  taxPct?: number | null;
+  netProfit?: number | null;
+  netProfitGrowthPct?: number | null;
+  netProfitMarginPct?: number | null;
+  netProfitMarginGrowthPct?: number | null;
+  basicEps?: number | null;
+  dilutedEps?: number | null;
+  grossNpa?: number | null;
+  netNpa?: number | null;
+  grossNpaIsPercent?: boolean;
+  netNpaIsPercent?: boolean;
+};
