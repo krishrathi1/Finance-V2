@@ -1,4 +1,4 @@
-# Financial Forensics AI
+ # Financial Forensics AI
 
 AI-powered Indian stock research platform built with Next.js 14 + FastAPI + PostgreSQL + Redis + Gemini.
 
