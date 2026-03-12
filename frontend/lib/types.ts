@@ -77,6 +77,7 @@ export type DashboardData = {
     quarterlyConsolidated?: Array<{ period: string; revenue: number; profit: number }>;
     quarterlyDetailedStandalone?: QuarterlyDetailedPoint[];
     quarterlyDetailedConsolidated?: QuarterlyDetailedPoint[];
+    growthSnapshot?: FinancialGrowthSnapshot;
     yearly: Array<{ period: string; revenue: number; profit: number; assets: number; cashFlow: number }>;
     incomeStatement: Array<Record<string, string | number>>;
     balanceSheet: Array<Record<string, string | number>>;
@@ -106,6 +107,7 @@ export type DashboardData = {
     fii: number;
     dii: number;
     public: number;
+    history?: ShareholdingPoint[];
   };
   brokerageResearch?: {
     source: string;
@@ -199,4 +201,23 @@ export type QuarterlyDetailedPoint = {
   netNpa?: number | null;
   grossNpaIsPercent?: boolean;
   netNpaIsPercent?: boolean;
+};
+
+export type FinancialGrowthSnapshot = {
+  basis: "consolidated" | "standalone";
+  periods: Array<{
+    label: string;
+    metrics: Array<{
+      label: string;
+      value: number | null;
+    }>;
+  }>;
+};
+
+export type ShareholdingPoint = {
+  quarter: string;
+  promoters: number;
+  fii: number;
+  dii: number;
+  public: number;
 };

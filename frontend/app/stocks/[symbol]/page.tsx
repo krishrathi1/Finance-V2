@@ -159,6 +159,7 @@ export default async function StockDetailsPage({ params }: Props) {
 
           <section id="financials">
             <FinancialsSection
+              growthSnapshot={data.financials.growthSnapshot}
               quarterly={data.financials.quarterly}
               yearly={data.financials.yearly}
               incomeStatement={data.financials.incomeStatement}
@@ -174,6 +175,7 @@ export default async function StockDetailsPage({ params }: Props) {
               fii={data.shareholding.fii}
               dii={data.shareholding.dii}
               publicHolding={data.shareholding.public}
+              history={data.shareholding.history}
             />
           </section>
 

@@ -1,6 +1,7 @@
 import asyncio
 from email.utils import parsedate_to_datetime
 from html import unescape
+from io import StringIO
 import json
 import math
 import re
@@ -11,6 +12,7 @@ from urllib.parse import quote_plus, urlparse
 from xml.etree import ElementTree as ET
 
 import httpx
+import pandas as pd
 import requests
 from tenacity import retry, stop_after_attempt, wait_exponential
 
@@ -51,6 +53,7 @@ class MarketDataProviders:
         self._trendlyne_equity_map_loaded_at: float = 0.0
         self._trendlyne_bulk_block_cache: dict[str, tuple[float, dict[str, list[dict[str, Any]]] | None]] = {}
         self._trendlyne_financials_cache: dict[str, tuple[float, dict[str, Any] | None]] = {}
+        self._trendlyne_shareholding_cache: dict[str, tuple[float, dict[str, Any] | None]] = {}
 
     @retry(stop=stop_after_attempt(1), wait=wait_exponential(multiplier=0.2, min=0.2, max=1.0))
     async def _get(self, url: str, params: dict[str, Any] | None = None, headers: dict[str, str] | None = None) -> Any:
@@ -612,6 +615,101 @@ class MarketDataProviders:
     async def get_trendlyne_financials(self, symbol: str) -> dict[str, Any] | None:
         return await asyncio.to_thread(self._get_trendlyne_financials_sync, symbol)
 
+    async def get_trendlyne_shareholding(self, symbol: str) -> dict[str, Any] | None:
+        return await asyncio.to_thread(self._get_trendlyne_shareholding_sync, symbol)
+
+    def _get_trendlyne_shareholding_sync(self, symbol: str) -> dict[str, Any] | None:
+        key = symbol.replace(".NS", "").replace(".BO", "").strip().upper()
+        if not key:
+            return None
+
+        now = time.time()
+        cached = self._trendlyne_shareholding_cache.get(key)
+        if cached and now - cached[0] < 900:
+            return cached[1]
+
+        meta = self._resolve_trendlyne_equity_meta(key)
+        if not meta:
+            self._trendlyne_shareholding_cache[key] = (now, None)
+            return None
+
+        stock_id, slug = meta
+        page_url = f"https://trendlyne.com/equity/share-holding/{stock_id}/{key}/{slug}/"
+        try:
+            response = requests.get(
+                page_url,
+                headers={**WEB_PAGE_HEADERS, "referer": "https://trendlyne.com/"},
+                timeout=12,
+            )
+            response.raise_for_status()
+            parsed = self._parse_trendlyne_shareholding_page(response.text)
+            self._trendlyne_shareholding_cache[key] = (now, parsed)
+            return parsed
+        except Exception:
+            return cached[1] if cached else None
+
+    def _parse_trendlyne_shareholding_page(self, html: str) -> dict[str, Any] | None:
+        try:
+            tables = pd.read_html(StringIO(html))
+        except Exception:
+            return None
+
+        if not tables:
+            return None
+
+        summary_table = None
+        for table in tables:
+            columns = [str(col).strip() for col in getattr(table, "columns", [])]
+            if columns and columns[0].lower() == "summary":
+                summary_table = table
+                break
+
+        if summary_table is None or summary_table.empty:
+            return None
+
+        columns = [str(col).strip() for col in summary_table.columns]
+        if len(columns) < 2:
+            return None
+        summary_table.columns = columns
+
+        metric_map = {
+            "promoter": "promoters",
+            "promoters": "promoters",
+            "fii": "fii",
+            "dii": "dii",
+            "public": "public",
+        }
+
+        def parse_pct(value: Any) -> float:
+            text = str(value or "").replace("%", "").replace(",", "").strip()
+            numeric = self._to_float(text)
+            return round(numeric or 0.0, 2)
+
+        quarter_columns = columns[1:]
+        history: list[dict[str, Any]] = []
+        for quarter in quarter_columns:
+            entry = {"quarter": quarter, "promoters": 0.0, "fii": 0.0, "dii": 0.0, "public": 0.0}
+            for _, row in summary_table.iterrows():
+                label = str(row.iloc[0] or "").strip().lower()
+                mapped = metric_map.get(label)
+                if not mapped:
+                    continue
+                entry[mapped] = parse_pct(row.get(quarter))
+            history.append(entry)
+
+        if not history:
+            return None
+
+        latest = history[0]
+        return {
+            "quarter": latest["quarter"],
+            "promoters": latest["promoters"],
+            "fii": latest["fii"],
+            "dii": latest["dii"],
+            "public": latest["public"],
+            "history": history,
+        }
+
     def _get_trendlyne_financials_sync(self, symbol: str) -> dict[str, Any] | None:
         key = symbol.replace(".NS", "").replace(".BO", "").strip().upper()
         if not key:
@@ -664,6 +762,8 @@ class MarketDataProviders:
 
         quarterly_order = body.get("quarterlyOrder")
         quarterly_dump = body.get("quarterlyDataDump")
+        annual_order = body.get("annualOrder")
+        annual_dump = body.get("annualDataDump")
         if not isinstance(quarterly_order, list) or not isinstance(quarterly_dump, dict):
             return None
 
@@ -671,6 +771,7 @@ class MarketDataProviders:
         if not latest_four:
             return None
         selected_periods = list(reversed(latest_four))
+        selected_annual_periods = list(reversed([str(period) for period in annual_order[:6] if period])) if isinstance(annual_order, list) else []
 
         def period_label(period_text: str) -> str:
             for fmt in ("%b %Y", "%B %Y"):
@@ -743,8 +844,36 @@ class MarketDataProviders:
 
             return summary_rows, detailed_rows
 
+        def parse_annual_mode(mode_key: str) -> list[dict[str, Any]]:
+            if not isinstance(annual_dump, dict):
+                return []
+
+            mode_rows = annual_dump.get(mode_key)
+            if not isinstance(mode_rows, dict):
+                return []
+
+            annual_rows: list[dict[str, Any]] = []
+            for raw_period in selected_annual_periods:
+                raw = mode_rows.get(raw_period)
+                if not isinstance(raw, dict):
+                    continue
+
+                annual_rows.append(
+                    {
+                        "period": period_label(raw_period),
+                        "totalRevenue": as_float(raw, "TOTAL_SR_A", "SR_A", "TotalOperatingRevenues_A"),
+                        "netProfit": as_float(raw, "NP_A", "PAT_A"),
+                        "financingProfit": as_float(raw, "CFA_A"),
+                        "dividend": as_float(raw, "DividendPerShare_A", "DIV_A", "EquityShareDividend_A"),
+                    }
+                )
+
+            return annual_rows
+
         standalone, standalone_detailed = parse_mode("standalone")
         consolidated, consolidated_detailed = parse_mode("consolidated")
+        annual_standalone = parse_annual_mode("standalone")
+        annual_consolidated = parse_annual_mode("consolidated")
         if not standalone and not consolidated:
             return None
 
@@ -753,6 +882,8 @@ class MarketDataProviders:
             "consolidated": consolidated,
             "standaloneDetailed": standalone_detailed,
             "consolidatedDetailed": consolidated_detailed,
+            "annualStandalone": annual_standalone,
+            "annualConsolidated": annual_consolidated,
         }
 
     async def get_google_market_news(self, query: str = "Indian stock market") -> list[dict[str, Any]] | None:

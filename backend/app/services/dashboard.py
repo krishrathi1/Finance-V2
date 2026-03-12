@@ -312,6 +312,7 @@ class StockDashboardService:
             polygon_candles,
             trendlyne_brokerage,
             trendlyne_financials,
+            trendlyne_shareholding,
         ) = await self._fetch_provider_data(symbol, timeframe)
 
         # FMP is primary as requested for more current and accurate charts.
@@ -567,6 +568,9 @@ class StockDashboardService:
                     except Exception:
                         pass
 
+        if trendlyne_shareholding:
+            data["shareholding"].update(trendlyne_shareholding)
+
         if self._num(data["price"].get("change")) is None:
             pct = self._num(data["price"].get("changePercent"))
             cmp_value = self._num(data["price"].get("cmp"))
@@ -579,6 +583,13 @@ class StockDashboardService:
         data["metrics"] = self._finalize_key_metrics(data["metrics"], data["price"], data["financials"], data["competitors"])
         data["returnsSummary"] = self._returns_summary(data["price"]["history"])
         data["returnsHeatmap"] = self._returns_heatmap(data["price"]["history"])
+        growth_snapshot = self._build_financial_growth_snapshot(
+            trendlyne_financials,
+            data["returnsSummary"],
+            data["corporateActions"].get("dividends") or [],
+        )
+        if growth_snapshot:
+            data["financials"]["growthSnapshot"] = growth_snapshot
         data["technicals"] = self._derive_technicals_from_history(data["price"]["history"])
         data["price"]["aiTarget"] = self._calculate_predictive_target(data["price"]["history"], data["metrics"], data["technicals"], data["price"].get("cmp", 0))
         data["smartScore"] = compute_smart_score(
@@ -620,6 +631,7 @@ class StockDashboardService:
             self._safe_provider_call(self.providers.get_polygon_candles(symbol, timeframe), timeout=15),
             self._safe_provider_call(self.providers.get_trendlyne_brokerage(symbol), timeout=14),
             self._safe_provider_call(self.providers.get_trendlyne_financials(symbol), timeout=18),
+            self._safe_provider_call(self.providers.get_trendlyne_shareholding(symbol), timeout=14),
         )
 
     async def _safe_provider_call(self, coro: Awaitable[Any], timeout: float) -> Any | None:
@@ -946,6 +958,135 @@ class StockDashboardService:
             {"label": "3 Years", "value": pct(756)},
             {"label": "5 Years", "value": pct(1260)},
         ]
+
+    def _build_financial_growth_snapshot(
+        self,
+        trendlyne_financials: dict[str, Any] | None,
+        returns_summary: list[dict[str, Any]],
+        dividends: list[dict[str, Any]],
+    ) -> dict[str, Any] | None:
+        if not isinstance(trendlyne_financials, dict):
+            return None
+
+        annual_consolidated = trendlyne_financials.get("annualConsolidated") or []
+        annual_standalone = trendlyne_financials.get("annualStandalone") or []
+        annual_rows = annual_consolidated if annual_consolidated else annual_standalone
+        if not annual_rows:
+            return None
+
+        basis = "consolidated" if annual_consolidated else "standalone"
+
+        def annual_value(index_from_end: int, key: str) -> float | None:
+            if len(annual_rows) <= index_from_end:
+                return None
+            row = annual_rows[-(index_from_end + 1)]
+            if not isinstance(row, dict):
+                return None
+            return self._num(row.get(key))
+
+        dividend_yearly_totals: list[float] = []
+        if dividends:
+            grouped_dividends: dict[int, float] = defaultdict(float)
+            for row in dividends:
+                if not isinstance(row, dict):
+                    continue
+                amount = self._num(row.get("dividendAmount"))
+                if amount is None:
+                    continue
+                date_raw = str(row.get("exDate") or row.get("recordDate") or row.get("date") or "").strip()
+                if not date_raw:
+                    continue
+                parsed_year = None
+                for fmt in ("%d-%b-%Y", "%Y-%m-%d", "%d %b %Y"):
+                    try:
+                        parsed_year = datetime.strptime(date_raw[:11], fmt).year
+                        break
+                    except Exception:
+                        continue
+                if parsed_year is None:
+                    continue
+                grouped_dividends[parsed_year] += amount
+            if grouped_dividends:
+                dividend_yearly_totals = [grouped_dividends[year] for year in sorted(grouped_dividends.keys())[-6:]]
+
+        def growth_from_series(values: list[float], years: int) -> float | None:
+            if years == 1:
+                if len(values) < 2:
+                    return None
+                latest = self._num(values[-1])
+                previous = self._num(values[-2])
+                if latest is None or previous is None or latest <= 0 or previous <= 0:
+                    return None
+                return round(((latest - previous) / previous) * 100, 2)
+
+            if len(values) <= years:
+                return None
+            latest = self._num(values[-1])
+            base = self._num(values[-(years + 1)])
+            if latest is None or base is None or latest <= 0 or base <= 0:
+                return None
+            try:
+                return round((((latest / base) ** (1 / years)) - 1) * 100, 2)
+            except Exception:
+                return None
+
+        def one_year_change(key: str) -> float | None:
+            latest = annual_value(0, key)
+            previous = annual_value(1, key)
+            if latest is None or previous in {None, 0}:
+                return None
+            if latest <= 0 or previous <= 0:
+                return None
+            return round(((latest - previous) / previous) * 100, 2)
+
+        def cagr_change(key: str, years: int) -> float | None:
+            latest = annual_value(0, key)
+            base = annual_value(years, key)
+            if latest is None or base is None or latest <= 0 or base <= 0:
+                return None
+            try:
+                return round((((latest / base) ** (1 / years)) - 1) * 100, 2)
+            except Exception:
+                return None
+
+        def returns_cagr(years: int) -> float | None:
+            label_map = {1: "1 Year", 3: "3 Years", 5: "5 Years"}
+            target = next((item for item in returns_summary if item.get("label") == label_map[years]), None)
+            total_return = self._num(target.get("value")) if isinstance(target, dict) else None
+            if total_return is None:
+                return None
+            if years == 1:
+                return round(total_return, 2)
+            gross = 1 + (total_return / 100)
+            if gross <= 0:
+                return None
+            try:
+                return round(((gross ** (1 / years)) - 1) * 100, 2)
+            except Exception:
+                return None
+
+        periods = []
+        for years, label in ((1, "1 Year CAGR"), (3, "3 Year CAGR"), (5, "5 Year CAGR")):
+            dividend_value = one_year_change("dividend") if years == 1 else cagr_change("dividend", years)
+            if dividend_value is None and dividend_yearly_totals:
+                dividend_value = growth_from_series(dividend_yearly_totals, years)
+
+            period_metrics = [
+                {"label": "Revenue Growth", "value": one_year_change("totalRevenue") if years == 1 else cagr_change("totalRevenue", years)},
+                {"label": "Net Profit Growth", "value": one_year_change("netProfit") if years == 1 else cagr_change("netProfit", years)},
+                {
+                    "label": "Financing Profit Growth",
+                    "value": one_year_change("financingProfit") if years == 1 else cagr_change("financingProfit", years),
+                },
+                {"label": "Dividend Growth", "value": dividend_value},
+                {"label": "Stock Returns CAGR", "value": returns_cagr(years)},
+            ]
+            periods.append({"label": label, "metrics": period_metrics})
+
+        if not any(metric.get("value") is not None for period in periods for metric in period["metrics"]):
+            return None
+
+        return {"basis": basis, "periods": periods}
 
     def _returns_heatmap(self, history: list[dict]) -> list[dict]:
         grouped: dict[int, dict[int, list[float]]] = defaultdict(lambda: defaultdict(list))

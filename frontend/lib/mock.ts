@@ -77,6 +77,41 @@ export const mockDashboard: DashboardData = {
     pivotLevels: { s3: 1620, s2: 1660, s1: 1705, pivot: 1750, r1: 1790, r2: 1830, r3: 1870 }
   },
   financials: {
+    growthSnapshot: {
+      basis: "consolidated",
+      periods: [
+        {
+          label: "1 Year CAGR",
+          metrics: [
+            { label: "Revenue Growth", value: 12.54 },
+            { label: "Net Profit Growth", value: 12.21 },
+            { label: "Financing Profit Growth", value: -22.79 },
+            { label: "Dividend Growth", value: 12.82 },
+            { label: "Stock Returns CAGR", value: -2.41 }
+          ]
+        },
+        {
+          label: "3 Year CAGR",
+          metrics: [
+            { label: "Revenue Growth", value: 35.26 },
+            { label: "Net Profit Growth", value: 24.44 },
+            { label: "Financing Profit Growth", value: null },
+            { label: "Dividend Growth", value: 12.38 },
+            { label: "Stock Returns CAGR", value: 2.02 }
+          ]
+        },
+        {
+          label: "5 Year CAGR",
+          metrics: [
+            { label: "Revenue Growth", value: 22.45 },
+            { label: "Net Profit Growth", value: 21.89 },
+            { label: "Financing Profit Growth", value: null },
+            { label: "Dividend Growth", value: 54.49 },
+            { label: "Stock Returns CAGR", value: 1.73 }
+          ]
+        }
+      ]
+    },
     quarterly: [
       { period: "Sep 24", revenue: 121456, profit: 18627 },
       { period: "Dec 24", revenue: 112193, profit: 18340 },
@@ -117,7 +152,19 @@ export const mockDashboard: DashboardData = {
     creditRatings: [{ title: "CRISIL Rating Update 2025", url: "#" }],
     exchangeFilings: [{ title: "NSE Filing Dec 2025", url: "#" }]
   },
-  shareholding: { quarter: "Dec 2025", promoters: 25.44, fii: 48.17, dii: 17.25, public: 9.14 },
+  shareholding: {
+    quarter: "Dec 2025",
+    promoters: 25.44,
+    fii: 48.17,
+    dii: 17.25,
+    public: 9.14,
+    history: [
+      { quarter: "Dec 2025", promoters: 25.44, fii: 48.17, dii: 17.25, public: 9.14 },
+      { quarter: "Sep 2025", promoters: 25.44, fii: 47.02, dii: 17.88, public: 9.66 },
+      { quarter: "Jun 2025", promoters: 25.44, fii: 46.51, dii: 18.42, public: 9.63 },
+      { quarter: "Mar 2025", promoters: 25.44, fii: 45.96, dii: 18.91, public: 9.69 }
+    ]
+  },
   brokerageResearch: {
     source: "Trendlyne",
     sourceUrl: "https://trendlyne.com/research-reports/stock/533/HDFCBANK/hdfc-bank-ltd/",

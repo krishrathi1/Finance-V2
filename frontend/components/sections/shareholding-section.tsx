@@ -1,31 +1,75 @@
+"use client";
+
+import { useMemo, useState } from "react";
+
 import { ShareholdingPie } from "@/components/charts/shareholding-pie";
 import { Card } from "@/components/ui/card";
+import type { ShareholdingPoint } from "@/lib/types";
 
 export function ShareholdingSection({
   quarter,
   promoters,
   fii,
   dii,
-  publicHolding
+  publicHolding,
+  history
 }: {
   quarter: string;
   promoters: number;
   fii: number;
   dii: number;
   publicHolding: number;
+  history?: ShareholdingPoint[];
 }) {
+  const points = useMemo(() => {
+    if (history && history.length) return history;
+    return [{ quarter, promoters, fii, dii, public: publicHolding }];
+  }, [history, quarter, promoters, fii, dii, publicHolding]);
+
+  const [selectedQuarter, setSelectedQuarter] = useState(points[0]?.quarter || quarter);
+
+  const activePoint = points.find((item) => item.quarter === selectedQuarter) || points[0];
+
   const rows = [
-    { name: "Promoters", value: promoters },
-    { name: "FII", value: fii },
-    { name: "DII", value: dii },
-    { name: "Public", value: publicHolding }
+    { name: "Promoters", value: activePoint?.promoters || 0 },
+    { name: "FII", value: activePoint?.fii || 0 },
+    { name: "DII", value: activePoint?.dii || 0 },
+    { name: "Public", value: activePoint?.public || 0 }
   ];
 
   return (
     <Card className="p-4">
-      <h3 className="text-lg font-semibold">Shareholding Pattern ({quarter})</h3>
-      <div className="mt-2 grid items-center gap-4 md:grid-cols-2">
-        <ShareholdingPie promoters={promoters} fii={fii} dii={dii} publicHolding={publicHolding} />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h3 className="text-lg font-semibold">Shareholding Pattern</h3>
+          <p className="text-sm text-muted">Choose a quarter to see how promoter, FII, DII, and public holdings changed.</p>
+        </div>
+        <div className="min-w-[180px]">
+          <label htmlFor="shareholding-quarter" className="mb-1 block text-xs font-medium uppercase tracking-wide text-muted">
+            Quarter
+          </label>
+          <select
+            id="shareholding-quarter"
+            value={activePoint?.quarter || ""}
+            onChange={(event) => setSelectedQuarter(event.target.value)}
+            className="w-full rounded-xl border border-border/70 bg-bg px-3 py-2 text-sm text-text outline-none transition focus:border-primary"
+          >
+            {points.map((item) => (
+              <option key={item.quarter} value={item.quarter}>
+                {item.quarter}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      <div className="mt-4 grid items-center gap-4 md:grid-cols-2">
+        <ShareholdingPie
+          promoters={activePoint?.promoters || 0}
+          fii={activePoint?.fii || 0}
+          dii={activePoint?.dii || 0}
+          publicHolding={activePoint?.public || 0}
+        />
         <div className="space-y-2">
           {rows.map((item) => (
             <div key={item.name} className="rounded-xl border border-border/70 p-3">
