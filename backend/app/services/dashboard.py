@@ -590,6 +590,12 @@ class StockDashboardService:
         data["metrics"] = self._finalize_key_metrics(data["metrics"], data["price"], data["financials"], data["competitors"])
         data["returnsSummary"] = self._returns_summary(data["price"]["history"])
         data["returnsHeatmap"] = self._returns_heatmap(data["price"]["history"])
+        data["financials"]["keyRatioTrends"] = self._finalize_key_ratio_trends(
+            data["financials"].get("keyRatioTrends"),
+            data["metrics"],
+            data["financials"],
+            data["price"]["history"],
+        )
         growth_snapshot = self._build_financial_growth_snapshot(
             trendlyne_financials,
             data["returnsSummary"],
@@ -991,6 +997,138 @@ class StockDashboardService:
             {"label": "3 Years", "value": pct(756)},
             {"label": "5 Years", "value": pct(1260)},
         ]
+
+    def _finalize_key_ratio_trends(
+        self,
+        existing_trends: dict[str, Any] | None,
+        metrics: dict[str, Any],
+        financials: dict[str, Any],
+        price_history: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        trends = existing_trends if isinstance(existing_trends, dict) else {}
+
+        def clone_card(card: dict[str, Any]) -> dict[str, Any]:
+            return {
+                "label": str(card.get("label") or ""),
+                "average3Y": self._num(card.get("average3Y")),
+                "series": [
+                    {"period": str(item.get("period") or ""), "value": self._num(item.get("value"))}
+                    for item in (card.get("series") or [])
+                    if isinstance(item, dict)
+                ],
+            }
+
+        normalized = {
+            "profitability": [clone_card(card) for card in trends.get("profitability", []) if isinstance(card, dict)],
+            "valuation": [clone_card(card) for card in trends.get("valuation", []) if isinstance(card, dict)],
+            "liquidity": [clone_card(card) for card in trends.get("liquidity", []) if isinstance(card, dict)],
+        }
+
+        def get_or_create_card(group: str, label: str) -> dict[str, Any]:
+            cards = normalized.setdefault(group, [])
+            for card in cards:
+                if card.get("label") == label:
+                    return card
+            card = {"label": label, "average3Y": None, "series": []}
+            cards.append(card)
+            return card
+
+        def card_is_blank(card: dict[str, Any]) -> bool:
+            values = [self._num(item.get("value")) for item in card.get("series", []) if isinstance(item, dict)]
+            values = [value for value in values if value is not None]
+            avg = self._num(card.get("average3Y"))
+            return (avg is None or abs(avg) < 1e-9) and (not values or all(abs(value) < 1e-9 for value in values))
+
+        history_pairs: list[tuple[datetime, float]] = []
+        for row in price_history:
+            date_raw = str(row.get("date") or "").split("T")[0]
+            close = self._num(row.get("close"))
+            if not date_raw or close is None:
+                continue
+            try:
+                history_pairs.append((datetime.fromisoformat(date_raw), close))
+            except Exception:
+                continue
+        history_pairs.sort(key=lambda item: item[0])
+
+        shares_outstanding = self._num(metrics.get("outstandingShares"))
+        if shares_outstanding is None:
+            market_cap = self._num(metrics.get("marketCap"))
+            cmp_value = self._num(metrics.get("cmp"))
+            if market_cap is not None and cmp_value not in {None, 0}:
+                shares_outstanding = market_cap / cmp_value
+
+        pcf_card = get_or_create_card("valuation", "Price to Cash Flow")
+        if card_is_blank(pcf_card):
+            series: list[dict[str, Any]] = []
+            cash_flow_rows = financials.get("cashFlow") or []
+            parsed_cash_flow_rows: list[tuple[datetime, dict[str, Any]]] = []
+            for row in cash_flow_rows:
+                if not isinstance(row, dict):
+                    continue
+                period = str(row.get("period") or "").strip()
+                parsed_dt = None
+                for fmt in ("%b %y", "%b %Y"):
+                    try:
+                        parsed_dt = datetime.strptime(period, fmt)
+                        break
+                    except Exception:
+                        continue
+                if parsed_dt is None:
+                    continue
+                parsed_cash_flow_rows.append((parsed_dt, row))
+            parsed_cash_flow_rows.sort(key=lambda item: item[0])
+
+            for parsed_dt, row in parsed_cash_flow_rows[-5:]:
+                operating_cf = self._num(row.get("operatingCashFlow"))
+                if operating_cf in {None, 0} or shares_outstanding in {None, 0}:
+                    continue
+                fiscal_end = datetime(parsed_dt.year, parsed_dt.month, 31 if parsed_dt.month in {1, 3, 5, 7, 8, 10, 12} else 30)
+                close = None
+                for history_dt, history_close in history_pairs:
+                    if history_dt <= fiscal_end:
+                        close = history_close
+                    else:
+                        break
+                if close is None:
+                    continue
+                value = round((close * shares_outstanding) / operating_cf, 2)
+                series.append({"period": str(parsed_dt.year), "value": value})
+
+            if series:
+                pcf_card["series"] = series
+                recent_values = [self._num(item.get("value")) for item in series[-3:]]
+                recent_values = [value for value in recent_values if value is not None]
+                pcf_card["average3Y"] = round(sum(recent_values) / len(recent_values), 2) if recent_values else None
+
+        net_npa_card = get_or_create_card("liquidity", "NET NPA")
+        if card_is_blank(net_npa_card):
+            detailed_sets = [
+                financials.get("quarterlyDetailedConsolidated") or [],
+                financials.get("quarterlyDetailedStandalone") or [],
+            ]
+            series: list[dict[str, Any]] = []
+            for rows in detailed_sets:
+                if not rows:
+                    continue
+                temp_series = []
+                for row in rows[-5:]:
+                    if not isinstance(row, dict):
+                        continue
+                    value = self._num(row.get("netNpa"))
+                    if value is None:
+                        continue
+                    temp_series.append({"period": str(row.get("period") or ""), "value": round(value, 2)})
+                if temp_series:
+                    series = temp_series
+                    break
+            if series:
+                net_npa_card["series"] = series
+                recent_values = [self._num(item.get("value")) for item in series[-3:]]
+                recent_values = [value for value in recent_values if value is not None]
+                net_npa_card["average3Y"] = round(sum(recent_values) / len(recent_values), 2) if recent_values else None
+
+        return normalized
 
     def _build_financial_growth_snapshot(
         self,

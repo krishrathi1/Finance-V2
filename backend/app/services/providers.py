@@ -992,6 +992,10 @@ class MarketDataProviders:
                         "dilutedEps": as_float(raw, "AfterDilutedEPS_Q"),
                         "netProfitTtm": as_float(raw, "NP_TTM"),
                         "basicEpsTtm": as_float(raw, "EPS_TTM"),
+                        "grossNpa": as_float(raw, "GNPARAT_Q", "GrossNPA_Q"),
+                        "netNpa": as_float(raw, "NNPARAT_Q", "NetNPA_Q"),
+                        "grossNpaIsPercent": as_float(raw, "GNPARAT_Q") is not None,
+                        "netNpaIsPercent": as_float(raw, "NNPARAT_Q") is not None,
                     }
                 )
 
