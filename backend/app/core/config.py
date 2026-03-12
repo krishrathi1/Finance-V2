@@ -27,6 +27,11 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     gemini_model: str = "gemini-1.5-flash"
 
+    s3_access_key: str = ""
+    s3_secret_key: str = ""
+    s3_endpoint: str = "https://files.massive.com"
+    s3_bucket: str = "flatfiles"
+
     cache_ttl_seconds: int = 180
 
 

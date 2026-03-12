@@ -308,12 +308,16 @@ class StockDashboardService:
             fmp_quote,
             fmp_candles,
             fmp_quarterly_results,
+            polygon_quote,
+            polygon_candles,
         ) = await self._fetch_provider_data(symbol, timeframe)
 
         # FMP is primary as requested for more current and accurate charts.
         selected_candles = fmp_candles
         if not selected_candles:
-            if yfinance_bundle and yfinance_bundle.get("candles"):
+            if polygon_candles:
+                selected_candles = polygon_candles
+            elif yfinance_bundle and yfinance_bundle.get("candles"):
                 selected_candles = yfinance_bundle["candles"]
             else:
                 selected_candles = yahoo_candles or groww_candles
@@ -449,6 +453,16 @@ class StockDashboardService:
             if fmp_quote.get("name"):
                 data["companyName"] = fmp_quote["name"]
 
+        if polygon_quote:
+            # Use Polygon as another fallback/verification
+            if not nse_quote and not fmp_quote and not yahoo_quote:
+                if polygon_quote.get("cmp") is not None:
+                    data["price"]["cmp"] = round(float(polygon_quote["cmp"]), 2)
+                if polygon_quote.get("change") is not None:
+                    data["price"]["change"] = round(float(polygon_quote["change"]), 2)
+                if polygon_quote.get("changePercent") is not None:
+                    data["price"]["changePercent"] = round(float(polygon_quote["changePercent"]), 2)
+
         if news_data:
             transformed = []
             for article in news_data[:10]:
@@ -563,6 +577,8 @@ class StockDashboardService:
             self._safe_provider_call(self.providers.get_fmp_quote(symbol), timeout=8),
             self._safe_provider_call(self.providers.get_fmp_candles(symbol, "5Y"), timeout=15),
             self._safe_provider_call(self.providers.get_fmp_quarterly_results(symbol), timeout=15),
+            self._safe_provider_call(self.providers.get_polygon_quote(symbol), timeout=8),
+            self._safe_provider_call(self.providers.get_polygon_candles(symbol, timeframe), timeout=15),
         )
 
     async def _safe_provider_call(self, coro: Awaitable[Any], timeout: float) -> Any | None:

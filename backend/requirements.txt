@@ -12,3 +12,5 @@ pyotp
 yfinance
 aiosqlite
 supervisor
+boto3==1.37.10
+aioboto3==14.2.0

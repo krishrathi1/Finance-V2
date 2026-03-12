@@ -1989,3 +1989,61 @@ class MarketDataProviders:
             pass
 
         return bundle
+
+    async def get_polygon_quote(self, symbol: str) -> dict[str, Any] | None:
+        if not settings.polygon_api_key:
+            return None
+        # Polygon uses X:NSE:SYMBOL for Indian stocks
+        poly_symbol = f"X:NSE:{symbol.upper().replace('.NS', '').replace('.BO', '')}"
+        url = f"https://api.polygon.io/v2/snapshot/locale/global/markets/stocks/tickers/{poly_symbol}"
+        try:
+            payload = await self._get(url, params={"apiKey": settings.polygon_api_key})
+            ticker_data = payload.get("ticker", {})
+            if not ticker_data:
+                return None
+            
+            day = ticker_data.get("day", {})
+            return {
+                "cmp": self._to_float(ticker_data.get("lastTrade", {}).get("p")),
+                "change": self._to_float(ticker_data.get("todaysChange")),
+                "changePercent": self._to_float(ticker_data.get("todaysChangePerc")),
+                "high": self._to_float(day.get("h")),
+                "low": self._to_float(day.get("l")),
+                "volume": self._to_float(day.get("v")),
+            }
+        except Exception:
+            return None
+
+    async def get_polygon_candles(self, symbol: str, timeframe: str = "1Y") -> list[dict] | None:
+        if not settings.polygon_api_key:
+            return None
+        poly_symbol = f"X:NSE:{symbol.upper().replace('.NS', '').replace('.BO', '')}"
+        
+        days = 365
+        if timeframe == "1M": days = 30
+        elif timeframe == "1W": days = 7
+        elif timeframe == "5Y": days = 1825
+        
+        end = int(time.time() * 1000)
+        start = end - (days * 24 * 3600 * 1000)
+        
+        url = f"https://api.polygon.io/v2/aggs/ticker/{poly_symbol}/range/1/day/{start}/{end}"
+        try:
+            payload = await self._get(url, params={"adjusted": "true", "sort": "asc", "apiKey": settings.polygon_api_key})
+            results = payload.get("results", [])
+            if not results:
+                return None
+            
+            formatted = []
+            for r in results:
+                formatted.append({
+                    "date": datetime.utcfromtimestamp(r["t"] / 1000).date().isoformat(),
+                    "open": float(r["o"]),
+                    "high": float(r["h"]),
+                    "low": float(r["l"]),
+                    "close": float(r["c"]),
+                    "volume": float(r["v"]),
+                })
+            return formatted
+        except Exception:
+            return None

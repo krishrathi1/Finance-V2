@@ -1,0 +1,6 @@
+'rishrathi1' is not recognized as an internal or external command,
+operable program or batch file.
+warning: in the working copy of 'backend/app/core/s3.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'backend/test_polygon_integration.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'backend/test_s3_connection.py', LF will be replaced by CRLF the next time Git touches it
+fatal: empty string is not a valid pathspec. please use . instead if you meant to match all paths
