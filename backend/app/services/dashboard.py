@@ -311,6 +311,7 @@ class StockDashboardService:
             polygon_quote,
             polygon_candles,
             trendlyne_brokerage,
+            trendlyne_financials,
         ) = await self._fetch_provider_data(symbol, timeframe)
 
         # FMP is primary as requested for more current and accurate charts.
@@ -516,6 +517,25 @@ class StockDashboardService:
                 data["financials"]["quarterly"] = fmp_quarterly_results
                 data["financials"]["quarterlyConsolidated"] = fmp_quarterly_results
 
+        if trendlyne_financials:
+            trendlyne_consolidated = trendlyne_financials.get("consolidated") or []
+            trendlyne_standalone = trendlyne_financials.get("standalone") or []
+            trendlyne_detailed_consolidated = trendlyne_financials.get("consolidatedDetailed") or []
+            trendlyne_detailed_standalone = trendlyne_financials.get("standaloneDetailed") or []
+
+            if trendlyne_consolidated:
+                data["financials"]["quarterlyConsolidated"] = trendlyne_consolidated
+            if trendlyne_standalone:
+                data["financials"]["quarterlyStandalone"] = trendlyne_standalone
+            if trendlyne_detailed_consolidated:
+                data["financials"]["quarterlyDetailedConsolidated"] = trendlyne_detailed_consolidated
+            if trendlyne_detailed_standalone:
+                data["financials"]["quarterlyDetailedStandalone"] = trendlyne_detailed_standalone
+
+            preferred_quarterly = trendlyne_consolidated or trendlyne_standalone
+            if preferred_quarterly:
+                data["financials"]["quarterly"] = preferred_quarterly
+
         if groww_data:
             profile = groww_data.get("profile", {})
             if profile:
@@ -599,6 +619,7 @@ class StockDashboardService:
             self._safe_provider_call(self.providers.get_polygon_quote(symbol), timeout=8),
             self._safe_provider_call(self.providers.get_polygon_candles(symbol, timeframe), timeout=15),
             self._safe_provider_call(self.providers.get_trendlyne_brokerage(symbol), timeout=14),
+            self._safe_provider_call(self.providers.get_trendlyne_financials(symbol), timeout=18),
         )
 
     async def _safe_provider_call(self, coro: Awaitable[Any], timeout: float) -> Any | None:

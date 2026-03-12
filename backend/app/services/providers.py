@@ -50,6 +50,7 @@ class MarketDataProviders:
         self._trendlyne_equity_meta_map: dict[str, tuple[str, str]] = {}
         self._trendlyne_equity_map_loaded_at: float = 0.0
         self._trendlyne_bulk_block_cache: dict[str, tuple[float, dict[str, list[dict[str, Any]]] | None]] = {}
+        self._trendlyne_financials_cache: dict[str, tuple[float, dict[str, Any] | None]] = {}
 
     @retry(stop=stop_after_attempt(1), wait=wait_exponential(multiplier=0.2, min=0.2, max=1.0))
     async def _get(self, url: str, params: dict[str, Any] | None = None, headers: dict[str, str] | None = None) -> Any:
@@ -607,6 +608,152 @@ class MarketDataProviders:
             return parsed
         except Exception:
             return cached[1] if cached else None
+
+    async def get_trendlyne_financials(self, symbol: str) -> dict[str, Any] | None:
+        return await asyncio.to_thread(self._get_trendlyne_financials_sync, symbol)
+
+    def _get_trendlyne_financials_sync(self, symbol: str) -> dict[str, Any] | None:
+        key = symbol.replace(".NS", "").replace(".BO", "").strip().upper()
+        if not key:
+            return None
+
+        now = time.time()
+        cached = self._trendlyne_financials_cache.get(key)
+        if cached and now - cached[0] < 900:
+            return cached[1]
+
+        meta = self._resolve_trendlyne_equity_meta(key)
+        if not meta:
+            self._trendlyne_financials_cache[key] = (now, None)
+            return None
+
+        stock_id, slug = meta
+        page_url = f"https://trendlyne.com/fundamentals/financials/{stock_id}/{key}/{slug}/"
+
+        try:
+            page_response = requests.get(
+                page_url,
+                headers={**WEB_PAGE_HEADERS, "referer": "https://trendlyne.com/"},
+                timeout=12,
+            )
+            page_response.raise_for_status()
+
+            url_match = re.search(r'data-tablesurl="([^"]+)"', page_response.text)
+            if not url_match:
+                self._trendlyne_financials_cache[key] = (now, None)
+                return None
+
+            data_url = url_match.group(1)
+            data_response = requests.get(
+                data_url,
+                headers={**NSE_HEADERS, "referer": page_url},
+                timeout=15,
+            )
+            data_response.raise_for_status()
+            payload = data_response.json() if data_response.content else {}
+            body = payload.get("body", {}) if isinstance(payload, dict) else {}
+            parsed = self._parse_trendlyne_financials_payload(body)
+            self._trendlyne_financials_cache[key] = (now, parsed)
+            return parsed
+        except Exception:
+            return cached[1] if cached else None
+
+    def _parse_trendlyne_financials_payload(self, body: dict[str, Any]) -> dict[str, Any] | None:
+        if not isinstance(body, dict):
+            return None
+
+        quarterly_order = body.get("quarterlyOrder")
+        quarterly_dump = body.get("quarterlyDataDump")
+        if not isinstance(quarterly_order, list) or not isinstance(quarterly_dump, dict):
+            return None
+
+        latest_four = [str(period) for period in quarterly_order[:4] if period]
+        if not latest_four:
+            return None
+        selected_periods = list(reversed(latest_four))
+
+        def period_label(period_text: str) -> str:
+            for fmt in ("%b %Y", "%B %Y"):
+                try:
+                    return datetime.strptime(period_text, fmt).strftime("%b %y")
+                except Exception:
+                    continue
+            return period_text
+
+        def as_float(row: dict[str, Any], *keys: str) -> float | None:
+            for item in keys:
+                value = row.get(item)
+                numeric = self._to_float(value)
+                if numeric is not None:
+                    return numeric
+            return None
+
+        def parse_mode(mode_key: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+            mode_rows = quarterly_dump.get(mode_key)
+            if not isinstance(mode_rows, dict):
+                return [], []
+
+            summary_rows: list[dict[str, Any]] = []
+            detailed_rows: list[dict[str, Any]] = []
+
+            for raw_period in selected_periods:
+                raw = mode_rows.get(raw_period)
+                if not isinstance(raw, dict):
+                    continue
+
+                revenue = as_float(raw, "TOTAL_SR_Q", "SR_Q", "OperatingIncome_Q") or 0.0
+                profit = as_float(raw, "NP_Q", "PL_After_TaxFromOrdineryActivities_Q") or 0.0
+                pbt = as_float(raw, "PBT_Q")
+                tax = as_float(raw, "TAX_Q")
+
+                summary_rows.append(
+                    {
+                        "period": period_label(raw_period),
+                        "revenue": round(revenue, 2),
+                        "profit": round(profit, 2),
+                    }
+                )
+
+                detailed_rows.append(
+                    {
+                        "period": period_label(raw_period),
+                        "totalRevenue": as_float(raw, "TOTAL_SR_Q", "SR_Q"),
+                        "totalRevenueGrowthPct": as_float(raw, "REV4Q_Q"),
+                        "operatingRevenue": as_float(raw, "OperatingIncome_Q", "SR_Q"),
+                        "otherIncome": as_float(raw, "OI_Q", "Others_Q", "IncomeOnInvestment_Q"),
+                        "expenses": as_float(raw, "OEXPNS_Q"),
+                        "interestExpended": as_float(raw, "INT_Q"),
+                        "operatingExpenses": as_float(raw, "OEXPNS_Q"),
+                        "operatingProfit": as_float(raw, "OP_Q", "OperatingProfitBeforeProvisionsAndContingencies_Q"),
+                        "opmPct": as_float(raw, "OPMPCT_Q"),
+                        "depreciations": as_float(raw, "DEP_Q"),
+                        "profitBeforeTax": pbt,
+                        "tax": tax,
+                        "taxPct": round((tax / pbt) * 100, 2) if tax is not None and pbt not in {None, 0} else None,
+                        "netProfit": as_float(raw, "NP_Q", "PL_After_TaxFromOrdineryActivities_Q"),
+                        "netProfitGrowthPct": as_float(raw, "NP_Q_GROWTH"),
+                        "netProfitMarginPct": as_float(raw, "NETPCT_Q"),
+                        "epsAdjusted": as_float(raw, "EPS_adj_Q"),
+                        "basicEps": as_float(raw, "EPS_Q"),
+                        "dilutedEps": as_float(raw, "AfterDilutedEPS_Q"),
+                        "netProfitTtm": as_float(raw, "NP_TTM"),
+                        "basicEpsTtm": as_float(raw, "EPS_TTM"),
+                    }
+                )
+
+            return summary_rows, detailed_rows
+
+        standalone, standalone_detailed = parse_mode("standalone")
+        consolidated, consolidated_detailed = parse_mode("consolidated")
+        if not standalone and not consolidated:
+            return None
+
+        return {
+            "standalone": standalone,
+            "consolidated": consolidated,
+            "standaloneDetailed": standalone_detailed,
+            "consolidatedDetailed": consolidated_detailed,
+        }
 
     async def get_google_market_news(self, query: str = "Indian stock market") -> list[dict[str, Any]] | None:
         return await asyncio.to_thread(self._get_google_market_news_sync, query)

@@ -172,6 +172,7 @@ export type QuarterlyDetailedPoint = {
   period: string;
   totalRevenue?: number | null;
   totalRevenueGrowthPct?: number | null;
+  operatingRevenue?: number | null;
   interestEarned?: number | null;
   otherIncome?: number | null;
   expenses?: number | null;
@@ -189,6 +190,9 @@ export type QuarterlyDetailedPoint = {
   netProfitGrowthPct?: number | null;
   netProfitMarginPct?: number | null;
   netProfitMarginGrowthPct?: number | null;
+  epsAdjusted?: number | null;
+  netProfitTtm?: number | null;
+  basicEpsTtm?: number | null;
   basicEps?: number | null;
   dilutedEps?: number | null;
   grossNpa?: number | null;

@@ -20,28 +20,19 @@ type RowConfig = {
 
 const TABLE_ROWS: RowConfig[] = [
   { label: "Total Revenue", key: "totalRevenue", type: "number", section: true },
-  { label: "Total Revenue Growth %", key: "totalRevenueGrowthPct", type: "percent", indent: true, signed: true },
-  { label: "Interest Earned", key: "interestEarned", type: "number", indent: true },
+  { label: "Operating Revenue", key: "operatingRevenue", type: "number", indent: true },
   { label: "Other Income", key: "otherIncome", type: "number", indent: true },
-  { label: "Expenses", key: "expenses", type: "number", section: true },
-  { label: "Interest Expended", key: "interestExpended", type: "number", indent: true },
-  { label: "Operating Expenses", key: "operatingExpenses", type: "number", indent: true },
-  { label: "Net Interest Income", key: "netInterestIncome", type: "number", section: true },
-  { label: "NI Growth", key: "niGrowthPct", type: "percent", indent: true, signed: true },
+  { label: "Operating Expenses", key: "operatingExpenses", type: "number", section: true },
   { label: "Operating Profit", key: "operatingProfit", type: "number", section: true },
-  { label: "OPM%", key: "opmPct", type: "percent", indent: true },
+  { label: "Operating Profit Margin %", key: "opmPct", type: "percent", indent: true },
   { label: "Depreciations", key: "depreciations", type: "number", indent: true },
-  { label: "Profit Before Tax", key: "profitBeforeTax", type: "number", indent: true },
-  { label: "Tax", key: "tax", type: "number", section: true },
-  { label: "Tax %", key: "taxPct", type: "percent", indent: true },
+  { label: "Interest", key: "interestExpended", type: "number", indent: true },
+  { label: "Profit Before Tax", key: "profitBeforeTax", type: "number", section: true },
+  { label: "Tax", key: "tax", type: "number", indent: true },
   { label: "Net Profit", key: "netProfit", type: "number", section: true },
-  { label: "Net Profit Growth", key: "netProfitGrowthPct", type: "percent", indent: true, signed: true },
-  { label: "Net Profit Margin", key: "netProfitMarginPct", type: "percent", indent: true },
-  { label: "Net Profit Margin Growth", key: "netProfitMarginGrowthPct", type: "percent", indent: true, signed: true },
-  { label: "Basic EPS in ₹", key: "basicEps", type: "eps", indent: true },
-  { label: "Diluted EPS in ₹", key: "dilutedEps", type: "eps", indent: true },
-  { label: "Gross NPA", key: "grossNpa", type: "npa", indent: true },
-  { label: "Net NPA", key: "netNpa", type: "npa", indent: true }
+  { label: "EPS Adj. latest", key: "epsAdjusted", type: "eps", indent: true },
+  { label: "Net profit TTM", key: "netProfitTtm", type: "number", indent: true },
+  { label: "Basic EPS TTM", key: "basicEpsTtm", type: "eps", indent: true }
 ];
 
 function toNumber(value: unknown): number | null {
@@ -63,7 +54,7 @@ function formatCellValue(row: RowConfig, point: QuarterlyDetailedPoint): string 
     return `${prefix}${formatIndian(value)}%`;
   }
   if (row.type === "eps") {
-    return `₹ ${formatIndian(value)}`;
+    return `Rs ${formatIndian(value)}`;
   }
   if (row.type === "npa") {
     const isPercent = row.key === "grossNpa" ? point.grossNpaIsPercent : point.netNpaIsPercent;
@@ -77,6 +68,20 @@ function cellColorClass(row: RowConfig, point: QuarterlyDetailedPoint): string {
   const value = toNumber(point[row.key]);
   if (value === null || value === 0) return "";
   return value > 0 ? "text-emerald-500" : "text-rose-500";
+}
+
+function parsePeriod(period: string): number {
+  const direct = Date.parse(period || "");
+  if (!Number.isNaN(direct)) return direct;
+  const padded = Date.parse(`01 ${period || ""}`);
+  if (!Number.isNaN(padded)) return padded;
+  return 0;
+}
+
+function normalizeQuarterlyPoints<T extends { period: string }>(rows: T[]): T[] {
+  return [...rows]
+    .sort((a, b) => parsePeriod(a.period) - parsePeriod(b.period))
+    .slice(-4);
 }
 
 export function QuarterlyResultsSection({
@@ -97,20 +102,17 @@ export function QuarterlyResultsSection({
   const chartData = useMemo(() => {
     const consolidatedData = consolidated && consolidated.length ? consolidated : quarterly;
     const standaloneData = standalone && standalone.length ? standalone : quarterly;
-    return view === "consolidated" ? consolidatedData : standaloneData;
+    return normalizeQuarterlyPoints(view === "consolidated" ? consolidatedData : standaloneData);
   }, [consolidated, standalone, quarterly, view]);
 
   const tableData = useMemo(() => {
     const consolidatedData = consolidatedDetailed && consolidatedDetailed.length ? consolidatedDetailed : standaloneDetailed || [];
     const standaloneData = standaloneDetailed && standaloneDetailed.length ? standaloneDetailed : consolidatedDetailed || [];
-    return view === "consolidated" ? consolidatedData : standaloneData;
+    return normalizeQuarterlyPoints(view === "consolidated" ? consolidatedData : standaloneData);
   }, [consolidatedDetailed, standaloneDetailed, view]);
 
   const visibleRows = useMemo(
-    () =>
-      TABLE_ROWS.filter((row) =>
-        tableData.some((point) => toNumber(point[row.key]) !== null)
-      ),
+    () => TABLE_ROWS.filter((row) => tableData.some((point) => toNumber(point[row.key]) !== null)),
     [tableData]
   );
 
