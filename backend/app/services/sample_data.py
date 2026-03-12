@@ -49,6 +49,7 @@ def get_sample_dashboard(symbol: str) -> dict:
             "quarterlyDetailedStandalone": [],
             "quarterlyDetailedConsolidated": [],
             "growthSnapshot": {"basis": "consolidated", "periods": []},
+            "keyRatioTrends": {"profitability": [], "valuation": [], "liquidity": []},
             "yearly": [],
             "incomeStatement": [],
             "balanceSheet": [],
@@ -79,6 +80,8 @@ def get_sample_dashboard(symbol: str) -> dict:
             "dii": 0.0,
             "public": 0.0,
             "history": [],
+            "topHolders": [],
+            "sourceUrl": "",
         },
         "brokerageResearch": {
             "source": "Trendlyne",

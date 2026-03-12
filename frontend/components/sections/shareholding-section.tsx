@@ -1,10 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 
 import { ShareholdingPie } from "@/components/charts/shareholding-pie";
 import { Card } from "@/components/ui/card";
-import type { ShareholdingPoint } from "@/lib/types";
+import type { ShareholdingHolder, ShareholdingPoint } from "@/lib/types";
 
 export function ShareholdingSection({
   quarter,
@@ -12,7 +13,9 @@ export function ShareholdingSection({
   fii,
   dii,
   publicHolding,
-  history
+  history,
+  topHolders,
+  sourceUrl
 }: {
   quarter: string;
   promoters: number;
@@ -20,6 +23,8 @@ export function ShareholdingSection({
   dii: number;
   publicHolding: number;
   history?: ShareholdingPoint[];
+  topHolders?: ShareholdingHolder[];
+  sourceUrl?: string;
 }) {
   const points = useMemo(() => {
     if (history && history.length) return history;
@@ -79,6 +84,27 @@ export function ShareholdingSection({
           ))}
         </div>
       </div>
+
+      {topHolders?.length ? (
+        <div className="mt-5 rounded-2xl border border-border/70 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h4 className="text-lg font-semibold">Top Shareholders</h4>
+            {sourceUrl ? (
+              <Link href={sourceUrl} target="_blank" className="text-sm text-accent hover:underline">
+                View all Share Holders
+              </Link>
+            ) : null}
+          </div>
+          <div className="mt-3 grid gap-3 xl:grid-cols-4">
+            {topHolders.map((holder) => (
+              <div key={holder.name} className="rounded-xl border border-border/70 p-3">
+                <p className="text-sm">{holder.name}</p>
+                <p className="mt-2 text-lg font-semibold">{holder.value.toFixed(2)}%</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
     </Card>
   );
 }

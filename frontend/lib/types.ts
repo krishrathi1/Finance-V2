@@ -78,6 +78,7 @@ export type DashboardData = {
     quarterlyDetailedStandalone?: QuarterlyDetailedPoint[];
     quarterlyDetailedConsolidated?: QuarterlyDetailedPoint[];
     growthSnapshot?: FinancialGrowthSnapshot;
+    keyRatioTrends?: KeyRatioTrends;
     yearly: Array<{ period: string; revenue: number; profit: number; assets: number; cashFlow: number }>;
     incomeStatement: Array<Record<string, string | number>>;
     balanceSheet: Array<Record<string, string | number>>;
@@ -108,6 +109,8 @@ export type DashboardData = {
     dii: number;
     public: number;
     history?: ShareholdingPoint[];
+    topHolders?: ShareholdingHolder[];
+    sourceUrl?: string;
   };
   brokerageResearch?: {
     source: string;
@@ -220,4 +223,26 @@ export type ShareholdingPoint = {
   fii: number;
   dii: number;
   public: number;
+};
+
+export type ShareholdingHolder = {
+  name: string;
+  value: number;
+};
+
+export type KeyRatioTrendPoint = {
+  period: string;
+  value: number | null;
+};
+
+export type KeyRatioTrendCard = {
+  label: string;
+  average3Y: number | null;
+  series: KeyRatioTrendPoint[];
+};
+
+export type KeyRatioTrends = {
+  profitability: KeyRatioTrendCard[];
+  valuation: KeyRatioTrendCard[];
+  liquidity: KeyRatioTrendCard[];
 };

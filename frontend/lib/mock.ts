@@ -112,6 +112,26 @@ export const mockDashboard: DashboardData = {
         }
       ]
     },
+    keyRatioTrends: {
+      profitability: [
+        { label: "ROE", average3Y: 14.49, series: [{ period: "2021", value: 15.17 }, { period: "2022", value: 15.38 }, { period: "2023", value: 15.89 }, { period: "2024", value: 14.03 }, { period: "2025", value: 13.56 }] },
+        { label: "ROCE", average3Y: 6.64, series: [{ period: "2021", value: 7.02 }, { period: "2022", value: 6.27 }, { period: "2023", value: 6.3 }, { period: "2024", value: 6.63 }, { period: "2025", value: 7.0 }] },
+        { label: "ROA", average3Y: 1.67, series: [{ period: "2021", value: 1.76 }, { period: "2022", value: 1.79 }, { period: "2023", value: 1.81 }, { period: "2024", value: 1.58 }, { period: "2025", value: 1.61 }] },
+        { label: "NPM", average3Y: 24.31, series: [{ period: "2021", value: 24.78 }, { period: "2022", value: 28.06 }, { period: "2023", value: 27.02 }, { period: "2024", value: 23.07 }, { period: "2025", value: 21.83 }] }
+      ],
+      valuation: [
+        { label: "P/E Ratio", average3Y: 18.38, series: [{ period: "2021", value: 25.82 }, { period: "2022", value: 21.38 }, { period: "2023", value: 19.47 }, { period: "2024", value: 16.0 }, { period: "2025", value: 19.67 }] },
+        { label: "EV/EBITDA", average3Y: 0, series: [{ period: "2021", value: 0 }, { period: "2022", value: 0 }, { period: "2023", value: 0 }, { period: "2024", value: 0 }, { period: "2025", value: 0 }] },
+        { label: "Price to Book Value", average3Y: 1.41, series: [{ period: "2021", value: 2.19 }, { period: "2022", value: 1.87 }, { period: "2023", value: 1.61 }, { period: "2024", value: 1.39 }, { period: "2025", value: 1.23 }] },
+        { label: "Price to Cash Flow", average3Y: 0, series: [{ period: "2021", value: 0 }, { period: "2022", value: 0 }, { period: "2023", value: 0 }, { period: "2024", value: 0 }, { period: "2025", value: 0 }] }
+      ],
+      liquidity: [
+        { label: "NET NPA", average3Y: 0, series: [{ period: "2021", value: 0 }, { period: "2022", value: 0 }, { period: "2023", value: 0 }, { period: "2024", value: 0 }, { period: "2025", value: 0 }] },
+        { label: "CASA Ratio", average3Y: 39.08, series: [{ period: "2021", value: 46.07 }, { period: "2022", value: 48.13 }, { period: "2023", value: 44.37 }, { period: "2024", value: 38.13 }, { period: "2025", value: 34.74 }] },
+        { label: "Advance Growth", average3Y: 24.59, series: [{ period: "2021", value: 14.47 }, { period: "2022", value: 19.88 }, { period: "2023", value: 16.96 }, { period: "2024", value: 54.39 }, { period: "2025", value: 6.2 }] },
+        { label: "Net Interest Margin", average3Y: 3.45, series: [{ period: "2021", value: 3.85 }, { period: "2022", value: 3.64 }, { period: "2023", value: 3.67 }, { period: "2024", value: 3.21 }, { period: "2025", value: 3.47 }] }
+      ]
+    },
     quarterly: [
       { period: "Sep 24", revenue: 121456, profit: 18627 },
       { period: "Dec 24", revenue: 112193, profit: 18340 },
@@ -158,6 +178,13 @@ export const mockDashboard: DashboardData = {
     fii: 48.17,
     dii: 17.25,
     public: 9.14,
+    sourceUrl: "https://trendlyne.com/equity/share-holding/533/HDFCBANK/hdfc-bank-ltd/",
+    topHolders: [
+      { name: "Sbi Nifty 50 Etf", value: 7.28 },
+      { name: "Life Insurance Corporation Of India", value: 4.77 },
+      { name: "Icici Prudential Large Cap Fund", value: 3.45 },
+      { name: "Hdfc Trustee Company Limited-hdfc Flexi Cap Fund", value: 2.87 }
+    ],
     history: [
       { quarter: "Dec 2025", promoters: 25.44, fii: 48.17, dii: 17.25, public: 9.14 },
       { quarter: "Sep 2025", promoters: 25.44, fii: 47.02, dii: 17.88, public: 9.66 },

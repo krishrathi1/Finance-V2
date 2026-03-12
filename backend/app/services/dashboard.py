@@ -313,6 +313,7 @@ class StockDashboardService:
             trendlyne_brokerage,
             trendlyne_financials,
             trendlyne_shareholding,
+            trendlyne_documents,
         ) = await self._fetch_provider_data(symbol, timeframe)
 
         # FMP is primary as requested for more current and accurate charts.
@@ -523,6 +524,8 @@ class StockDashboardService:
             trendlyne_standalone = trendlyne_financials.get("standalone") or []
             trendlyne_detailed_consolidated = trendlyne_financials.get("consolidatedDetailed") or []
             trendlyne_detailed_standalone = trendlyne_financials.get("standaloneDetailed") or []
+            ratio_trends_consolidated = trendlyne_financials.get("ratioTrendsConsolidated") or {}
+            ratio_trends_standalone = trendlyne_financials.get("ratioTrendsStandalone") or {}
 
             if trendlyne_consolidated:
                 data["financials"]["quarterlyConsolidated"] = trendlyne_consolidated
@@ -536,6 +539,7 @@ class StockDashboardService:
             preferred_quarterly = trendlyne_consolidated or trendlyne_standalone
             if preferred_quarterly:
                 data["financials"]["quarterly"] = preferred_quarterly
+            data["financials"]["keyRatioTrends"] = ratio_trends_consolidated or ratio_trends_standalone
 
         if groww_data:
             profile = groww_data.get("profile", {})
@@ -570,6 +574,9 @@ class StockDashboardService:
 
         if trendlyne_shareholding:
             data["shareholding"].update(trendlyne_shareholding)
+
+        if trendlyne_documents:
+            data["documents"].update(trendlyne_documents)
 
         if self._num(data["price"].get("change")) is None:
             pct = self._num(data["price"].get("changePercent"))
@@ -632,6 +639,7 @@ class StockDashboardService:
             self._safe_provider_call(self.providers.get_trendlyne_brokerage(symbol), timeout=14),
             self._safe_provider_call(self.providers.get_trendlyne_financials(symbol), timeout=18),
             self._safe_provider_call(self.providers.get_trendlyne_shareholding(symbol), timeout=14),
+            self._safe_provider_call(self.providers.get_trendlyne_documents(symbol), timeout=16),
         )
 
     async def _safe_provider_call(self, coro: Awaitable[Any], timeout: float) -> Any | None:
@@ -924,6 +932,31 @@ class StockDashboardService:
         ev_sales = self._num(out.get("evToSales"))
         if ev_sales is not None and ev_sales > 100:
             out["evToSales"] = None
+
+        if out.get("profitMargin") is None:
+            detailed_sets = [
+                financials.get("quarterlyDetailedConsolidated") or [],
+                financials.get("quarterlyDetailedStandalone") or [],
+            ]
+            derived_profit_margin = None
+            for rows in detailed_sets:
+                if not rows:
+                    continue
+                latest = rows[-1]
+                derived_profit_margin = self._num(latest.get("netProfitMarginPct"))
+                if derived_profit_margin is not None:
+                    break
+            if derived_profit_margin is None:
+                ratio_trends = financials.get("keyRatioTrends") or {}
+                profitability_cards = ratio_trends.get("profitability") if isinstance(ratio_trends, dict) else []
+                for card in profitability_cards or []:
+                    if str(card.get("label") or "").upper() == "NPM":
+                        series = card.get("series") or []
+                        if series:
+                            derived_profit_margin = self._num(series[-1].get("value"))
+                        break
+            if derived_profit_margin is not None:
+                out["profitMargin"] = derived_profit_margin
 
         peg = self._num(out.get("pegRatio"))
         if peg is not None and (peg <= 0.2 or peg > 10):

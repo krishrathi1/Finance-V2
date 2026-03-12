@@ -176,11 +176,13 @@ export default async function StockDetailsPage({ params }: Props) {
               dii={data.shareholding.dii}
               publicHolding={data.shareholding.public}
               history={data.shareholding.history}
+              topHolders={data.shareholding.topHolders}
+              sourceUrl={data.shareholding.sourceUrl}
             />
           </section>
 
           <section id="key-ratios">
-            <KeyRatiosSection metrics={data.metrics} />
+            <KeyRatiosSection metrics={data.metrics} trends={data.financials.keyRatioTrends} />
           </section>
 
           <section id="competitors">

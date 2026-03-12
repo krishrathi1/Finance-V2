@@ -14,6 +14,7 @@ from xml.etree import ElementTree as ET
 import httpx
 import pandas as pd
 import requests
+from bs4 import BeautifulSoup
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from app.core.config import get_settings
@@ -54,6 +55,7 @@ class MarketDataProviders:
         self._trendlyne_bulk_block_cache: dict[str, tuple[float, dict[str, list[dict[str, Any]]] | None]] = {}
         self._trendlyne_financials_cache: dict[str, tuple[float, dict[str, Any] | None]] = {}
         self._trendlyne_shareholding_cache: dict[str, tuple[float, dict[str, Any] | None]] = {}
+        self._trendlyne_documents_cache: dict[str, tuple[float, dict[str, Any] | None]] = {}
 
     @retry(stop=stop_after_attempt(1), wait=wait_exponential(multiplier=0.2, min=0.2, max=1.0))
     async def _get(self, url: str, params: dict[str, Any] | None = None, headers: dict[str, str] | None = None) -> Any:
@@ -618,6 +620,9 @@ class MarketDataProviders:
     async def get_trendlyne_shareholding(self, symbol: str) -> dict[str, Any] | None:
         return await asyncio.to_thread(self._get_trendlyne_shareholding_sync, symbol)
 
+    async def get_trendlyne_documents(self, symbol: str) -> dict[str, Any] | None:
+        return await asyncio.to_thread(self._get_trendlyne_documents_sync, symbol)
+
     def _get_trendlyne_shareholding_sync(self, symbol: str) -> dict[str, Any] | None:
         key = symbol.replace(".NS", "").replace(".BO", "").strip().upper()
         if not key:
@@ -643,6 +648,8 @@ class MarketDataProviders:
             )
             response.raise_for_status()
             parsed = self._parse_trendlyne_shareholding_page(response.text)
+            if parsed is not None:
+                parsed["sourceUrl"] = page_url
             self._trendlyne_shareholding_cache[key] = (now, parsed)
             return parsed
         except Exception:
@@ -700,6 +707,40 @@ class MarketDataProviders:
         if not history:
             return None
 
+        top_holders: list[dict[str, Any]] = []
+        if len(tables) >= 3:
+            holders_table = tables[2].copy()
+            flattened = []
+            for col in holders_table.columns:
+                if isinstance(col, tuple):
+                    flattened.append(" ".join(str(part).strip() for part in col if str(part).strip()))
+                else:
+                    flattened.append(str(col).strip())
+            holders_table.columns = flattened
+
+            name_col = next((col for col in holders_table.columns if col.lower().startswith("name")), None)
+            holding_col = next((col for col in holders_table.columns if "%" in col.lower()), None)
+            if name_col and holding_col:
+                skip_names = {
+                    "mutual funds",
+                    "foreign portfolio investors category i",
+                    "foreign portfolio investors category ii",
+                    "insurance companies",
+                    "banks",
+                    "trusts",
+                    "fii",
+                    "foreign banks",
+                    "other financial institutions",
+                    "other foreign institutions",
+                }
+                collected_holders: list[dict[str, Any]] = []
+                for _, row in holders_table.iterrows():
+                    name = " ".join(str(row.get(name_col) or "").split()).strip()
+                    if not name or name.lower() in skip_names:
+                        continue
+                    collected_holders.append({"name": name, "value": parse_pct(row.get(holding_col))})
+                top_holders = sorted(collected_holders, key=lambda item: item["value"], reverse=True)[:4]
+
         latest = history[0]
         return {
             "quarter": latest["quarter"],
@@ -708,6 +749,118 @@ class MarketDataProviders:
             "dii": latest["dii"],
             "public": latest["public"],
             "history": history,
+            "topHolders": top_holders,
+        }
+
+    def _get_trendlyne_documents_sync(self, symbol: str) -> dict[str, Any] | None:
+        key = symbol.replace(".NS", "").replace(".BO", "").strip().upper()
+        if not key:
+            return None
+
+        now = time.time()
+        cached = self._trendlyne_documents_cache.get(key)
+        if cached and now - cached[0] < 900:
+            return cached[1]
+
+        meta = self._resolve_trendlyne_equity_meta(key)
+        if not meta:
+            self._trendlyne_documents_cache[key] = (now, None)
+            return None
+
+        stock_id, slug = meta
+        documents_url = f"https://trendlyne.com/fundamentals/annual-earnings-credit/None/{stock_id}/"
+        filings_url = f"https://trendlyne.com/latest-news/BSE-Announcements/{stock_id}/{key}/{slug}/"
+        try:
+            docs_html = requests.get(
+                documents_url,
+                headers={**WEB_PAGE_HEADERS, "referer": f"https://trendlyne.com/fundamentals/documents/{stock_id}/{key}/{slug}/"},
+                timeout=15,
+            )
+            docs_html.raise_for_status()
+
+            filings_html = requests.get(
+                filings_url,
+                headers={**WEB_PAGE_HEADERS, "referer": "https://trendlyne.com/"},
+                timeout=15,
+            )
+            filings_html.raise_for_status()
+
+            parsed = self._parse_trendlyne_documents(docs_html.text, filings_html.text)
+            self._trendlyne_documents_cache[key] = (now, parsed)
+            return parsed
+        except Exception:
+            return cached[1] if cached else None
+
+    def _parse_trendlyne_documents(self, docs_html: str, filings_html: str) -> dict[str, Any]:
+        soup = BeautifulSoup(docs_html, "html.parser")
+
+        def unique_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+            output: list[dict[str, Any]] = []
+            seen: set[str] = set()
+            for row in rows:
+                url = str(row.get("url") or "").strip()
+                title = " ".join(str(row.get("title") or "").split())
+                if not title or not url:
+                    continue
+                key = f"{title}|{url}"
+                if key in seen:
+                    continue
+                seen.add(key)
+                output.append({"title": title, "url": url})
+            return output
+
+        def parse_annual_reports() -> list[dict[str, Any]]:
+            pane = soup.select_one('.tab-pane[data-targetid="annualreport"]')
+            if not pane:
+                return []
+            rows: list[dict[str, Any]] = []
+            for card in pane.select(".annual-reports-card"):
+                title_el = card.select_one(".title")
+                link_el = card.select_one('a[href*="get-document"]')
+                title = " ".join(title_el.get_text(" ", strip=True).split()) if title_el else ""
+                href = link_el.get("href", "").strip() if link_el else ""
+                if title and href:
+                    rows.append({"title": title, "url": href})
+            return unique_rows(rows)
+
+        def parse_card_pane(target_id: str) -> list[dict[str, Any]]:
+            pane = soup.select_one(f'.tab-pane[data-targetid="{target_id}"]')
+            if not pane:
+                return []
+            rows: list[dict[str, Any]] = []
+            for card in pane.select(".earnings-template-card, .credit-ratings-card"):
+                title = ""
+                link = ""
+                header_link = card.select_one(".main-header a[href]")
+                if header_link:
+                    title = " ".join(header_link.get_text(" ", strip=True).split())
+                pdf_link = card.select_one('a[href*="get-document"]')
+                post_link = card.select_one('a[href*="/posts/"]')
+                link = (pdf_link.get("href", "").strip() if pdf_link else "") or (post_link.get("href", "").strip() if post_link else "")
+                if title and link:
+                    rows.append({"title": title, "url": link})
+            return unique_rows(rows)
+
+        filings_soup = BeautifulSoup(filings_html, "html.parser")
+        exchange_rows: list[dict[str, Any]] = []
+        for block in filings_soup.select("div.card-block.p-x-0"):
+            title = " ".join(block.get_text(" ", strip=True).split())
+            if not title:
+                continue
+            link = ""
+            for a in block.select("a[href]"):
+                href = a.get("href", "").strip()
+                if "get-document/post/pdf/" in href or "/posts/" in href:
+                    link = href
+                    break
+            if link:
+                exchange_rows.append({"title": title, "url": link})
+
+        return {
+            "annualReports": parse_annual_reports()[:12],
+            "investorPresentations": parse_card_pane("investorpresentation")[:12],
+            "creditRatings": parse_card_pane("creditrating")[:12],
+            "exchangeFilings": unique_rows(exchange_rows)[:20],
         }
 
     def _get_trendlyne_financials_sync(self, symbol: str) -> dict[str, Any] | None:
@@ -870,10 +1023,101 @@ class MarketDataProviders:
 
             return annual_rows
 
+        def parse_ratio_trends(mode_key: str) -> dict[str, list[dict[str, Any]]]:
+            if not isinstance(annual_dump, dict):
+                return {"profitability": [], "valuation": [], "liquidity": []}
+
+            mode_rows = annual_dump.get(mode_key)
+            if not isinstance(mode_rows, dict):
+                return {"profitability": [], "valuation": [], "liquidity": []}
+
+            ratio_periods = [str(period) for period in annual_order[:6] if period] if isinstance(annual_order, list) else []
+            ratio_periods = list(reversed(ratio_periods))
+
+            annual_points: list[dict[str, Any]] = []
+            for raw_period in ratio_periods:
+                raw = mode_rows.get(raw_period)
+                if not isinstance(raw, dict):
+                    continue
+                annual_points.append(
+                    {
+                        "period": str(datetime.strptime(raw_period, "%b %Y").year) if re.match(r"^[A-Za-z]{3} \d{4}$", raw_period) else raw_period[-4:],
+                        "roe": as_float(raw, "ROE_A"),
+                        "roce": as_float(raw, "ROCE_A"),
+                        "roa": as_float(raw, "ROA_A"),
+                        "npm": as_float(raw, "NETPCT_A"),
+                        "pe": as_float(raw, "PE_A"),
+                        "evEbitda": as_float(raw, "EVPerEBITDA_A"),
+                        "pbv": as_float(raw, "PBV_A"),
+                        "pcf": as_float(raw, "PCFO_A"),
+                        "netNpa": as_float(raw, "NNPARAT_A", "NetNPAToAdvancesPercentage_A"),
+                        "casa": as_float(raw, "CASA_A"),
+                        "nim": as_float(raw, "NIM_A"),
+                        "advances": as_float(raw, "Advances_A"),
+                    }
+                )
+
+            if len(annual_points) < 1:
+                return {"profitability": [], "valuation": [], "liquidity": []}
+
+            def average_last_3(key: str) -> float | None:
+                values = [self._to_float(point.get(key)) for point in annual_points[-3:]]
+                values = [value for value in values if value is not None]
+                if not values:
+                    return 0.0
+                return round(sum(values) / len(values), 2)
+
+            def to_series(key: str) -> list[dict[str, Any]]:
+                series = []
+                for point in annual_points[-5:]:
+                    value = self._to_float(point.get(key))
+                    series.append({"period": point["period"], "value": round(value, 2) if value is not None else 0.0})
+                return series
+
+            advance_series: list[dict[str, Any]] = []
+            latest_five = annual_points[-5:]
+            for idx, point in enumerate(latest_five):
+                current_adv = self._to_float(point.get("advances"))
+                previous_adv = self._to_float(annual_points[-6 + idx].get("advances")) if len(annual_points) >= 6 else None
+                growth = 0.0
+                if current_adv is not None and previous_adv not in {None, 0}:
+                    growth = round(((current_adv - previous_adv) / previous_adv) * 100, 2)
+                elif idx > 0:
+                    fallback_prev = self._to_float(latest_five[idx - 1].get("advances"))
+                    if current_adv is not None and fallback_prev not in {None, 0}:
+                        growth = round(((current_adv - fallback_prev) / fallback_prev) * 100, 2)
+                advance_series.append({"period": point["period"], "value": growth})
+
+            advance_avg_values = [self._to_float(item.get("value")) or 0.0 for item in advance_series[-3:]]
+            advance_avg = round(sum(advance_avg_values) / len(advance_avg_values), 2) if advance_avg_values else 0.0
+
+            return {
+                "profitability": [
+                    {"label": "ROE", "average3Y": average_last_3("roe"), "series": to_series("roe")},
+                    {"label": "ROCE", "average3Y": average_last_3("roce"), "series": to_series("roce")},
+                    {"label": "ROA", "average3Y": average_last_3("roa"), "series": to_series("roa")},
+                    {"label": "NPM", "average3Y": average_last_3("npm"), "series": to_series("npm")},
+                ],
+                "valuation": [
+                    {"label": "P/E Ratio", "average3Y": average_last_3("pe"), "series": to_series("pe")},
+                    {"label": "EV/EBITDA", "average3Y": average_last_3("evEbitda"), "series": to_series("evEbitda")},
+                    {"label": "Price to Book Value", "average3Y": average_last_3("pbv"), "series": to_series("pbv")},
+                    {"label": "Price to Cash Flow", "average3Y": average_last_3("pcf"), "series": to_series("pcf")},
+                ],
+                "liquidity": [
+                    {"label": "NET NPA", "average3Y": average_last_3("netNpa"), "series": to_series("netNpa")},
+                    {"label": "CASA Ratio", "average3Y": average_last_3("casa"), "series": to_series("casa")},
+                    {"label": "Advance Growth", "average3Y": advance_avg, "series": advance_series},
+                    {"label": "Net Interest Margin", "average3Y": average_last_3("nim"), "series": to_series("nim")},
+                ],
+            }
+
         standalone, standalone_detailed = parse_mode("standalone")
         consolidated, consolidated_detailed = parse_mode("consolidated")
         annual_standalone = parse_annual_mode("standalone")
         annual_consolidated = parse_annual_mode("consolidated")
+        ratio_trends_standalone = parse_ratio_trends("standalone")
+        ratio_trends_consolidated = parse_ratio_trends("consolidated")
         if not standalone and not consolidated:
             return None
 
@@ -884,6 +1128,8 @@ class MarketDataProviders:
             "consolidatedDetailed": consolidated_detailed,
             "annualStandalone": annual_standalone,
             "annualConsolidated": annual_consolidated,
+            "ratioTrendsStandalone": ratio_trends_standalone,
+            "ratioTrendsConsolidated": ratio_trends_consolidated,
         }
 
     async def get_google_market_news(self, query: str = "Indian stock market") -> list[dict[str, Any]] | None:
