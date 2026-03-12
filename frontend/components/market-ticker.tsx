@@ -13,6 +13,23 @@ function formatSigned(value: number) {
   return `${value >= 0 ? "+" : ""}${value.toFixed(2)}`;
 }
 
+function TrendMarker({ up }: { up: boolean }) {
+  if (up) {
+    return (
+      <span
+        className="inline-block h-0 w-0 border-l-[7px] border-r-[7px] border-b-[11px] border-l-transparent border-r-transparent border-b-[#39ff14] align-middle"
+        aria-hidden="true"
+      />
+    );
+  }
+  return (
+    <span
+      className="inline-block h-0 w-0 border-l-[7px] border-r-[7px] border-t-[11px] border-l-transparent border-r-transparent border-t-[#ff0015] align-middle"
+      aria-hidden="true"
+    />
+  );
+}
+
 export function MarketTicker() {
   const [rows, setRows] = useState<TickerRow[]>([]);
 
@@ -57,11 +74,11 @@ export function MarketTicker() {
           const isStockSymbol = !item.symbol.includes(" ");
           const content = (
             <>
-              <span className={color}>{up ? "^" : "v"}</span>
+              <TrendMarker up={up} />
               <span>{item.symbol}</span>
               <span>{item.cmp ? `Rs ${item.cmp.toLocaleString("en-IN", { maximumFractionDigits: 2 })}` : "-"}</span>
               <span className={color}>{item.cmp ? `${formatSigned(item.change)} (${formatSigned(item.changePercent)}%) 1D` : ""}</span>
-              <span className={color}>{up ? "^" : "v"}</span>
+              <TrendMarker up={up} />
             </>
           );
 

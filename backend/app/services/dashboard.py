@@ -557,8 +557,23 @@ class StockDashboardService:
         data["returnsHeatmap"] = self._returns_heatmap(data["price"]["history"])
         data["technicals"] = self._derive_technicals_from_history(data["price"]["history"])
         data["price"]["aiTarget"] = self._calculate_predictive_target(data["price"]["history"], data["metrics"], data["technicals"], data["price"].get("cmp", 0))
-        data["smartScore"] = compute_smart_score(data["metrics"], data["technicals"])
-        data["riskScore"] = compute_risk_score(data["news"], data["metrics"], data["technicals"])
+        data["smartScore"] = compute_smart_score(
+            data["metrics"],
+            data["technicals"],
+            financials=data["financials"],
+            price_history=data["price"]["history"],
+            returns_summary=data["returnsSummary"],
+            news_items=data["news"],
+            corporate_actions=data["corporateActions"],
+            shareholding=data["shareholding"],
+        )
+        data["riskScore"] = compute_risk_score(
+            data["news"],
+            data["metrics"],
+            data["technicals"],
+            price_history=data["price"]["history"],
+            financials=data["financials"],
+        )
         data["timeframe"] = timeframe
         return data
 

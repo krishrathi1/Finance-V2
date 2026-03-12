@@ -118,8 +118,20 @@ export default async function StockDetailsPage({ params }: Props) {
           </section>
 
           <div className="grid gap-4 xl:grid-cols-2">
-            <SmartScore score={data.smartScore.score} dimensions={data.smartScore.dimensions} explanation={data.smartScore.explanation} />
-            <RiskScore score={data.riskScore.score} components={data.riskScore.components} explanation={data.riskScore.explanation} />
+            <SmartScore
+              score={data.smartScore.score}
+              dimensions={data.smartScore.dimensions}
+              aiExplanation={data.smartScore.aiExplanation || data.smartScore.explanation}
+              methodology={data.smartScore.methodology}
+              label={data.smartScore.label}
+            />
+            <RiskScore
+              score={data.riskScore.score}
+              components={data.riskScore.components}
+              aiExplanation={data.riskScore.aiExplanation || data.riskScore.explanation}
+              methodology={data.riskScore.methodology}
+              label={data.riskScore.label}
+            />
           </div>
 
           <ReturnsPanel summary={data.returnsSummary} heatmap={data.returnsHeatmap} />

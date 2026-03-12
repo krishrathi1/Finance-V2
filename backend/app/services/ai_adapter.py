@@ -52,3 +52,50 @@ class AIAdapter:
             "## AI Investment Summary\n"
             "Suitable for watchlist; staggered accumulation only after confirming trend continuation."
         )
+
+    async def explain_smart_score(self, symbol: str, context: dict[str, Any]) -> str:
+        if self._gemini and settings.gemini_api_key:
+            return await self._gemini.explain_smart_score(symbol=symbol, context=context)
+        smart = (context.get("smartScore") or {}) if isinstance(context, dict) else {}
+        score = float(smart.get("score", 0.0) or 0.0)
+        dimensions = smart.get("dimensions") or {}
+        top = sorted(dimensions.items(), key=lambda item: item[1], reverse=True)[:2] if isinstance(dimensions, dict) else []
+        weak = sorted(dimensions.items(), key=lambda item: item[1])[:1] if isinstance(dimensions, dict) else []
+        top_text = ", ".join(str(name) for name, _ in top) if top else "key factors"
+        weak_text = str(weak[0][0]) if weak else "momentum"
+        if score >= 4:
+            setup = "improving"
+        elif score >= 2.5:
+            setup = "neutral"
+        else:
+            setup = "weak"
+        return (
+            f"{symbol.upper()} has a Smart Score of {score:.1f} out of 5, so the overall picture is {setup}. "
+            f"The stronger parts are {top_text}. "
+            f"The weak part is {weak_text}, so it is safer to invest slowly until this improves."
+        )
+
+    async def explain_risk_score(self, symbol: str, context: dict[str, Any]) -> str:
+        if self._gemini and settings.gemini_api_key:
+            return await self._gemini.explain_risk_score(symbol=symbol, context=context)
+
+        risk = (context.get("riskScore") or {}) if isinstance(context, dict) else {}
+        score = float(risk.get("score", 0.0) or 0.0)
+        components = risk.get("components") or {}
+        high = sorted(components.items(), key=lambda item: item[1], reverse=True)[:1] if isinstance(components, dict) else []
+        low = sorted(components.items(), key=lambda item: item[1])[:1] if isinstance(components, dict) else []
+        high_text = str(high[0][0]) if high else "market mood"
+        low_text = str(low[0][0]) if low else "financial risk"
+
+        if score < 2:
+            level = "low"
+        elif score < 3.5:
+            level = "medium"
+        else:
+            level = "high"
+
+        return (
+            f"{symbol.upper()} has a Risk Score of {score:.1f} out of 5, so risk is {level}. "
+            f"The main risk now is {high_text}, while {low_text} looks better. "
+            "To stay safe, invest in small parts instead of all at once."
+        )

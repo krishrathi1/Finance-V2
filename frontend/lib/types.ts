@@ -38,6 +38,18 @@ export type DashboardData = {
     dimensions: Record<string, number>;
     label: string;
     explanation: string;
+    aiExplanation?: string;
+    methodology?: string;
+    score10?: number;
+    mlConfidence?: number;
+    mlAdjustment?: number;
+    modelVersion?: string;
+    validation?: {
+      samples?: number;
+      horizonDays?: number;
+      hitRate?: number | null;
+      upProbability?: number;
+    };
   };
   riskScore: {
     score: number;
@@ -45,6 +57,9 @@ export type DashboardData = {
     components: Record<string, number>;
     label: string;
     explanation: string;
+    aiExplanation?: string;
+    methodology?: string;
+    modelVersion?: string;
   };
   returnsSummary: Array<{ label: string; value: number | null }>;
   returnsHeatmap: Array<Record<string, number | null>>;

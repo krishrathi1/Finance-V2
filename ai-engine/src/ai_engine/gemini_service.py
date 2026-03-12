@@ -19,6 +19,14 @@ class GeminiService:
         prompt = self._build_report_prompt(symbol=symbol, context=context)
         return await self._generate(prompt)
 
+    async def explain_smart_score(self, symbol: str, context: dict[str, Any]) -> str:
+        prompt = self._build_smart_score_prompt(symbol=symbol, context=context)
+        return await self._generate(prompt)
+
+    async def explain_risk_score(self, symbol: str, context: dict[str, Any]) -> str:
+        prompt = self._build_risk_score_prompt(symbol=symbol, context=context)
+        return await self._generate(prompt)
+
     async def _generate(self, prompt: str) -> str:
         url = f"{self.base_url}/{self.model}:generateContent"
         params = {"key": self.api_key}
@@ -94,4 +102,105 @@ class GeminiService:
             "6. Valuation summary\n"
             "7. AI investment outlook\n"
             "Keep it neutral and analytical."
+        )
+
+    def _build_smart_score_prompt(self, symbol: str, context: dict[str, Any]) -> str:
+        smart = context.get("smartScore", {}) or {}
+        risk = context.get("riskScore", {}) or {}
+        metrics = context.get("metrics", {}) or {}
+        technicals = context.get("technicals", {}) or {}
+        returns_summary = context.get("returnsSummary", []) or []
+        news = context.get("news", []) or []
+        compact_context = json.dumps(
+            {
+                "symbol": context.get("symbol", symbol),
+                "companyName": context.get("companyName"),
+                "sector": context.get("sector"),
+                "smartScore": {
+                    "score": smart.get("score"),
+                    "score10": smart.get("score10"),
+                    "dimensions": smart.get("dimensions"),
+                },
+                "riskScore": {
+                    "score": risk.get("score"),
+                    "components": risk.get("components"),
+                    "label": risk.get("label"),
+                },
+                "metrics": {
+                    "peRatio": metrics.get("peRatio"),
+                    "pbRatio": metrics.get("pbRatio"),
+                    "roe": metrics.get("roe"),
+                    "debtToEquity": metrics.get("debtToEquity"),
+                    "currentRatio": metrics.get("currentRatio"),
+                },
+                "technicals": {
+                    "trend": technicals.get("trend"),
+                    "rsi14": technicals.get("rsi14"),
+                    "macd": technicals.get("macd"),
+                },
+                "returnsSummary": returns_summary[:4],
+                "recentNews": news[:4],
+            }
+        )
+        return (
+            "You are a helpful stock explainer for beginners.\n"
+            f"Stock symbol: {symbol}\n"
+            f"Context JSON: {compact_context}\n\n"
+            "Task: Explain what this Smart Score means in very simple language.\n"
+            "Output rules:\n"
+            "1) Use simple words that a 12-year-old can understand.\n"
+            "2) 3 short sentences only.\n"
+            "3) Mention 2 good points and 1 caution.\n"
+            "4) Replace finance jargon with simple words.\n"
+            "5) Do not use words like setup, allocation, position sizing, conviction, or drawdown.\n"
+            "6) Do not use markdown, bullets, or investment guarantees.\n"
+            "7) Keep under 70 words."
+        )
+
+    def _build_risk_score_prompt(self, symbol: str, context: dict[str, Any]) -> str:
+        risk = context.get("riskScore", {}) or {}
+        smart = context.get("smartScore", {}) or {}
+        metrics = context.get("metrics", {}) or {}
+        technicals = context.get("technicals", {}) or {}
+        news = context.get("news", []) or []
+        compact_context = json.dumps(
+            {
+                "symbol": context.get("symbol", symbol),
+                "companyName": context.get("companyName"),
+                "sector": context.get("sector"),
+                "riskScore": {
+                    "score": risk.get("score"),
+                    "components": risk.get("components"),
+                    "label": risk.get("label"),
+                },
+                "smartScore": {
+                    "score": smart.get("score"),
+                    "dimensions": smart.get("dimensions"),
+                },
+                "metrics": {
+                    "debtToEquity": metrics.get("debtToEquity"),
+                    "currentRatio": metrics.get("currentRatio"),
+                    "roa": metrics.get("roa"),
+                },
+                "technicals": {
+                    "trend": technicals.get("trend"),
+                    "rsi14": technicals.get("rsi14"),
+                    "macd": technicals.get("macd"),
+                },
+                "recentNews": news[:4],
+            }
+        )
+        return (
+            "You are a helpful stock explainer for beginners.\n"
+            f"Stock symbol: {symbol}\n"
+            f"Context JSON: {compact_context}\n\n"
+            "Task: Explain what this Risk Score means in very simple language.\n"
+            "Output rules:\n"
+            "1) Use simple words that a 12-year-old can understand.\n"
+            "2) 3 short sentences only.\n"
+            "3) Say if risk is low, medium, or high in plain words.\n"
+            "4) Mention one main risk and one positive point.\n"
+            "5) Give one simple safety tip (for example: invest slowly).\n"
+            "6) Do not use markdown, bullets, or investment guarantees.\n"
+            "7) Keep under 70 words."
         )

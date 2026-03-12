@@ -1,5 +1,6 @@
 import asyncio
 from datetime import datetime, timedelta, timezone
+import re
 
 from fastapi import APIRouter, HTTPException, Query
 
@@ -31,10 +32,227 @@ async def _refresh_market_news_cache(today: str, cache_key: str, stale_key: str)
 async def _refresh_dashboard_cache(symbol: str, timeframe: str, cache_key: str, stale_key: str) -> None:
     try:
         data = await asyncio.wait_for(dashboard_service.get_dashboard(symbol=symbol, timeframe=timeframe), timeout=55)
+        data = await _enrich_score_explanations(symbol=symbol, data=data)
         await redis_cache.set_json(cache_key, data, ttl_seconds=settings.cache_ttl_seconds)
         await redis_cache.set_json(stale_key, data, ttl_seconds=60 * 60 * 24 * 7)
     except Exception:
         return
+
+
+async def _enrich_score_explanations(symbol: str, data: dict) -> dict:
+    data = await _enrich_smart_score_explanation(symbol=symbol, data=data)
+    data = await _enrich_risk_score_explanation(symbol=symbol, data=data)
+    return data
+
+
+async def _enrich_smart_score_explanation(symbol: str, data: dict) -> dict:
+    smart = data.get("smartScore") if isinstance(data, dict) else None
+    if not isinstance(smart, dict):
+        return data
+
+    methodology = (
+        "Factor score uses normalized profitability, growth, valuation, momentum, and balance-sheet health. "
+        "A bounded walk-forward ML signal validates trend persistence before applying a small score adjustment."
+    )
+    smart["methodology"] = smart.get("methodology") or methodology
+    dims = smart.get("dimensions") if isinstance(smart.get("dimensions"), dict) else {}
+    weak_hint = None
+    if dims:
+        weakest = sorted(dims.items(), key=lambda item: float(item[1]))[0][0]
+        weak_hint = str(weakest)
+
+    gemini_enabled = bool(str(settings.gemini_api_key or "").strip())
+    ai_explanation = str(smart.get("aiExplanation") or "").strip()
+    ai_source = str(smart.get("aiSource") or "").strip().lower()
+
+    # If Gemini is now enabled, refresh non-Gemini (or missing) explanations once and cache them.
+    if gemini_enabled and (not ai_explanation or ai_source != "gemini"):
+        try:
+            generated = await asyncio.wait_for(ai_adapter.explain_smart_score(symbol=symbol, context=data), timeout=12)
+            if generated and str(generated).strip():
+                smart["aiExplanation"] = _to_plain_language_ai_text(
+                    symbol=symbol,
+                    score=float(smart.get("score", 0.0) or 0.0),
+                    label=str(smart.get("label") or "Moderate"),
+                    text=str(generated).strip(),
+                    weak_hint=weak_hint,
+                )
+                smart["aiSource"] = "gemini"
+                return data
+        except Exception:
+            pass
+
+    if ai_explanation:
+        smart["aiExplanation"] = _to_plain_language_ai_text(
+            symbol=symbol,
+            score=float(smart.get("score", 0.0) or 0.0),
+            label=str(smart.get("label") or "Moderate"),
+            text=ai_explanation,
+            weak_hint=weak_hint,
+        )
+        if ai_source not in {"gemini", "fallback"}:
+            smart["aiSource"] = "fallback"
+        return data
+
+    score_value = float(smart.get("score", 0.0) or 0.0)
+    label = str(smart.get("label") or "Moderate")
+    smart["aiExplanation"] = _to_plain_language_ai_text(
+        symbol=symbol,
+        score=score_value,
+        label=label,
+        text=(
+            f"{symbol.upper()} has a Smart Score of {score_value:.1f} out of 5 ({label}). "
+            "Some parts are good, but some parts are weak right now, so it is better to invest slowly."
+        ),
+        weak_hint=weak_hint,
+    )
+    smart["aiSource"] = "fallback"
+    return data
+
+
+def _to_plain_language_ai_text(symbol: str, score: float, label: str, text: str, weak_hint: str | None = None) -> str:
+    simplified = " ".join(str(text or "").split())
+    replacements = {
+        r"\bsetup\b": "overall picture",
+        r"\bposition sizing\b": "how much money to put",
+        r"\ballocation\b": "money split",
+        r"\bconviction\b": "confidence",
+        r"\bdrawdown\b": "price fall",
+        r"\bvolatility\b": "price ups and downs",
+        r"\bmomentum\b": "recent price trend",
+        r"\bprofitability\b": "profit strength",
+        r"\bfinancialHealth\b": "financial safety",
+        r"\bfinancial health\b": "financial safety",
+        r"\bneutral setup\b": "middle rating",
+        r"\bbullish\b": "positive",
+        r"\bbearish\b": "weak",
+    }
+    for pattern, target in replacements.items():
+        simplified = re.sub(pattern, target, simplified, flags=re.IGNORECASE)
+
+    if "smart score" not in simplified.lower():
+        simplified = (
+            f"{symbol.upper()} has a Smart Score of {score:.1f} out of 5 ({label}). "
+            f"{simplified}"
+        ).strip()
+
+    # Keep text short and easy to scan in the UI.
+    if len(simplified) > 220:
+        chunks = re.split(r"(?<=[.!?])\s+", simplified)
+        simplified = " ".join(chunks[:2]).strip()
+    if not re.search(r"\b(weak|caution|careful|risk|go slowly|invest slowly|watch)\b", simplified, flags=re.IGNORECASE):
+        hint = (weak_hint or "momentum").replace("financialHealth", "financial safety")
+        hint = hint.replace("momentum", "recent price trend").replace("profitability", "profit strength")
+        base = simplified.strip()
+        if base and base[-1] not in ".!?":
+            base += "."
+        simplified = f"{base} The weak part right now is {hint}, so invest slowly."
+    return simplified
+
+
+async def _enrich_risk_score_explanation(symbol: str, data: dict) -> dict:
+    risk = data.get("riskScore") if isinstance(data, dict) else None
+    if not isinstance(risk, dict):
+        return data
+
+    methodology = (
+        "Risk score combines market mood, company financial stress, negative news signals, and price instability."
+    )
+    risk["methodology"] = risk.get("methodology") or methodology
+
+    components = risk.get("components") if isinstance(risk.get("components"), dict) else {}
+    high_hint = None
+    if components:
+        highest = sorted(components.items(), key=lambda item: float(item[1]), reverse=True)[0][0]
+        high_hint = str(highest)
+
+    gemini_enabled = bool(str(settings.gemini_api_key or "").strip())
+    ai_explanation = str(risk.get("aiExplanation") or "").strip()
+    ai_source = str(risk.get("aiSource") or "").strip().lower()
+
+    # If Gemini is now enabled, refresh non-Gemini (or missing) explanations once and cache them.
+    if gemini_enabled and (not ai_explanation or ai_source != "gemini"):
+        try:
+            generated = await asyncio.wait_for(ai_adapter.explain_risk_score(symbol=symbol, context=data), timeout=12)
+            if generated and str(generated).strip():
+                risk["aiExplanation"] = _to_plain_language_risk_text(
+                    symbol=symbol,
+                    score=float(risk.get("score", 0.0) or 0.0),
+                    label=str(risk.get("label") or "Medium"),
+                    text=str(generated).strip(),
+                    high_hint=high_hint,
+                )
+                risk["aiSource"] = "gemini"
+                return data
+        except Exception:
+            pass
+
+    if ai_explanation:
+        risk["aiExplanation"] = _to_plain_language_risk_text(
+            symbol=symbol,
+            score=float(risk.get("score", 0.0) or 0.0),
+            label=str(risk.get("label") or "Medium"),
+            text=ai_explanation,
+            high_hint=high_hint,
+        )
+        if ai_source not in {"gemini", "fallback"}:
+            risk["aiSource"] = "fallback"
+        return data
+
+    score_value = float(risk.get("score", 0.0) or 0.0)
+    label = str(risk.get("label") or "Medium")
+    risk["aiExplanation"] = _to_plain_language_risk_text(
+        symbol=symbol,
+        score=score_value,
+        label=label,
+        text=(
+            f"{symbol.upper()} has a Risk Score of {score_value:.1f} out of 5 ({label}). "
+            "Risk is not very low right now, so it is better to invest slowly and watch news and price moves."
+        ),
+        high_hint=high_hint,
+    )
+    risk["aiSource"] = "fallback"
+    return data
+
+
+def _to_plain_language_risk_text(symbol: str, score: float, label: str, text: str, high_hint: str | None = None) -> str:
+    simplified = " ".join(str(text or "").split())
+    replacements = {
+        r"\bsetup\b": "overall picture",
+        r"\bposition sizing\b": "how much money to put",
+        r"\ballocation\b": "money split",
+        r"\bconviction\b": "confidence",
+        r"\bdrawdown\b": "price fall",
+        r"\bvolatility\b": "price ups and downs",
+        r"\bmomentum\b": "recent price trend",
+        r"\bfinancialRisk\b": "financial risk",
+        r"\bnarrativeRisk\b": "news risk",
+        r"\btechnicalRisk\b": "price trend risk",
+        r"\bsentiment\b": "market mood",
+        r"\bbullish\b": "positive",
+        r"\bbearish\b": "weak",
+    }
+    for pattern, target in replacements.items():
+        simplified = re.sub(pattern, target, simplified, flags=re.IGNORECASE)
+
+    if "risk score" not in simplified.lower():
+        simplified = (
+            f"{symbol.upper()} has a Risk Score of {score:.1f} out of 5 ({label}). "
+            f"{simplified}"
+        ).strip()
+
+    if len(simplified) > 220:
+        chunks = re.split(r"(?<=[.!?])\s+", simplified)
+        simplified = " ".join(chunks[:2]).strip()
+
+    if not re.search(r"\b(invest slowly|careful|risk|watch)\b", simplified, flags=re.IGNORECASE):
+        hint = (high_hint or "technicalRisk").replace("technicalRisk", "price trend risk")
+        hint = hint.replace("narrativeRisk", "news risk").replace("financialRisk", "financial risk")
+        base = simplified.strip()
+        if base and base[-1] not in ".!?":
+            base += "."
+        simplified = f"{base} The main risk now is {hint}, so invest slowly."
+    return simplified
 
 
 @router.get("/search")
@@ -152,10 +370,14 @@ async def get_stock_dashboard(
     stale_key = f"dashboard:last:{symbol.upper()}:{timeframe}"
     cached = await redis_cache.get_json(cache_key) if not refresh else None
     if cached:
+        cached = await _enrich_score_explanations(symbol=symbol, data=cached)
+        await redis_cache.set_json(cache_key, cached, ttl_seconds=settings.cache_ttl_seconds)
+        await redis_cache.set_json(stale_key, cached, ttl_seconds=60 * 60 * 24 * 7)
         return {"cached": True, "data": cached}
 
     try:
         data = await asyncio.wait_for(dashboard_service.get_dashboard(symbol=symbol, timeframe=timeframe), timeout=45)
+        data = await _enrich_score_explanations(symbol=symbol, data=data)
         await redis_cache.set_json(cache_key, data, ttl_seconds=settings.cache_ttl_seconds)
         await redis_cache.set_json(stale_key, data, ttl_seconds=60 * 60 * 24 * 7)
         return {"cached": False, "data": data}
