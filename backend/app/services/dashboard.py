@@ -310,6 +310,7 @@ class StockDashboardService:
             fmp_quarterly_results,
             polygon_quote,
             polygon_candles,
+            trendlyne_brokerage,
         ) = await self._fetch_provider_data(symbol, timeframe)
 
         # FMP is primary as requested for more current and accurate charts.
@@ -481,6 +482,9 @@ class StockDashboardService:
             if transformed:
                 data["news"] = transformed
 
+        if trendlyne_brokerage:
+            data["brokerageResearch"] = trendlyne_brokerage
+
         if nse_events:
             data["corporateActions"] = nse_events
 
@@ -594,6 +598,7 @@ class StockDashboardService:
             self._safe_provider_call(self.providers.get_fmp_quarterly_results(symbol), timeout=15),
             self._safe_provider_call(self.providers.get_polygon_quote(symbol), timeout=8),
             self._safe_provider_call(self.providers.get_polygon_candles(symbol, timeframe), timeout=15),
+            self._safe_provider_call(self.providers.get_trendlyne_brokerage(symbol), timeout=14),
         )
 
     async def _safe_provider_call(self, coro: Awaitable[Any], timeout: float) -> Any | None:

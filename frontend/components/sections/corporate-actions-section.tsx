@@ -76,6 +76,74 @@ function ActionTable({ rows }: { rows: ActionRow[] }) {
   );
 }
 
+function mergeDealRows(actions: Record<string, ActionRow[]>) {
+  const explicitDeals = actions.deals || [];
+  if (explicitDeals.length) {
+    return explicitDeals;
+  }
+
+  const merged = [
+    ...(actions.bulkDeals || []).map((row) => ({ ...row, dealType: row.dealType || "Bulk" })),
+    ...(actions.blockDeals || []).map((row) => ({ ...row, dealType: row.dealType || "Block" }))
+  ];
+
+  const seen = new Set<string>();
+  return merged
+    .filter((row) => {
+      const key = [
+        row.date,
+        row.client,
+        row.quantity,
+        row.price,
+        row.exchange,
+        row.dealType,
+        row.orderType
+      ].join("|");
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .sort((a, b) => {
+      const aTime = Date.parse(a.date || "") || 0;
+      const bTime = Date.parse(b.date || "") || 0;
+      return bTime - aTime;
+    });
+}
+
+function DealsTable({ rows }: { rows: ActionRow[] }) {
+  if (!rows.length) return <p className="py-4 text-sm text-muted">No records available.</p>;
+  return (
+    <TableShell>
+      <table className="w-full min-w-[820px] text-sm">
+        <thead className="sticky top-0 z-10 bg-bg">
+          <tr>
+            <th className="border-b border-border p-2 text-left">Date</th>
+            <th className="border-b border-border p-2 text-left">Client</th>
+            <th className="border-b border-border p-2 text-left">Deal Type</th>
+            <th className="border-b border-border p-2 text-left">Order Type</th>
+            <th className="border-b border-border p-2 text-left">Quantity</th>
+            <th className="border-b border-border p-2 text-left">Average Price</th>
+            <th className="border-b border-border p-2 text-left">Exchange</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, idx) => (
+            <tr key={idx} className="border-b border-border/50 last:border-none">
+              <td className="p-2">{row.date}</td>
+              <td className="p-2">{row.client}</td>
+              <td className="p-2">{row.dealType || "-"}</td>
+              <td className="p-2">{row.orderType}</td>
+              <td className="p-2">{row.quantity}</td>
+              <td className="p-2">{row.price}</td>
+              <td className="p-2">{row.exchange}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </TableShell>
+  );
+}
+
 function DividendsTable({ rows }: { rows: ActionRow[] }) {
   if (!rows.length) return <p className="py-4 text-sm text-muted">No records available.</p>;
   return (
@@ -223,6 +291,8 @@ function AgmEgmTable({ rows }: { rows: ActionRow[] }) {
 }
 
 export function CorporateActionsSection({ actions }: { actions: Record<string, ActionRow[]> }) {
+  const dealRows = mergeDealRows(actions);
+
   return (
     <Card className="p-4">
       <h3 className="text-lg font-semibold">Corporate Actions and Deals</h3>
@@ -234,8 +304,7 @@ export function CorporateActionsSection({ actions }: { actions: Record<string, A
           <TabsTrigger value="stockSplits">Stock Splits</TabsTrigger>
           <TabsTrigger value="rightsIssues">Rights Issues</TabsTrigger>
           <TabsTrigger value="agmEgm">AGM / EGM</TabsTrigger>
-          <TabsTrigger value="bulkDeals">Bulk Deals</TabsTrigger>
-          <TabsTrigger value="blockDeals">Block Deals</TabsTrigger>
+          <TabsTrigger value="deals">Deals</TabsTrigger>
           <TabsTrigger value="insiderTrades">Insider Trades</TabsTrigger>
         </TabsList>
 
@@ -257,11 +326,8 @@ export function CorporateActionsSection({ actions }: { actions: Record<string, A
         <TabsContent value="agmEgm">
           <AgmEgmTable rows={actions.agmEgm || []} />
         </TabsContent>
-        <TabsContent value="bulkDeals">
-          <ActionTable rows={actions.bulkDeals || []} />
-        </TabsContent>
-        <TabsContent value="blockDeals">
-          <ActionTable rows={actions.blockDeals || []} />
+        <TabsContent value="deals">
+          <DealsTable rows={dealRows} />
         </TabsContent>
         <TabsContent value="insiderTrades">
           <ActionTable rows={actions.insiderTrades || []} />

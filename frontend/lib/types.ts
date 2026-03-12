@@ -89,6 +89,7 @@ export type DashboardData = {
     stockSplits: ActionRow[];
     rightsIssues: ActionRow[];
     agmEgm: ActionRow[];
+    deals: ActionRow[];
     bulkDeals: ActionRow[];
     blockDeals: ActionRow[];
     insiderTrades: ActionRow[];
@@ -106,6 +107,30 @@ export type DashboardData = {
     dii: number;
     public: number;
   };
+  brokerageResearch?: {
+    source: string;
+    sourceUrl: string;
+    updatedAt: string;
+    summary: {
+      "1D": number;
+      "1W": number;
+      "1M": number;
+      buy: number;
+      hold: number;
+      sell: number;
+      total: number;
+    };
+    reports: Array<{
+      broker: string;
+      action: string;
+      targetPrice: number | null;
+      rating: number | null;
+      date: string;
+      headline: string;
+      summary: string;
+      url: string;
+    }>;
+  };
   competitors: Array<{ name: string; marketCap: number; pe: number; pb: number; roe: number }>;
   news: NewsItem[];
 };
@@ -114,6 +139,7 @@ export type ActionRow = {
   date: string;
   client: string;
   orderType: string;
+  dealType?: string;
   agenda?: string;
   announcementDate?: string;
   type?: string;

@@ -103,8 +103,12 @@ export const mockDashboard: DashboardData = {
     stockSplits: [],
     rightsIssues: [],
     agmEgm: [],
-    bulkDeals: [{ date: "2026-01-09", client: "Institutional Fund", orderType: "Buy", quantity: 560000, price: 1768, exchange: "NSE" }],
-    blockDeals: [{ date: "2026-01-10", client: "Broker House", orderType: "Sell", quantity: 240000, price: 1789, exchange: "BSE" }],
+    deals: [
+      { date: "2026-01-10", client: "Broker House", orderType: "Sell", dealType: "Block", quantity: 240000, price: 1789, exchange: "BSE" },
+      { date: "2026-01-09", client: "Institutional Fund", orderType: "Buy", dealType: "Bulk", quantity: 560000, price: 1768, exchange: "NSE" }
+    ],
+    bulkDeals: [{ date: "2026-01-09", client: "Institutional Fund", orderType: "Buy", dealType: "Bulk", quantity: 560000, price: 1768, exchange: "NSE" }],
+    blockDeals: [{ date: "2026-01-10", client: "Broker House", orderType: "Sell", dealType: "Block", quantity: 240000, price: 1789, exchange: "BSE" }],
     insiderTrades: [{ date: "2026-02-12", client: "Senior Executive", orderType: "Buy", quantity: 5000, price: 1752, exchange: "NSE" }]
   },
   documents: {
@@ -114,6 +118,24 @@ export const mockDashboard: DashboardData = {
     exchangeFilings: [{ title: "NSE Filing Dec 2025", url: "#" }]
   },
   shareholding: { quarter: "Dec 2025", promoters: 25.44, fii: 48.17, dii: 17.25, public: 9.14 },
+  brokerageResearch: {
+    source: "Trendlyne",
+    sourceUrl: "https://trendlyne.com/research-reports/stock/533/HDFCBANK/hdfc-bank-ltd/",
+    updatedAt: "2026-03-12T10:00:00Z",
+    summary: { "1D": 1, "1W": 3, "1M": 8, buy: 5, hold: 2, sell: 1, total: 8 },
+    reports: [
+      {
+        broker: "Geojit BNP Paribas",
+        action: "hold",
+        targetPrice: 1022,
+        rating: 4.8,
+        date: "2026-02-10",
+        headline: "Latest research reports of HDFC Bank Ltd.",
+        summary: "Geojit BNP Paribas decreased Hold price target of HDFC Bank Ltd. to 1022.0 on 10 Feb, 2026.",
+        url: "https://trendlyne.com/posts/5523813/hdfc-bank-limited"
+      }
+    ]
+  },
   competitors: [
     { name: "ICICI Bank", marketCap: 976659, pe: 18.44, pb: 2.85, roe: 16.17 },
     { name: "SBI", marketCap: 1084136, pe: 13.39, pb: 1.92, roe: 14.35 }

@@ -11,7 +11,7 @@ import { KeyRatiosSection } from "@/components/sections/key-ratios-section";
 import { MetricsGrid } from "@/components/sections/metrics-grid";
 import { NewsSection } from "@/components/sections/news-section";
 import { ResearchReportSection } from "@/components/sections/research-report-section";
-import { InsiderTradingSummary } from "@/components/sections/insider-trading-summary";
+import { BrokerageSummary } from "@/components/sections/brokerage-summary";
 import { ReturnsPanel } from "@/components/sections/returns-panel";
 import { RiskScore } from "@/components/sections/risk-score";
 import { SmartScore } from "@/components/sections/smart-score";
@@ -140,7 +140,7 @@ export default async function StockDetailsPage({ params }: Props) {
 
           <div className="grid gap-4 xl:grid-cols-2">
             <ReturnsCalculator symbol={symbol} currentPrice={data.price.cmp} aiTarget={data.price.aiTarget} />
-            <InsiderTradingSummary insiderTrades={data.corporateActions.insiderTrades} />
+            <BrokerageSummary brokerage={data.brokerageResearch} />
           </div>
 
           <section id="corporate-actions">

@@ -23,7 +23,7 @@ export function ReturnsCalculator({ symbol, currentPrice, aiTarget }: { symbol: 
   const future = series[series.length - 1].value;
 
   return (
-    <Card className="p-4">
+    <Card className="h-full p-4">
       <h3 className="text-lg font-semibold">Predictive ROI Simulator</h3>
       <p className="mt-1 text-sm text-muted">Simulated 3-Year Return to AI Target Price</p>
 

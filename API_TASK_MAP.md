@@ -33,6 +33,7 @@ Base path: `/api/v1/stocks/*`
 | **Groww authenticated API (`growwapi`)** | Optional profile/shareholding/price enrichment if Groww auth credentials are configured. |
 | **Google News RSS** | Primary source for **market-wide news** endpoint (`/market-news`). |
 | **NewsAPI (`newsapi.org`)** | Fallback for market-wide news; also symbol-level dashboard news. |
+| **Trendlyne (`trendlyne.com`)** | Brokerage/analyst research details per symbol (latest reports, action mix, targets) and bulk/block deal rows for corporate actions tables. |
 | **Gemini API (`generativelanguage.googleapis.com`)** | AI chat, research report, smart-score explanation, and risk-score explanation. |
 
 ## 3) Source priority used by dashboard

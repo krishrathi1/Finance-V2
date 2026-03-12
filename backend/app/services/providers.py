@@ -1,6 +1,7 @@
 import asyncio
 from email.utils import parsedate_to_datetime
 from html import unescape
+import json
 import math
 import re
 import time
@@ -43,6 +44,12 @@ class MarketDataProviders:
         self._last_nse_quotes: dict[str, dict[str, Any]] = {}
         self._nse_xbrl_cache: dict[str, dict[str, float] | None] = {}
         self._nse_session: requests.Session | None = None
+        self._trendlyne_symbol_url_map: dict[str, str] = {}
+        self._trendlyne_map_loaded_at: float = 0.0
+        self._trendlyne_reports_cache: dict[str, tuple[float, dict[str, Any] | None]] = {}
+        self._trendlyne_equity_meta_map: dict[str, tuple[str, str]] = {}
+        self._trendlyne_equity_map_loaded_at: float = 0.0
+        self._trendlyne_bulk_block_cache: dict[str, tuple[float, dict[str, list[dict[str, Any]]] | None]] = {}
 
     @retry(stop=stop_after_attempt(1), wait=wait_exponential(multiplier=0.2, min=0.2, max=1.0))
     async def _get(self, url: str, params: dict[str, Any] | None = None, headers: dict[str, str] | None = None) -> Any:
@@ -220,6 +227,386 @@ class MarketDataProviders:
             return payload.get("articles")
         except Exception:
             return None
+
+    async def get_trendlyne_brokerage(self, symbol: str) -> dict[str, Any] | None:
+        return await asyncio.to_thread(self._get_trendlyne_brokerage_sync, symbol)
+
+    def _get_trendlyne_brokerage_sync(self, symbol: str) -> dict[str, Any] | None:
+        key = symbol.replace(".NS", "").replace(".BO", "").strip().upper()
+        if not key:
+            return None
+
+        now = time.time()
+        cached = self._trendlyne_reports_cache.get(key)
+        if cached and now - cached[0] < 900:
+            return cached[1]
+
+        source_url = self._resolve_trendlyne_stock_report_url(key)
+        if not source_url:
+            self._trendlyne_reports_cache[key] = (now, None)
+            return None
+
+        try:
+            response = requests.get(
+                source_url,
+                headers={**WEB_PAGE_HEADERS, "referer": "https://trendlyne.com/"},
+                timeout=10,
+            )
+            response.raise_for_status()
+            payload = self._parse_trendlyne_brokerage_payload(source_url, response.text)
+            self._trendlyne_reports_cache[key] = (now, payload)
+            return payload
+        except Exception:
+            # Fall back to stale cached value when page fetch fails.
+            return cached[1] if cached else None
+
+    def _resolve_trendlyne_stock_report_url(self, symbol: str) -> str | None:
+        self._refresh_trendlyne_symbol_map_if_needed()
+        if not self._trendlyne_symbol_url_map:
+            return None
+
+        exact = self._trendlyne_symbol_url_map.get(symbol)
+        if exact:
+            return exact
+
+        normalized = re.sub(r"[^A-Z0-9]", "", symbol)
+        if not normalized:
+            return None
+        for key, value in self._trendlyne_symbol_url_map.items():
+            if re.sub(r"[^A-Z0-9]", "", key) == normalized:
+                return value
+        return None
+
+    def _refresh_trendlyne_symbol_map_if_needed(self) -> None:
+        now = time.time()
+        if self._trendlyne_symbol_url_map and now - self._trendlyne_map_loaded_at < 6 * 60 * 60:
+            return
+
+        built: dict[str, str] = {}
+        try:
+            stock_reports_xml = requests.get(
+                "https://trendlyne.com/equity-sitemap-stockreports.xml",
+                headers=WEB_PAGE_HEADERS,
+                timeout=15,
+            ).text
+            for loc in re.findall(r"<loc>(.*?)</loc>", stock_reports_xml):
+                match = re.search(r"/research-reports/stock/\d+/([^/]+)/", loc)
+                if not match:
+                    continue
+                symbol = str(match.group(1)).strip().upper()
+                if not symbol:
+                    continue
+                built[symbol] = loc.strip()
+        except Exception:
+            pass
+
+        # This sitemap is keyed by symbol and id, so it improves lookup reliability.
+        try:
+            posts_xml = requests.get(
+                "https://trendlyne.com/equity-sitemap-stock-research-reports-posts.xml",
+                headers=WEB_PAGE_HEADERS,
+                timeout=15,
+            ).text
+            for loc in re.findall(r"<loc>(.*?)</loc>", posts_xml):
+                match = re.search(r"/research-reports/post/([^/]+)/(\d+)/([^/]+)/", loc)
+                if not match:
+                    continue
+                symbol = str(match.group(1)).strip().upper()
+                stock_id = str(match.group(2)).strip()
+                slug = str(match.group(3)).strip()
+                if not symbol or not stock_id or not slug:
+                    continue
+                built[symbol] = f"https://trendlyne.com/research-reports/stock/{stock_id}/{symbol}/{slug}/"
+        except Exception:
+            pass
+
+        if built:
+            self._trendlyne_symbol_url_map = built
+            self._trendlyne_map_loaded_at = now
+
+    def _parse_trendlyne_brokerage_payload(self, source_url: str, html: str) -> dict[str, Any]:
+        reports: list[dict[str, Any]] = []
+        seen: set[str] = set()
+
+        for script in re.findall(
+            r"<script[^>]+type\s*=\s*[\"']application/ld\+json[\"'][^>]*>(.*?)</script>",
+            html,
+            flags=re.IGNORECASE | re.DOTALL,
+        ):
+            payload_raw = unescape((script or "").strip())
+            if not payload_raw:
+                continue
+            try:
+                payload = json.loads(payload_raw)
+            except Exception:
+                continue
+
+            items = payload if isinstance(payload, list) else [payload]
+            for item in items:
+                if not isinstance(item, dict):
+                    continue
+                if str(item.get("@type") or "").strip().lower() != "review":
+                    continue
+
+                author = item.get("author") if isinstance(item.get("author"), dict) else {}
+                rating = item.get("reviewRating") if isinstance(item.get("reviewRating"), dict) else {}
+                headline = " ".join(str(item.get("name") or "").split())
+                summary = " ".join(str(item.get("description") or "").split())
+                link = str(item.get("url") or "").strip()
+                date_value = self._parse_trendlyne_review_date(str(item.get("datePublished") or ""))
+                action = self._extract_trendlyne_reco_action(headline, summary)
+                key = link or f"{author.get('name')}|{date_value}|{headline}"
+                if key in seen:
+                    continue
+                seen.add(key)
+
+                reports.append(
+                    {
+                        "broker": str(author.get("name") or "Broker").strip() or "Broker",
+                        "action": action,
+                        "targetPrice": self._extract_trendlyne_target_price(summary),
+                        "rating": self._to_float(rating.get("ratingValue")),
+                        "date": date_value,
+                        "headline": headline[:220],
+                        "summary": summary[:360],
+                        "url": link,
+                    }
+                )
+
+        reports.sort(key=lambda row: row.get("date") or "", reverse=True)
+        reports = reports[:20]
+
+        now = datetime.utcnow()
+        summary = {"1D": 0, "1W": 0, "1M": 0, "buy": 0, "hold": 0, "sell": 0, "total": len(reports)}
+        for row in reports:
+            action = str(row.get("action") or "").strip().lower()
+            if action == "buy":
+                summary["buy"] += 1
+            elif action == "sell":
+                summary["sell"] += 1
+            elif action == "hold":
+                summary["hold"] += 1
+
+            row_date_raw = str(row.get("date") or "").strip()
+            try:
+                row_date = datetime.strptime(row_date_raw[:10], "%Y-%m-%d")
+            except Exception:
+                continue
+            age_days = (now - row_date).days
+            if age_days <= 1:
+                summary["1D"] += 1
+            if age_days <= 7:
+                summary["1W"] += 1
+            if age_days <= 30:
+                summary["1M"] += 1
+
+        return {
+            "source": "Trendlyne",
+            "sourceUrl": source_url,
+            "updatedAt": datetime.utcnow().isoformat(),
+            "summary": summary,
+            "reports": reports,
+        }
+
+    def _parse_trendlyne_review_date(self, raw_date: str) -> str:
+        value = " ".join((raw_date or "").split())
+        if not value:
+            return ""
+        value = value.replace("Sept.", "Sep.")
+        value = value.replace("a.m.", "AM").replace("p.m.", "PM")
+        value = re.sub(r"(?<=\b[A-Za-z]{3})\.", "", value)
+        value = re.sub(r",\s*midnight\b", ", 00:00", value, flags=re.IGNORECASE)
+        value = re.sub(r",\s*noon\b", ", 12:00", value, flags=re.IGNORECASE)
+
+        for fmt in (
+            "%b %d, %Y, %H:%M",
+            "%b %d, %Y, %I:%M %p",
+            "%b %d, %Y",
+            "%Y-%m-%d",
+            "%d-%m-%Y",
+        ):
+            try:
+                return datetime.strptime(value, fmt).date().isoformat()
+            except Exception:
+                continue
+        try:
+            return parsedate_to_datetime(value).date().isoformat()
+        except Exception:
+            return value[:10]
+
+    def _extract_trendlyne_target_price(self, text: str) -> float | None:
+        value = " ".join((text or "").split())
+        if not value:
+            return None
+        patterns = [
+            r"target(?:\s+price)?[^0-9]{0,20}([0-9][0-9,]*(?:\.\d+)?)",
+            r"\bto\s+([0-9][0-9,]*(?:\.\d+)?)\b",
+        ]
+        for pattern in patterns:
+            match = re.search(pattern, value, flags=re.IGNORECASE)
+            if not match:
+                continue
+            return self._to_float(match.group(1))
+        return None
+
+    def _extract_trendlyne_reco_action(self, headline: str, summary: str) -> str:
+        text = f"{headline} {summary}".lower()
+        if re.search(r"\b(sell|reduce|underperform|underweight)\b", text):
+            return "sell"
+        if re.search(r"\b(hold|neutral)\b", text):
+            return "hold"
+        if re.search(r"\b(buy|accumulate|add|outperform|overweight)\b", text):
+            return "buy"
+        return "hold"
+
+    def _refresh_trendlyne_equity_map_if_needed(self) -> None:
+        now = time.time()
+        if self._trendlyne_equity_meta_map and now - self._trendlyne_equity_map_loaded_at < 6 * 60 * 60:
+            return
+
+        built: dict[str, tuple[str, str]] = {}
+        try:
+            xml_text = requests.get(
+                "https://trendlyne.com/equity-sitemap-stocks.xml",
+                headers=WEB_PAGE_HEADERS,
+                timeout=20,
+            ).text
+            for loc in re.findall(r"<loc>(.*?)</loc>", xml_text):
+                match = re.search(r"/equity/(\d+)/([^/]+)/([^/]+)/", loc)
+                if not match:
+                    continue
+                stock_id = str(match.group(1)).strip()
+                symbol = str(match.group(2)).strip().upper()
+                slug = str(match.group(3)).strip()
+                if not stock_id or not symbol or not slug:
+                    continue
+                built[symbol] = (stock_id, slug)
+        except Exception:
+            pass
+
+        # Fallback from the already-known research report map.
+        if self._trendlyne_symbol_url_map:
+            for symbol, url in self._trendlyne_symbol_url_map.items():
+                match = re.search(r"/research-reports/stock/(\d+)/([^/]+)/([^/]+)/", url)
+                if not match:
+                    continue
+                stock_id = str(match.group(1)).strip()
+                slug = str(match.group(3)).strip()
+                if symbol and stock_id and slug and symbol not in built:
+                    built[symbol] = (stock_id, slug)
+
+        if built:
+            self._trendlyne_equity_meta_map = built
+            self._trendlyne_equity_map_loaded_at = now
+
+    def _resolve_trendlyne_equity_meta(self, symbol: str) -> tuple[str, str] | None:
+        self._refresh_trendlyne_equity_map_if_needed()
+        if not self._trendlyne_equity_meta_map:
+            return None
+
+        key = symbol.replace(".NS", "").replace(".BO", "").strip().upper()
+        exact = self._trendlyne_equity_meta_map.get(key)
+        if exact:
+            return exact
+
+        normalized = re.sub(r"[^A-Z0-9]", "", key)
+        if not normalized:
+            return None
+        for raw, meta in self._trendlyne_equity_meta_map.items():
+            if re.sub(r"[^A-Z0-9]", "", raw) == normalized:
+                return meta
+        return None
+
+    def _parse_trendlyne_bulk_block_deals(self, html: str, symbol: str) -> dict[str, list[dict[str, Any]]]:
+        result: dict[str, list[dict[str, Any]]] = {"bulkDeals": [], "blockDeals": []}
+        table_match = re.search(r"<table[^>]*>(.*?)</table>", html, flags=re.IGNORECASE | re.DOTALL)
+        if not table_match:
+            return result
+
+        seen: set[str] = set()
+        for row_html in re.findall(r"<tr[^>]*>(.*?)</tr>", table_match.group(1), flags=re.IGNORECASE | re.DOTALL):
+            cols = re.findall(r"<t[dh][^>]*>(.*?)</t[dh]>", row_html, flags=re.IGNORECASE | re.DOTALL)
+            if len(cols) < 8:
+                continue
+
+            cleaned: list[str] = []
+            for cell in cols[:8]:
+                text = unescape(re.sub(r"<[^>]+>", " ", cell))
+                text = " ".join(text.split())
+                cleaned.append(text)
+
+            client, deal_type, action_raw, date_raw, avg_price_raw, quantity_raw, _intraday, exchange_raw = cleaned
+            action = action_raw.strip().lower()
+            order_type = "Buy" if action.startswith(("pur", "buy")) else "Sell" if action.startswith(("sell", "sal")) else (action_raw or "Deal")
+            deal_type_norm = (deal_type or "").strip().lower()
+            bucket = "bulkDeals" if "bulk" in deal_type_norm else "blockDeals"
+            exchange = (exchange_raw or "NSE").strip().upper() or "NSE"
+
+            date_value = date_raw
+            for fmt in ("%d %b %Y", "%d %B %Y", "%d-%b-%Y", "%Y-%m-%d"):
+                try:
+                    date_value = datetime.strptime(date_raw, fmt).date().isoformat()
+                    break
+                except Exception:
+                    continue
+
+            price_num = self._to_float(avg_price_raw)
+            row = {
+                "date": date_value,
+                "client": client or symbol,
+                "orderType": order_type,
+                "quantity": quantity_raw or "-",
+                "price": round(price_num, 2) if price_num is not None else (avg_price_raw or "-"),
+                "exchange": exchange,
+            }
+            row_key = f"{row['date']}|{row['client']}|{row['orderType']}|{row['quantity']}|{row['price']}|{row['exchange']}"
+            if row_key in seen:
+                continue
+            seen.add(row_key)
+            result[bucket].append(row)
+
+        def parse_sort_date(value: str) -> datetime:
+            for fmt in ("%Y-%m-%d", "%d %b %Y", "%d-%b-%Y", "%d-%m-%Y"):
+                try:
+                    return datetime.strptime(value, fmt)
+                except Exception:
+                    continue
+            return datetime.min
+
+        result["bulkDeals"].sort(key=lambda row: parse_sort_date(str(row.get("date") or "")), reverse=True)
+        result["blockDeals"].sort(key=lambda row: parse_sort_date(str(row.get("date") or "")), reverse=True)
+        return result
+
+    def _get_trendlyne_bulk_block_deals_sync(self, symbol: str) -> dict[str, list[dict[str, Any]]] | None:
+        key = symbol.replace(".NS", "").replace(".BO", "").strip().upper()
+        if not key:
+            return None
+
+        now = time.time()
+        cached = self._trendlyne_bulk_block_cache.get(key)
+        if cached and now - cached[0] < 900:
+            return cached[1]
+
+        meta = self._resolve_trendlyne_equity_meta(key)
+        if not meta:
+            self._trendlyne_bulk_block_cache[key] = (now, None)
+            return None
+        stock_id, slug = meta
+        url = f"https://trendlyne.com/equity/bulk-block-deals/{key}/{stock_id}/{slug}/"
+
+        try:
+            response = requests.get(
+                url,
+                headers={**WEB_PAGE_HEADERS, "referer": "https://trendlyne.com/"},
+                timeout=12,
+                allow_redirects=True,
+            )
+            response.raise_for_status()
+            parsed = self._parse_trendlyne_bulk_block_deals(response.text, key)
+            self._trendlyne_bulk_block_cache[key] = (now, parsed)
+            return parsed
+        except Exception:
+            return cached[1] if cached else None
 
     async def get_google_market_news(self, query: str = "Indian stock market") -> list[dict[str, Any]] | None:
         return await asyncio.to_thread(self._get_google_market_news_sync, query)
@@ -981,6 +1368,7 @@ class MarketDataProviders:
             "stockSplits": [],
             "rightsIssues": [],
             "agmEgm": [],
+            "deals": [],
             "bulkDeals": [],
             "blockDeals": [],
             "insiderTrades": [],
@@ -1005,6 +1393,7 @@ class MarketDataProviders:
 
         def parse_event_date(value: str) -> datetime:
             for fmt in (
+                "%d %b %Y",
                 "%d-%b-%Y",
                 "%d-%m-%Y",
                 "%Y-%m-%d",
@@ -1068,6 +1457,35 @@ class MarketDataProviders:
             if not labels:
                 return "Dividend"
             return " + ".join(labels)
+
+        def merge_deal_rows(bulk_rows: list[dict[str, Any]], block_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+            combined: list[dict[str, Any]] = []
+            seen: set[str] = set()
+
+            for deal_type, rows in (("Bulk", bulk_rows), ("Block", block_rows)):
+                for row in rows:
+                    merged_row = {**row, "dealType": deal_type}
+                    row_key = "|".join(
+                        [
+                            str(merged_row.get("date") or ""),
+                            str(merged_row.get("client") or ""),
+                            str(merged_row.get("quantity") or ""),
+                            str(merged_row.get("price") or ""),
+                            str(merged_row.get("exchange") or ""),
+                            str(merged_row.get("dealType") or ""),
+                            str(merged_row.get("orderType") or ""),
+                        ]
+                    )
+                    if row_key in seen:
+                        continue
+                    seen.add(row_key)
+                    combined.append(merged_row)
+
+            combined.sort(
+                key=lambda row: parse_event_date(str(row.get("date") or "")),
+                reverse=True,
+            )
+            return combined
 
         try:
             if self._nse_session is None:
@@ -1292,6 +1710,7 @@ class MarketDataProviders:
                         "date": item.get("BD_DT_DATE") or "",
                         "client": item.get("BD_CLIENT_NAME") or key,
                         "orderType": item.get("BD_BUY_SELL") or "Bulk Deal",
+                        "dealType": "Bulk",
                         "quantity": item.get("BD_QTY_TRD") or "-",
                         "price": item.get("BD_TP_WATP") or "-",
                         "exchange": "NSE",
@@ -1304,16 +1723,36 @@ class MarketDataProviders:
                         "date": item.get("BD_DT_DATE") or "",
                         "client": item.get("BD_CLIENT_NAME") or key,
                         "orderType": item.get("BD_BUY_SELL") or "Block Deal",
+                        "dealType": "Block",
                         "quantity": item.get("BD_QTY_TRD") or "-",
                         "price": item.get("BD_TP_WATP") or "-",
                         "exchange": "NSE",
                     }
                 )
+
+            trendlyne_deals = self._get_trendlyne_bulk_block_deals_sync(key)
+            if trendlyne_deals:
+                trend_bulk = trendlyne_deals.get("bulkDeals") or []
+                trend_block = trendlyne_deals.get("blockDeals") or []
+                if trend_bulk:
+                    empty["bulkDeals"] = trend_bulk
+                if trend_block:
+                    empty["blockDeals"] = trend_block
+
             for action_key in ("dividends", "bonusIssues", "stockSplits", "rightsIssues", "agmEgm"):
                 empty[action_key].sort(
                     key=lambda row: parse_event_date(str(row.get("exDate") or row.get("date") or "")),
                     reverse=True,
                 )
+            for action_key in ("bulkDeals", "blockDeals"):
+                empty[action_key].sort(
+                    key=lambda row: parse_event_date(str(row.get("date") or "")),
+                    reverse=True,
+                )
+            empty["deals"] = merge_deal_rows(
+                empty.get("bulkDeals") or [],
+                empty.get("blockDeals") or [],
+            )
             return empty
         except Exception:
             return empty

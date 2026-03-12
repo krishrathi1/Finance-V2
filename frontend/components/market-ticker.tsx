@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { fetchTickerTape } from "@/lib/api";
 
-const DEFAULT_SYMBOLS = ["NIFTY 50", "HDFCBANK", "RELIANCE", "SBIN", "TCS", "INFY", "ICICIBANK", "LT", "BHARTIARTL", "ITC"];
+const FALLBACK_SYMBOLS = ["NIFTY 50", "HDFCBANK", "RELIANCE", "SBIN", "TCS", "INFY", "ICICIBANK", "LT", "BHARTIARTL", "ITC"];
 
 type TickerRow = { symbol: string; cmp: number; change: number; changePercent: number };
 
@@ -37,7 +37,8 @@ export function MarketTicker() {
     let alive = true;
     const load = async (forceRefresh = false) => {
       try {
-        const data = await fetchTickerTape(DEFAULT_SYMBOLS, { force: forceRefresh });
+        // No symbol filter = backend returns the full NSE market ticker feed.
+        const data = await fetchTickerTape([], { force: forceRefresh });
         if (alive && data.length) setRows(data);
       } catch {
         if (alive) setRows([]);
@@ -55,7 +56,7 @@ export function MarketTicker() {
   }, []);
 
   const tape = useMemo(() => {
-    const source = rows.length ? rows : DEFAULT_SYMBOLS.map((symbol) => ({ symbol, cmp: 0, change: 0, changePercent: 0 }));
+    const source = rows.length ? rows : FALLBACK_SYMBOLS.map((symbol) => ({ symbol, cmp: 0, change: 0, changePercent: 0 }));
     return [...source, ...source];
   }, [rows]);
 
