@@ -19,6 +19,7 @@ export type DashboardData = {
     description: string;
     chairman: string;
     previousName: string;
+    industry?: string;
   };
   price: {
     cmp: number;
@@ -136,7 +137,13 @@ export type DashboardData = {
       url: string;
     }>;
   };
-  competitors: Array<{ name: string; marketCap: number; pe: number; pb: number; roe: number }>;
+  competitors: {
+    table: Array<{ name: string; marketCap: number; pe: number; pb: number; roe: number }>;
+    sectorName?: string;
+    industryName?: string;
+    sectorCompanies?: Array<{ symbol: string; name: string }>;
+    industryCompanies?: Array<{ symbol: string; name: string }>;
+  };
   news: NewsItem[];
 };
 

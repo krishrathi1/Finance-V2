@@ -2806,6 +2806,7 @@ class MarketDataProviders:
             "profile": {
                 "companyName": chosen_info.get("longName") or chosen_info.get("shortName"),
                 "sector": chosen_info.get("sector"),
+                "industry": chosen_info.get("industry"),
                 "description": chosen_info.get("longBusinessSummary"),
                 "website": chosen_info.get("website"),
                 "chairman": next((officer.get('name') for officer in chosen_info.get('companyOfficers', []) if 'chairman' in str(officer.get('title')).lower()), "N/A"),

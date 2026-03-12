@@ -12,6 +12,7 @@ def get_sample_dashboard(symbol: str) -> dict:
             "description": "",
             "chairman": "N/A",
             "previousName": "N/A",
+            "industry": "",
         },
         "price": {
             "cmp": 0.0,
@@ -91,7 +92,13 @@ def get_sample_dashboard(symbol: str) -> dict:
             "reports": [],
         },
         "news": [],
-        "competitors": [],
+        "competitors": {
+            "table": [],
+            "sectorName": "",
+            "industryName": "",
+            "sectorCompanies": [],
+            "industryCompanies": [],
+        },
         "technicals": {
             "rsi14": 0.0,
             "macd": 0.0,

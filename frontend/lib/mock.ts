@@ -11,7 +11,8 @@ export const mockDashboard: DashboardData = {
     website: "https://www.hdfcbank.com",
     description: "Large private sector Indian bank with diversified lending and deposit franchise.",
     chairman: "N/A",
-    previousName: "N/A"
+    previousName: "N/A",
+    industry: "Private Sector Bank"
   },
   price: {
     cmp: 1775.5,
@@ -210,10 +211,28 @@ export const mockDashboard: DashboardData = {
       }
     ]
   },
-  competitors: [
-    { name: "ICICI Bank", marketCap: 976659, pe: 18.44, pb: 2.85, roe: 16.17 },
-    { name: "SBI", marketCap: 1084136, pe: 13.39, pb: 1.92, roe: 14.35 }
-  ],
+  competitors: {
+    table: [
+      { name: "ICICI Bank", marketCap: 976659, pe: 18.44, pb: 2.85, roe: 16.17 },
+      { name: "SBI", marketCap: 1084136, pe: 13.39, pb: 1.92, roe: 14.35 }
+    ],
+    sectorName: "Financial Services",
+    industryName: "Private Sector Bank",
+    sectorCompanies: [
+      { symbol: "HDFCBANK", name: "HDFC Bank Ltd" },
+      { symbol: "ICICIBANK", name: "ICICI Bank Ltd" },
+      { symbol: "SBIN", name: "State Bank of India" },
+      { symbol: "KOTAKBANK", name: "Kotak Mahindra Bank Ltd" },
+      { symbol: "AXISBANK", name: "Axis Bank Ltd" }
+    ],
+    industryCompanies: [
+      { symbol: "HDFCBANK", name: "HDFC Bank Ltd" },
+      { symbol: "ICICIBANK", name: "ICICI Bank Ltd" },
+      { symbol: "KOTAKBANK", name: "Kotak Mahindra Bank Ltd" },
+      { symbol: "AXISBANK", name: "Axis Bank Ltd" },
+      { symbol: "INDUSINDBK", name: "IndusInd Bank Ltd" }
+    ]
+  },
   news: [
     {
       title: "HDFC vs SBI: Which bank is ruling Indian banking?",
