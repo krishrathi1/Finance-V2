@@ -329,7 +329,7 @@ class StockDashboardService:
 
         deduped.sort(key=sort_key, reverse=True)
         top_rows = deduped[:24]
-        return await self.providers.enrich_news_images(top_rows, max_items=10)
+        return await self.providers.enrich_news_images(top_rows, max_items=24)
 
     async def get_dashboard(self, symbol: str, timeframe: str = "5Y") -> dict[str, Any]:
         data = get_sample_dashboard(symbol=symbol)

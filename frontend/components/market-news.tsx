@@ -59,30 +59,36 @@ export function MarketNews() {
   return (
     <div className="space-y-3">
       {lastUpdated ? <p className="text-xs text-muted">Updated: {lastUpdated}</p> : null}
-      <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
+      <div className="news-grid-stagger grid gap-4 sm:grid-cols-2 md:grid-cols-3">
         {articles.map((article, idx) => (
           <a
             key={`${article.url}-${idx}`}
             href={article.url}
             target="_blank"
             rel="noreferrer"
-            className="group flex h-[320px] flex-col overflow-hidden rounded-2xl border border-border/50 bg-panel transition-colors hover:border-accent hover:bg-panel/80"
+            className="news-card group flex h-[320px] flex-col overflow-hidden rounded-2xl border border-border/50 bg-panel hover:border-accent hover:bg-panel/80"
           >
             {article.imageUrl ? (
               <div className="relative h-40 w-full shrink-0 overflow-hidden bg-background/50">
+                <div className="absolute inset-0 z-[1] bg-gradient-to-t from-black/20 via-transparent to-transparent opacity-70" />
                 <img
                   src={article.imageUrl}
                   alt={article.title}
                   loading="lazy"
                   referrerPolicy="no-referrer"
-                  className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                  className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
                   onError={(e) => {
-                    (e.target as HTMLImageElement).style.display = "none";
+                    const target = e.target as HTMLImageElement;
+                    target.style.display = "none";
+                    const parent = target.parentElement;
+                    if (parent) {
+                      parent.classList.add("news-image-fallback");
+                    }
                   }}
                 />
               </div>
             ) : (
-              <div className="flex h-40 w-full shrink-0 items-center justify-center bg-background/50 text-xs text-muted">No Image</div>
+              <div className="news-image-fallback flex h-40 w-full shrink-0 items-center justify-center text-xs text-muted">No Image</div>
             )}
             <div className="flex flex-1 flex-col p-4">
               <div className="mb-2 flex items-center justify-between text-xs text-muted">
