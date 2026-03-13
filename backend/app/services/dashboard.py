@@ -270,28 +270,32 @@ class StockDashboardService:
             "NSE BSE stocks",
             "Nifty Sensex market update",
         ]
-        newsapi_items = await self.providers.get_news("stock market OR NSE OR BSE OR Sensex OR Nifty")
-        query_results = await asyncio.gather(
+        newsapi_results = await asyncio.gather(
+            *(self.providers.get_news(query) for query in queries),
+            return_exceptions=True,
+        )
+        google_results = await asyncio.gather(
             *(self.providers.get_google_market_news(query) for query in queries),
             return_exceptions=True,
         )
 
         combined: list[dict[str, Any]] = []
-        if newsapi_items:
-            for item in newsapi_items[:24]:
-                published_at = str(item.get("publishedAt") or "")[:10]
-                combined.append(
-                    {
-                        "title": str(item.get("title") or "").strip(),
-                        "source": ((item.get("source") or {}).get("name") or "News").strip(),
-                        "publishedAt": published_at,
-                        "url": str(item.get("url") or "").strip(),
-                        "summary": str(item.get("description") or "").strip(),
-                        "imageUrl": item.get("urlToImage"),
-                    }
-                )
+        for result in newsapi_results:
+            if isinstance(result, list):
+                for item in result[:12]:
+                    published_at = str(item.get("publishedAt") or "")[:10]
+                    combined.append(
+                        {
+                            "title": str(item.get("title") or "").strip(),
+                            "source": ((item.get("source") or {}).get("name") or "News").strip(),
+                            "publishedAt": published_at,
+                            "url": str(item.get("url") or "").strip(),
+                            "summary": str(item.get("description") or "").strip(),
+                            "imageUrl": item.get("urlToImage") if self.providers._is_usable_news_image_url(item.get("urlToImage")) else None,
+                        }
+                    )
 
-        for result in query_results:
+        for result in google_results:
             if isinstance(result, list):
                 combined.extend(result)
 
@@ -326,7 +330,13 @@ class StockDashboardService:
                     continue
             return datetime.min
 
-        deduped.sort(key=sort_key, reverse=True)
+        deduped.sort(
+            key=lambda item: (
+                1 if self.providers._is_usable_news_image_url(item.get("imageUrl")) else 0,
+                sort_key(item),
+            ),
+            reverse=True,
+        )
         top_rows = deduped[:24]
         return await self.providers.enrich_news_images(top_rows, max_items=24)
 

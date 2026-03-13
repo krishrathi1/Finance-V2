@@ -1344,14 +1344,14 @@ class MarketDataProviders:
         image_match = re.search(r'<img[^>]+src="([^"]+)"', description_html, flags=re.IGNORECASE)
         if image_match:
             candidate = image_match.group(1).strip()
-            if candidate:
+            if self._is_usable_news_image_url(candidate):
                 return candidate
 
         enclosure = item.find("enclosure")
         if enclosure is not None:
             enc_url = (enclosure.attrib.get("url") or "").strip()
             enc_type = (enclosure.attrib.get("type") or "").lower()
-            if enc_url and ("image" in enc_type or enc_url.lower().endswith((".jpg", ".jpeg", ".png", ".webp"))):
+            if self._is_usable_news_image_url(enc_url) and ("image" in enc_type or enc_url.lower().endswith((".jpg", ".jpeg", ".png", ".webp"))):
                 return enc_url
 
         media_tag = None
@@ -1362,16 +1362,56 @@ class MarketDataProviders:
                 break
         if media_tag is not None:
             media_url = (media_tag.attrib.get("url") or "").strip()
-            if media_url:
+            if self._is_usable_news_image_url(media_url):
                 return media_url
 
         return None
 
+    def _is_usable_news_image_url(self, url: str | None) -> bool:
+        candidate = str(url or "").strip()
+        if not candidate or not candidate.startswith("http"):
+            return False
+
+        parsed = urlparse(candidate)
+        host = (parsed.hostname or "").lower()
+        path = (parsed.path or "").lower()
+        query = (parsed.query or "").lower()
+        full = f"{host}{path}?{query}"
+
+        blocked_hosts = {
+            "news.google.com",
+            "lh3.googleusercontent.com",
+            "lh4.googleusercontent.com",
+            "lh5.googleusercontent.com",
+            "lh6.googleusercontent.com",
+            "encrypted-tbn0.gstatic.com",
+            "ssl.gstatic.com",
+        }
+        if host in blocked_hosts or host.endswith(".gstatic.com"):
+            return False
+
+        blocked_terms = [
+            "favicon",
+            "logo",
+            "icon",
+            "placeholder",
+            "default-image",
+            "default_news",
+            "google_news",
+            "/ge/",
+            "gnews",
+        ]
+        if any(term in full for term in blocked_terms):
+            return False
+
+        return True
+
     async def enrich_news_images(self, rows: list[dict[str, Any]], max_items: int = 10) -> list[dict[str, Any]]:
         async def enrich_row(row: dict[str, Any]) -> dict[str, Any]:
             image_url = str(row.get("imageUrl") or "").strip()
-            if image_url:
+            if self._is_usable_news_image_url(image_url):
                 return row
+            row["imageUrl"] = None
             url = str(row.get("url") or "").strip()
             if not url:
                 return row
@@ -1405,7 +1445,7 @@ class MarketDataProviders:
                 match = re.search(pattern, html, flags=re.IGNORECASE)
                 if match:
                     img = match.group(1).strip()
-                    if img.startswith("http"):
+                    if self._is_usable_news_image_url(img):
                         return img
             return None
         except Exception:

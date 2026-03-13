@@ -24,11 +24,13 @@ export function MarketNews() {
       try {
         const data = await fetchMarketNews({ force: forceRefresh });
         if (alive) {
-          setArticles(data);
-          setLastUpdated(new Date().toLocaleTimeString());
+          if (data.length || !forceRefresh) {
+            setArticles(data);
+            setLastUpdated(new Date().toLocaleTimeString());
+          }
         }
       } catch {
-        if (alive) setArticles([]);
+        if (alive && !forceRefresh) setArticles([]);
       } finally {
         if (alive) setLoading(false);
       }

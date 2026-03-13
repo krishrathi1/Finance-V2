@@ -238,7 +238,11 @@ export async function fetchMarketNews(options: { force?: boolean } = {}) {
       summary: string;
       imageUrl: string | null;
     }>;
-    setCache(key, rows);
+    if (rows.length) {
+      setCache(key, rows);
+      return rows;
+    }
+    if (stale) return stale;
     return rows;
   } catch (err) {
     if (stale) return stale;
