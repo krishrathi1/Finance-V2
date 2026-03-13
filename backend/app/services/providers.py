@@ -198,7 +198,7 @@ class MarketDataProviders:
         try:
             payload = await self._get(
                 "https://newsapi.org/v2/everything",
-                params={"q": query, "sortBy": "publishedAt", "language": "en", "pageSize": 10, "apiKey": settings.news_api_key},
+                params={"q": query, "sortBy": "publishedAt", "language": "en", "pageSize": 24, "apiKey": settings.news_api_key},
             )
             return payload.get("articles")
         except Exception:

@@ -270,31 +270,30 @@ class StockDashboardService:
             "NSE BSE stocks",
             "Nifty Sensex market update",
         ]
+        newsapi_items = await self.providers.get_news("stock market OR NSE OR BSE OR Sensex OR Nifty")
         query_results = await asyncio.gather(
             *(self.providers.get_google_market_news(query) for query in queries),
             return_exceptions=True,
         )
 
         combined: list[dict[str, Any]] = []
+        if newsapi_items:
+            for item in newsapi_items[:24]:
+                published_at = str(item.get("publishedAt") or "")[:10]
+                combined.append(
+                    {
+                        "title": str(item.get("title") or "").strip(),
+                        "source": ((item.get("source") or {}).get("name") or "News").strip(),
+                        "publishedAt": published_at,
+                        "url": str(item.get("url") or "").strip(),
+                        "summary": str(item.get("description") or "").strip(),
+                        "imageUrl": item.get("urlToImage"),
+                    }
+                )
+
         for result in query_results:
             if isinstance(result, list):
                 combined.extend(result)
-
-        if not combined:
-            fallback_news = await self.providers.get_news("Indian stock market")
-            if fallback_news:
-                for item in fallback_news[:20]:
-                    published_at = str(item.get("publishedAt") or "")[:10]
-                    combined.append(
-                        {
-                            "title": str(item.get("title") or "").strip(),
-                            "source": ((item.get("source") or {}).get("name") or "News").strip(),
-                            "publishedAt": published_at,
-                            "url": str(item.get("url") or "").strip(),
-                            "summary": str(item.get("description") or "").strip(),
-                            "imageUrl": item.get("urlToImage"),
-                        }
-                    )
 
         deduped: list[dict[str, Any]] = []
         seen: set[str] = set()
