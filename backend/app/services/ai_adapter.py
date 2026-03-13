@@ -26,7 +26,10 @@ class AIAdapter:
 
     async def chat(self, symbol: str, question: str, context: dict[str, Any]) -> str:
         if self._gemini and settings.gemini_api_key:
-            return await self._gemini.chat(symbol=symbol, question=question, context=context)
+            try:
+                return await self._gemini.chat(symbol=symbol, question=question, context=context)
+            except Exception:
+                pass
         return (
             f"Gemini API key not configured. Offline insight for {symbol}: "
             "review debt trends, operating margin trajectory, and 3-year earnings consistency before allocation."
@@ -34,7 +37,10 @@ class AIAdapter:
 
     async def generate_report(self, symbol: str, context: dict[str, Any]) -> str:
         if self._gemini and settings.gemini_api_key:
-            return await self._gemini.generate_report(symbol=symbol, context=context)
+            try:
+                return await self._gemini.generate_report(symbol=symbol, context=context)
+            except Exception:
+                pass
         return (
             f"# {symbol} Research Report\n"
             "## Company Overview\n"
@@ -55,7 +61,10 @@ class AIAdapter:
 
     async def explain_smart_score(self, symbol: str, context: dict[str, Any]) -> str:
         if self._gemini and settings.gemini_api_key:
-            return await self._gemini.explain_smart_score(symbol=symbol, context=context)
+            try:
+                return await self._gemini.explain_smart_score(symbol=symbol, context=context)
+            except Exception:
+                pass
         smart = (context.get("smartScore") or {}) if isinstance(context, dict) else {}
         score = float(smart.get("score", 0.0) or 0.0)
         dimensions = smart.get("dimensions") or {}
@@ -77,7 +86,10 @@ class AIAdapter:
 
     async def explain_risk_score(self, symbol: str, context: dict[str, Any]) -> str:
         if self._gemini and settings.gemini_api_key:
-            return await self._gemini.explain_risk_score(symbol=symbol, context=context)
+            try:
+                return await self._gemini.explain_risk_score(symbol=symbol, context=context)
+            except Exception:
+                pass
 
         risk = (context.get("riskScore") or {}) if isinstance(context, dict) else {}
         score = float(risk.get("score", 0.0) or 0.0)

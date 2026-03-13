@@ -10,6 +10,13 @@ class GeminiService:
         self.model = model
         self.base_url = "https://generativelanguage.googleapis.com/v1beta/models"
         self.timeout = httpx.Timeout(25.0, connect=5.0)
+        self.fallback_models = [
+            model,
+            "gemini-2.0-flash",
+            "gemini-2.0-flash-lite",
+            "gemini-1.5-flash-latest",
+            "gemini-1.5-pro-latest",
+        ]
 
     async def chat(self, symbol: str, question: str, context: dict[str, Any]) -> str:
         prompt = self._build_chat_prompt(symbol=symbol, question=question, context=context)
@@ -28,14 +35,27 @@ class GeminiService:
         return await self._generate(prompt)
 
     async def _generate(self, prompt: str) -> str:
-        url = f"{self.base_url}/{self.model}:generateContent"
-        params = {"key": self.api_key}
         payload = {"contents": [{"parts": [{"text": prompt}]}]}
+        params = {"key": self.api_key}
+        errors: list[str] = []
 
         async with httpx.AsyncClient(timeout=self.timeout) as client:
-            response = await client.post(url, params=params, json=payload)
-            response.raise_for_status()
-            data = response.json()
+            for model_name in list(dict.fromkeys(self.fallback_models)):
+                url = f"{self.base_url}/{model_name}:generateContent"
+                response = await client.post(url, params=params, json=payload)
+                if response.status_code == 404:
+                    errors.append(f"{model_name}:404")
+                    continue
+                response.raise_for_status()
+                data = response.json()
+                self.model = model_name
+                break
+            else:
+                raise httpx.HTTPStatusError(
+                    f"Gemini models not available: {', '.join(errors) or 'unknown error'}",
+                    request=response.request,
+                    response=response,
+                )
 
         candidates = data.get("candidates", [])
         if not candidates:
@@ -63,7 +83,7 @@ class GeminiService:
         )
         return (
             "You are Financial Forensics AI, a senior Indian stock market analyst.\n"
-            "Use concise, factual language and avoid investment guarantees.\n"
+            "Use concise, factual language, avoid investment guarantees, and never invent missing facts.\n"
             f"Stock symbol: {symbol}\n"
             f"Question: {question}\n"
             f"Context JSON: {compact_context}\n\n"
@@ -126,6 +146,7 @@ class GeminiService:
                     "components": risk.get("components"),
                     "label": risk.get("label"),
                 },
+                "brokerageSummary": ((context.get("brokerageResearch") or {}).get("summary") if isinstance(context.get("brokerageResearch"), dict) else {}),
                 "metrics": {
                     "peRatio": metrics.get("peRatio"),
                     "pbRatio": metrics.get("pbRatio"),
@@ -151,6 +172,7 @@ class GeminiService:
             "1) Use simple words that a 12-year-old can understand.\n"
             "2) 3 short sentences only.\n"
             "3) Mention 2 good points and 1 caution.\n"
+            "3a) Use only the facts visible in the context JSON.\n"
             "4) Replace finance jargon with simple words.\n"
             "5) Do not use words like setup, allocation, position sizing, conviction, or drawdown.\n"
             "6) Do not use markdown, bullets, or investment guarantees.\n"
@@ -177,6 +199,7 @@ class GeminiService:
                     "score": smart.get("score"),
                     "dimensions": smart.get("dimensions"),
                 },
+                "brokerageSummary": ((context.get("brokerageResearch") or {}).get("summary") if isinstance(context.get("brokerageResearch"), dict) else {}),
                 "metrics": {
                     "debtToEquity": metrics.get("debtToEquity"),
                     "currentRatio": metrics.get("currentRatio"),
@@ -199,6 +222,7 @@ class GeminiService:
             "1) Use simple words that a 12-year-old can understand.\n"
             "2) 3 short sentences only.\n"
             "3) Say if risk is low, medium, or high in plain words.\n"
+            "3a) Use only the facts visible in the context JSON.\n"
             "4) Mention one main risk and one positive point.\n"
             "5) Give one simple safety tip (for example: invest slowly).\n"
             "6) Do not use markdown, bullets, or investment guarantees.\n"

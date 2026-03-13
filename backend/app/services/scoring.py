@@ -528,6 +528,7 @@ def compute_risk_score(
     technicals: dict[str, Any],
     price_history: list[dict[str, Any]] | None = None,
     financials: dict[str, Any] | None = None,
+    brokerage_research: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     financials = financials or {}
     sentiments: list[float] = []
@@ -569,7 +570,19 @@ def compute_risk_score(
         else:
             narrative_risk_scores.append(0.35)
 
-    sentiment_risk = _clamp(1.0 - (_avg(sentiments, 0.55)), 0.0, 1.0)
+    if isinstance(brokerage_research, dict):
+        summary = brokerage_research.get("summary") or {}
+        total = _num(summary.get("total"))
+        buys = _num(summary.get("buy"))
+        sells = _num(summary.get("sell"))
+        holds = _num(summary.get("hold"))
+        if total not in {None, 0} and buys is not None and sells is not None:
+            structured_sentiment = _clamp(0.5 + (((buys - sells) / total) * 0.35), 0.0, 1.0)
+            sentiments.append(structured_sentiment)
+            if holds is not None and holds / total > 0.55:
+                narrative_risk_scores.append(0.5)
+
+    sentiment_risk = _clamp(1.0 - (_avg(sentiments, 0.5)), 0.0, 1.0)
     narrative_risk = _clamp(_avg(narrative_risk_scores, 0.45), 0.0, 1.0)
 
     debt_to_equity = _num(metrics.get("debtToEquity"))

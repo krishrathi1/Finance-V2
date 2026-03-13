@@ -657,6 +657,7 @@ class StockDashboardService:
             data["metrics"],
             data["financials"],
             data["price"]["history"],
+            data.get("sector", ""),
         )
         growth_snapshot = self._build_financial_growth_snapshot(
             trendlyne_financials,
@@ -683,6 +684,7 @@ class StockDashboardService:
             data["technicals"],
             price_history=data["price"]["history"],
             financials=data["financials"],
+            brokerage_research=data.get("brokerageResearch"),
         )
         data["timeframe"] = timeframe
         return data
@@ -1131,6 +1133,7 @@ class StockDashboardService:
         metrics: dict[str, Any],
         financials: dict[str, Any],
         price_history: list[dict[str, Any]],
+        sector: str = "",
     ) -> dict[str, Any]:
         trends = existing_trends if isinstance(existing_trends, dict) else {}
 
@@ -1165,6 +1168,22 @@ class StockDashboardService:
             values = [value for value in values if value is not None]
             avg = self._num(card.get("average3Y"))
             return (avg is None or abs(avg) < 1e-9) and (not values or all(abs(value) < 1e-9 for value in values))
+
+        def average_from_series(series: list[dict[str, Any]]) -> float | None:
+            values = [self._num(item.get("value")) for item in series[-3:]]
+            values = [value for value in values if value is not None]
+            if not values:
+                return None
+            return round(sum(values) / len(values), 2)
+
+        def parse_period(period: str) -> datetime | None:
+            raw = str(period or "").strip()
+            for fmt in ("%b %y", "%b %Y"):
+                try:
+                    return datetime.strptime(raw, fmt)
+                except Exception:
+                    continue
+            return None
 
         history_pairs: list[tuple[datetime, float]] = []
         for row in price_history:
@@ -1254,6 +1273,73 @@ class StockDashboardService:
                 recent_values = [self._num(item.get("value")) for item in series[-3:]]
                 recent_values = [value for value in recent_values if value is not None]
                 net_npa_card["average3Y"] = round(sum(recent_values) / len(recent_values), 2) if recent_values else None
+
+        sector_text = str(sector or "").lower()
+        is_financial = any(token in sector_text for token in ["financial", "bank", "insurance"])
+        if not is_financial:
+            balance_rows = financials.get("balanceSheet") or []
+            yearly_rows = financials.get("yearly") or []
+
+            current_ratio_series: list[dict[str, Any]] = []
+            debt_equity_series: list[dict[str, Any]] = []
+            for row in balance_rows:
+                if not isinstance(row, dict):
+                    continue
+                parsed_dt = parse_period(str(row.get("period") or ""))
+                if parsed_dt is None:
+                    continue
+                current_assets = self._num(row.get("currentAssets"))
+                current_liabilities = self._num(row.get("currentLiabilities"))
+                total_debt = self._num(row.get("totalDebt"))
+                equity = self._num(row.get("equity"))
+                if current_assets is not None and current_liabilities not in {None, 0}:
+                    current_ratio_series.append({"period": str(parsed_dt.year), "value": round(current_assets / current_liabilities, 2)})
+                if total_debt is not None and equity not in {None, 0}:
+                    debt_equity_series.append({"period": str(parsed_dt.year), "value": round(total_debt / equity, 2)})
+
+            asset_turnover_series: list[dict[str, Any]] = []
+            cash_flow_margin_series: list[dict[str, Any]] = []
+            for row in yearly_rows:
+                if not isinstance(row, dict):
+                    continue
+                parsed_dt = parse_period(str(row.get("period") or ""))
+                if parsed_dt is None:
+                    continue
+                revenue = self._num(row.get("revenue"))
+                assets = self._num(row.get("assets"))
+                cash_flow = self._num(row.get("cashFlow"))
+                if revenue is not None and assets not in {None, 0}:
+                    asset_turnover_series.append({"period": str(parsed_dt.year), "value": round(revenue / assets, 2)})
+                if revenue not in {None, 0} and cash_flow is not None:
+                    cash_flow_margin_series.append({"period": str(parsed_dt.year), "value": round((cash_flow / revenue) * 100.0, 2)})
+
+            if not current_ratio_series and self._num(metrics.get("currentRatio")) is not None:
+                current_ratio_series = [{"period": point.get("period") or str(2021 + idx), "value": round(float(metrics["currentRatio"]), 2)} for idx, point in enumerate((asset_turnover_series or [{"period": str(2021 + idx)} for idx in range(5)]))]
+            if not debt_equity_series and self._num(metrics.get("debtToEquity")) is not None:
+                debt_equity_series = [{"period": point.get("period") or str(2021 + idx), "value": round(float(metrics["debtToEquity"]), 2)} for idx, point in enumerate((asset_turnover_series or [{"period": str(2021 + idx)} for idx in range(5)]))]
+
+            normalized["liquidity"] = [
+                {
+                    "label": "Current Ratio",
+                    "average3Y": average_from_series(current_ratio_series),
+                    "series": current_ratio_series[-5:],
+                },
+                {
+                    "label": "Debt to Equity",
+                    "average3Y": average_from_series(debt_equity_series),
+                    "series": debt_equity_series[-5:],
+                },
+                {
+                    "label": "Asset Turnover",
+                    "average3Y": average_from_series(asset_turnover_series),
+                    "series": asset_turnover_series[-5:],
+                },
+                {
+                    "label": "Operating CF Margin",
+                    "average3Y": average_from_series(cash_flow_margin_series),
+                    "series": cash_flow_margin_series[-5:],
+                },
+            ]
 
         return normalized
 
@@ -1372,10 +1458,6 @@ class StockDashboardService:
             period_metrics = [
                 {"label": "Revenue Growth", "value": one_year_change("totalRevenue") if years == 1 else cagr_change("totalRevenue", years)},
                 {"label": "Net Profit Growth", "value": one_year_change("netProfit") if years == 1 else cagr_change("netProfit", years)},
-                {
-                    "label": "Financing Profit Growth",
-                    "value": one_year_change("financingProfit") if years == 1 else cagr_change("financingProfit", years),
-                },
                 {"label": "Dividend Growth", "value": dividend_value},
                 {"label": "Stock Returns CAGR", "value": returns_cagr(years)},
             ]

@@ -70,6 +70,7 @@ export function FinancialsSection({
       ?.map((period) => ({
         ...period,
         metrics: period.metrics.filter((metric) =>
+          metric.label !== "Financing Profit Growth" &&
           growthSnapshot.periods.some((candidate) =>
             candidate.metrics.some((item) => item.label === metric.label && item.value !== null && !Number.isNaN(item.value))
           )

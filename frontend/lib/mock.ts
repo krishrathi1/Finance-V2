@@ -86,7 +86,6 @@ export const mockDashboard: DashboardData = {
           metrics: [
             { label: "Revenue Growth", value: 12.54 },
             { label: "Net Profit Growth", value: 12.21 },
-            { label: "Financing Profit Growth", value: -22.79 },
             { label: "Dividend Growth", value: 12.82 },
             { label: "Stock Returns CAGR", value: -2.41 }
           ]
@@ -96,7 +95,6 @@ export const mockDashboard: DashboardData = {
           metrics: [
             { label: "Revenue Growth", value: 35.26 },
             { label: "Net Profit Growth", value: 24.44 },
-            { label: "Financing Profit Growth", value: null },
             { label: "Dividend Growth", value: 12.38 },
             { label: "Stock Returns CAGR", value: 2.02 }
           ]
@@ -106,7 +104,6 @@ export const mockDashboard: DashboardData = {
           metrics: [
             { label: "Revenue Growth", value: 22.45 },
             { label: "Net Profit Growth", value: 21.89 },
-            { label: "Financing Profit Growth", value: null },
             { label: "Dividend Growth", value: 54.49 },
             { label: "Stock Returns CAGR", value: 1.73 }
           ]

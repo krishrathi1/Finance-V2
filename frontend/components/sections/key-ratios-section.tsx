@@ -4,9 +4,11 @@ import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { KeyRatioTrendCard, KeyRatioTrends } from "@/lib/types";
 
+const PERCENTAGE_LABELS = new Set(["ROE", "ROCE", "ROA", "NPM", "NET NPA", "CASA Ratio", "Advance Growth", "Net Interest Margin", "Operating CF Margin"]);
+
 function formatValue(value: number | null, label: string): string {
   const numeric = Number(value || 0);
-  if (label === "ROE" || label === "ROCE" || label === "ROA" || label === "NPM" || label === "NET NPA" || label === "CASA Ratio" || label === "Advance Growth" || label === "Net Interest Margin") {
+  if (PERCENTAGE_LABELS.has(label)) {
     return `${numeric.toFixed(2)}%`;
   }
   return numeric.toFixed(2);
@@ -97,10 +99,10 @@ export function KeyRatiosSection({
       { label: "Price to Cash Flow", average3Y: 0, series: Array.from({ length: 5 }, (_, index) => ({ period: String(2021 + index), value: 0 })) }
     ],
     liquidity: [
-      { label: "NET NPA", average3Y: 0, series: Array.from({ length: 5 }, (_, index) => ({ period: String(2021 + index), value: 0 })) },
-      { label: "CASA Ratio", average3Y: 0, series: Array.from({ length: 5 }, (_, index) => ({ period: String(2021 + index), value: 0 })) },
-      { label: "Advance Growth", average3Y: 0, series: Array.from({ length: 5 }, (_, index) => ({ period: String(2021 + index), value: 0 })) },
-      { label: "Net Interest Margin", average3Y: 0, series: Array.from({ length: 5 }, (_, index) => ({ period: String(2021 + index), value: 0 })) }
+      { label: "Current Ratio", average3Y: Number(metrics.currentRatio || 0), series: Array.from({ length: 5 }, (_, index) => ({ period: String(2021 + index), value: Number(metrics.currentRatio || 0) })) },
+      { label: "Debt to Equity", average3Y: Number(metrics.debtToEquity || 0), series: Array.from({ length: 5 }, (_, index) => ({ period: String(2021 + index), value: Number(metrics.debtToEquity || 0) })) },
+      { label: "Asset Turnover", average3Y: 0, series: Array.from({ length: 5 }, (_, index) => ({ period: String(2021 + index), value: 0 })) },
+      { label: "Operating CF Margin", average3Y: 0, series: Array.from({ length: 5 }, (_, index) => ({ period: String(2021 + index), value: 0 })) }
     ]
   };
 

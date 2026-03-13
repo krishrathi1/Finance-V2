@@ -4,7 +4,6 @@ import { notFound } from "next/navigation";
 
 import { StockSearch } from "@/components/stock-search";
 import { CompanyOverview } from "@/components/sections/company-overview";
-import { CompetitorsSection } from "@/components/sections/competitors-section";
 import { CorporateActionsSection } from "@/components/sections/corporate-actions-section";
 import { DocumentsSection } from "@/components/sections/documents-section";
 import { KeyRatiosSection } from "@/components/sections/key-ratios-section";
@@ -139,7 +138,13 @@ export default async function StockDetailsPage({ params }: Props) {
           <TechnicalsSection technicals={data.technicals} />
 
           <div className="grid gap-4 xl:grid-cols-2">
-            <ReturnsCalculator symbol={symbol} currentPrice={data.price.cmp} aiTarget={data.price.aiTarget} />
+            <ReturnsCalculator
+              symbol={symbol}
+              currentPrice={data.price.cmp}
+              aiTarget={data.price.aiTarget}
+              mlConfidence={data.smartScore.mlConfidence}
+              upProbability={data.smartScore.validation?.upProbability}
+            />
             <BrokerageSummary brokerage={data.brokerageResearch} />
           </div>
 
@@ -183,10 +188,6 @@ export default async function StockDetailsPage({ params }: Props) {
 
           <section id="key-ratios">
             <KeyRatiosSection metrics={data.metrics} trends={data.financials.keyRatioTrends} />
-          </section>
-
-          <section id="competitors">
-            <CompetitorsSection competitors={data.competitors} />
           </section>
 
           <section id="documents">

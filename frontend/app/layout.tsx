@@ -19,7 +19,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${manrope.variable} ${space.variable} min-h-screen font-[var(--font-manrope)]`}>
-        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
+        <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
           <header className="sticky top-0 z-40 border-b border-border/70 bg-bg/80 backdrop-blur">
             <div className="mx-auto flex max-w-[1640px] items-center justify-between px-4 py-3 md:px-6">
               <div>
