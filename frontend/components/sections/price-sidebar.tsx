@@ -107,11 +107,16 @@ export function PriceSidebar({ data }: { data: DashboardData }) {
           </button>
         </div>
 
-        <div className="mt-4 flex items-center gap-2">
-          <p className="text-3xl font-bold">{formatCurrency(data.price.cmp, data.price.currency)}</p>
-          <div className={`flex items-baseline gap-1.5 text-lg font-semibold ${isPositive ? "text-success" : "text-danger"}`}>
-            <span>{isPositive ? "+" : ""}{formatCurrency(pointChange, data.price.currency)}</span>
-            <span className="text-sm opacity-90">({formatPercent(percentChange)}) {changeLabel}</span>
+        <div className="mt-4 grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 gap-y-1">
+          <p className="min-w-0 text-3xl font-bold leading-none">{formatCurrency(data.price.cmp, data.price.currency)}</p>
+          <div className={`min-w-0 text-right ${isPositive ? "text-success" : "text-danger"}`}>
+            <p className="text-2xl font-semibold leading-none">
+              {isPositive ? "+" : ""}
+              {formatCurrency(pointChange, data.price.currency)}
+            </p>
+            <p className="mt-1 text-sm font-semibold opacity-90">
+              {formatPercent(percentChange)} {changeLabel}
+            </p>
           </div>
         </div>
 
