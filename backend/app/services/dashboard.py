@@ -157,7 +157,7 @@ class StockDashboardService:
         self.providers = MarketDataProviders()
 
     async def search_stocks(self, query: str) -> list[dict[str, str]]:
-        universe = [
+        fallback_universe = [
             {"symbol": "HDFCBANK", "name": "HDFC Bank Ltd", "exchange": "NSE"},
             {"symbol": "RELIANCE", "name": "Reliance Industries Ltd", "exchange": "NSE"},
             {"symbol": "TCS", "name": "Tata Consultancy Services Ltd", "exchange": "NSE"},
@@ -166,8 +166,43 @@ class StockDashboardService:
         ]
         q = query.strip().lower()
         if not q:
-            return universe
-        return [item for item in universe if q in item["symbol"].lower() or q in item["name"].lower()]
+            return fallback_universe
+
+        provider_results = await self.providers.search_indian_stocks(query, limit=25)
+        if provider_results:
+            return provider_results
+
+        peer_rows = [{"symbol": item["symbol"], "name": item["name"], "exchange": "NSE"} for item in PEER_COMPANY_CATALOG]
+        combined = peer_rows + fallback_universe
+        seen: set[str] = set()
+        deduped: list[dict[str, str]] = []
+        for item in combined:
+            symbol = item["symbol"].upper()
+            if symbol in seen:
+                continue
+            seen.add(symbol)
+            deduped.append(item)
+
+        def score(item: dict[str, str]) -> tuple[int, int, str]:
+            symbol = item["symbol"].lower()
+            name = item["name"].lower()
+            if symbol == q:
+                rank = 0
+            elif symbol.startswith(q):
+                rank = 1
+            elif any(part.startswith(q) for part in name.split()):
+                rank = 2
+            elif q in symbol:
+                rank = 3
+            elif q in name:
+                rank = 4
+            else:
+                rank = 9
+            return (rank, len(symbol), item["symbol"])
+
+        matches = [item for item in deduped if q in item["symbol"].lower() or q in item["name"].lower()]
+        matches.sort(key=score)
+        return matches[:25]
 
     async def get_ticker_tape(self, symbols: list[str] | None = None) -> list[dict[str, Any]]:
         default_symbols = ["NIFTY 50", "HDFCBANK", "RELIANCE", "SBIN", "TCS", "INFY", "ICICIBANK", "LT", "BHARTIARTL", "ITC"]

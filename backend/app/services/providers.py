@@ -57,6 +57,9 @@ class MarketDataProviders:
         self._trendlyne_shareholding_cache: dict[str, tuple[float, dict[str, Any] | None]] = {}
         self._trendlyne_documents_cache: dict[str, tuple[float, dict[str, Any] | None]] = {}
 
+    async def search_indian_stocks(self, query: str, limit: int = 25) -> list[dict[str, str]]:
+        return await asyncio.to_thread(self._search_indian_stocks_sync, query, limit)
+
     @retry(stop=stop_after_attempt(1), wait=wait_exponential(multiplier=0.2, min=0.2, max=1.0))
     async def _get(self, url: str, params: dict[str, Any] | None = None, headers: dict[str, str] | None = None) -> Any:
         async with httpx.AsyncClient(timeout=self._timeout) as client:
@@ -522,6 +525,65 @@ class MarketDataProviders:
             if re.sub(r"[^A-Z0-9]", "", raw) == normalized:
                 return meta
         return None
+
+    def _search_indian_stocks_sync(self, query: str, limit: int = 25) -> list[dict[str, str]]:
+        q = str(query or "").strip().lower()
+        if not q:
+            return []
+
+        self._refresh_trendlyne_equity_map_if_needed()
+        rows: list[dict[str, str]] = []
+        seen: set[str] = set()
+
+        for symbol, meta in self._trendlyne_equity_meta_map.items():
+            stock_symbol = str(symbol or "").strip().upper()
+            if not stock_symbol or stock_symbol in seen:
+                continue
+            slug = str(meta[1] if isinstance(meta, tuple) and len(meta) > 1 else "").strip()
+            company_name = self._trendlyne_name_from_slug(slug, stock_symbol)
+            rows.append({"symbol": stock_symbol, "name": company_name, "exchange": "NSE/BSE"})
+            seen.add(stock_symbol)
+
+        def score(item: dict[str, str]) -> tuple[int, int, str]:
+            symbol = item["symbol"].lower()
+            name = item["name"].lower()
+            if symbol == q:
+                rank = 0
+            elif symbol.startswith(q):
+                rank = 1
+            elif q in symbol:
+                rank = 2
+            elif name.startswith(q):
+                rank = 3
+            elif q in name:
+                rank = 4
+            else:
+                rank = 9
+            return (rank, len(symbol), item["symbol"])
+
+        matches = [item for item in rows if q in item["symbol"].lower() or q in item["name"].lower()]
+        matches.sort(key=score)
+        return matches[: max(1, int(limit or 25))]
+
+    def _trendlyne_name_from_slug(self, slug: str, symbol: str) -> str:
+        cleaned = str(slug or "").strip().strip("/")
+        if not cleaned:
+            return symbol
+
+        words: list[str] = []
+        for part in cleaned.split("-"):
+            token = part.strip()
+            if not token:
+                continue
+            if token in {"ltd", "limited", "inc", "plc", "bank", "india"}:
+                words.append(token.upper() if token == "ltd" else token.title())
+                continue
+            if token.isupper() and len(token) <= 5:
+                words.append(token)
+            else:
+                words.append(token.title())
+        name = " ".join(words).strip()
+        return name or symbol
 
     def _parse_trendlyne_bulk_block_deals(self, html: str, symbol: str) -> dict[str, list[dict[str, Any]]]:
         result: dict[str, list[dict[str, Any]]] = {"bulkDeals": [], "blockDeals": []}
