@@ -41,7 +41,7 @@ body {
   background-image:
     radial-gradient(circle at 0% 0%, rgba(255, 166, 72, 0.1) 0, transparent 35%),
     radial-gradient(circle at 100% 0%, rgba(60, 173, 255, 0.08) 0, transparent 30%);
-  animation: page-fade-in 260ms var(--ease-smooth);
+  animation: page-fade-in 180ms var(--ease-smooth);
 }
 
 .dark body {
@@ -64,7 +64,7 @@ textarea,
 [role="tab"],
 summary {
   transition-property: background-color, border-color, color, opacity, box-shadow, transform;
-  transition-duration: 200ms;
+  transition-duration: 140ms;
   transition-timing-function: var(--ease-smooth);
 }
 
@@ -72,7 +72,7 @@ input,
 select,
 textarea {
   transition-property: border-color, box-shadow, background-color, color;
-  transition-duration: 160ms;
+  transition-duration: 120ms;
   transition-timing-function: var(--ease-smooth);
 }
 
@@ -88,7 +88,7 @@ textarea:focus {
 
 .search-bar {
   transition-property: border-color, box-shadow, background-color, transform;
-  transition-duration: 180ms;
+  transition-duration: 130ms;
   transition-timing-function: var(--ease-smooth);
 }
 
@@ -107,7 +107,7 @@ textarea:focus {
 
 .card-surface {
   transition-property: transform, box-shadow, border-color, background-color;
-  transition-duration: 160ms;
+  transition-duration: 120ms;
   transition-timing-function: var(--ease-smooth);
   will-change: transform;
 }
@@ -122,61 +122,61 @@ textarea:focus {
 }
 
 .smooth-panel-enter {
-  animation: smooth-panel-enter 160ms var(--ease-smooth);
+  animation: smooth-panel-enter 120ms var(--ease-smooth);
 }
 
 .header-enter {
-  animation: header-enter 220ms var(--ease-smooth);
+  animation: header-enter 160ms var(--ease-smooth);
 }
 
 .page-enter {
-  animation: page-content-enter 240ms var(--ease-smooth);
+  animation: page-content-enter 170ms var(--ease-smooth);
 }
 
 .stagger-fade > * {
   opacity: 0;
-  transform: translateY(12px);
-  animation: stagger-fade-in 320ms var(--ease-smooth) forwards;
+  transform: translateY(8px);
+  animation: stagger-fade-in 200ms var(--ease-smooth) forwards;
 }
 
-.stagger-fade > *:nth-child(1) { animation-delay: 40ms; }
-.stagger-fade > *:nth-child(2) { animation-delay: 80ms; }
-.stagger-fade > *:nth-child(3) { animation-delay: 120ms; }
-.stagger-fade > *:nth-child(4) { animation-delay: 160ms; }
-.stagger-fade > *:nth-child(5) { animation-delay: 200ms; }
-.stagger-fade > *:nth-child(6) { animation-delay: 240ms; }
-.stagger-fade > *:nth-child(7) { animation-delay: 280ms; }
-.stagger-fade > *:nth-child(8) { animation-delay: 320ms; }
-.stagger-fade > *:nth-child(9) { animation-delay: 360ms; }
-.stagger-fade > *:nth-child(10) { animation-delay: 400ms; }
-.stagger-fade > *:nth-child(11) { animation-delay: 440ms; }
-.stagger-fade > *:nth-child(12) { animation-delay: 480ms; }
+.stagger-fade > *:nth-child(1) { animation-delay: 20ms; }
+.stagger-fade > *:nth-child(2) { animation-delay: 40ms; }
+.stagger-fade > *:nth-child(3) { animation-delay: 60ms; }
+.stagger-fade > *:nth-child(4) { animation-delay: 80ms; }
+.stagger-fade > *:nth-child(5) { animation-delay: 100ms; }
+.stagger-fade > *:nth-child(6) { animation-delay: 120ms; }
+.stagger-fade > *:nth-child(7) { animation-delay: 140ms; }
+.stagger-fade > *:nth-child(8) { animation-delay: 160ms; }
+.stagger-fade > *:nth-child(9) { animation-delay: 180ms; }
+.stagger-fade > *:nth-child(10) { animation-delay: 200ms; }
+.stagger-fade > *:nth-child(11) { animation-delay: 220ms; }
+.stagger-fade > *:nth-child(12) { animation-delay: 240ms; }
 
 .news-grid-stagger > * {
   opacity: 0;
-  transform: translateY(14px);
-  animation: stagger-fade-in 360ms var(--ease-smooth) forwards;
+  transform: translateY(8px);
+  animation: stagger-fade-in 220ms var(--ease-smooth) forwards;
 }
 
-.news-grid-stagger > *:nth-child(1) { animation-delay: 40ms; }
-.news-grid-stagger > *:nth-child(2) { animation-delay: 80ms; }
-.news-grid-stagger > *:nth-child(3) { animation-delay: 120ms; }
-.news-grid-stagger > *:nth-child(4) { animation-delay: 160ms; }
-.news-grid-stagger > *:nth-child(5) { animation-delay: 200ms; }
-.news-grid-stagger > *:nth-child(6) { animation-delay: 240ms; }
-.news-grid-stagger > *:nth-child(7) { animation-delay: 280ms; }
-.news-grid-stagger > *:nth-child(8) { animation-delay: 320ms; }
-.news-grid-stagger > *:nth-child(9) { animation-delay: 360ms; }
+.news-grid-stagger > *:nth-child(1) { animation-delay: 20ms; }
+.news-grid-stagger > *:nth-child(2) { animation-delay: 40ms; }
+.news-grid-stagger > *:nth-child(3) { animation-delay: 60ms; }
+.news-grid-stagger > *:nth-child(4) { animation-delay: 80ms; }
+.news-grid-stagger > *:nth-child(5) { animation-delay: 100ms; }
+.news-grid-stagger > *:nth-child(6) { animation-delay: 120ms; }
+.news-grid-stagger > *:nth-child(7) { animation-delay: 140ms; }
+.news-grid-stagger > *:nth-child(8) { animation-delay: 160ms; }
+.news-grid-stagger > *:nth-child(9) { animation-delay: 180ms; }
 
 .news-card {
   transition-property: transform, box-shadow, border-color, background-color;
-  transition-duration: 220ms;
+  transition-duration: 150ms;
   transition-timing-function: var(--ease-smooth);
 }
 
 .news-card:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 14px 32px rgba(19, 27, 54, 0.08);
+  transform: translateY(-2px);
+  box-shadow: 0 10px 22px rgba(19, 27, 54, 0.07);
 }
 
 .dark .news-card:hover {

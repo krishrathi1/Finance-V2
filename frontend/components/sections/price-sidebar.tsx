@@ -2,7 +2,8 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import { Maximize2, X } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 
 import { PriceChart } from "@/components/charts/price-chart";
 import { MarketStatusBadge } from "@/components/market-status-badge";
@@ -21,7 +22,13 @@ const ranges = [
 export function PriceSidebar({ data }: { data: DashboardData }) {
   const [range, setRange] = useState("1Y");
   const [isExpanded, setIsExpanded] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const selected = ranges.find((item) => item.key === range) || ranges[3];
+
+  useEffect(() => {
+    setMounted(true);
+    return () => setMounted(false);
+  }, []);
 
   const rangeHistory = useMemo(() => {
     if (selected.days === 1) {
@@ -160,53 +167,58 @@ export function PriceSidebar({ data }: { data: DashboardData }) {
           )}
         </div>
       </Card>
-      <AnimatePresence>
-        {isExpanded && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4 backdrop-blur-sm"
-          >
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              className="relative flex h-[80vh] w-full max-w-6xl flex-col rounded-2xl border border-border bg-card p-6 shadow-2xl"
-            >
-              <button
-                onClick={() => setIsExpanded(false)}
-                className="absolute right-4 top-4 rounded-md p-2 text-muted transition-colors hover:bg-accent/20 hover:text-foreground"
-              >
-                <X className="h-6 w-6" />
-              </button>
+      {mounted
+        ? createPortal(
+            <AnimatePresence>
+              {isExpanded && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="fixed inset-0 z-[120] flex items-center justify-center bg-bg/35 p-4 backdrop-blur-lg"
+                >
+                  <motion.div
+                    initial={{ scale: 0.95, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    exit={{ scale: 0.95, opacity: 0 }}
+                    className="relative flex h-[80vh] w-full max-w-6xl flex-col rounded-2xl border border-border/70 bg-panel/68 p-6 shadow-2xl backdrop-blur-2xl"
+                  >
+                    <button
+                      onClick={() => setIsExpanded(false)}
+                      className="absolute right-4 top-4 rounded-md p-2 text-muted transition-colors hover:bg-accent/20 hover:text-foreground"
+                    >
+                      <X className="h-6 w-6" />
+                    </button>
 
-              <div className="mb-6 space-y-1">
-                <p className="font-[var(--font-space)] text-3xl font-bold">{data.companyName}</p>
-                <p className="text-muted">
-                  {data.symbol} • {data.exchange}
-                </p>
-              </div>
+                    <div className="mb-6 space-y-1">
+                      <p className="font-[var(--font-space)] text-3xl font-bold">{data.companyName}</p>
+                      <p className="text-muted">
+                        {data.symbol} • {data.exchange}
+                      </p>
+                    </div>
 
-              <div className="flex items-center gap-3">
-                <p className="text-4xl font-bold">{formatCurrency(data.price.cmp, data.price.currency)}</p>
-                <div className={`flex items-baseline gap-2 text-xl font-semibold ${isPositive ? "text-success" : "text-danger"}`}>
-                  <span>{isPositive ? "+" : ""}{formatCurrency(pointChange, data.price.currency)}</span>
-                  <span className="text-base opacity-90">({formatPercent(percentChange)}) {changeLabel}</span>
-                </div>
-              </div>
+                    <div className="flex items-center gap-3">
+                      <p className="text-4xl font-bold">{formatCurrency(data.price.cmp, data.price.currency)}</p>
+                      <div className={`flex items-baseline gap-2 text-xl font-semibold ${isPositive ? "text-success" : "text-danger"}`}>
+                        <span>{isPositive ? "+" : ""}{formatCurrency(pointChange, data.price.currency)}</span>
+                        <span className="text-base opacity-90">({formatPercent(percentChange)}) {changeLabel}</span>
+                      </div>
+                    </div>
 
-              <div className="mt-8 flex-1 min-h-0">
-                <PriceChart data={rangeHistory} trend={trend} height="50vh" />
-              </div>
+                    <div className="mt-8 min-h-0 flex-1">
+                      <PriceChart data={rangeHistory} trend={trend} height="50vh" />
+                    </div>
 
-              <div className="mt-6 mx-auto w-full max-w-md">
-                {rangeSelector}
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+                    <div className="mx-auto mt-6 w-full max-w-md">
+                      {rangeSelector}
+                    </div>
+                  </motion.div>
+                </motion.div>
+              )}
+            </AnimatePresence>,
+            document.body
+          )
+        : null}
     </>
   );
 }
