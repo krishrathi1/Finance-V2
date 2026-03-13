@@ -29,11 +29,8 @@ class AIAdapter:
             try:
                 return await self._gemini.chat(symbol=symbol, question=question, context=context)
             except Exception:
-                pass
-        return (
-            f"Gemini API key not configured. Offline insight for {symbol}: "
-            "review debt trends, operating margin trajectory, and 3-year earnings consistency before allocation."
-        )
+                return self._offline_chat_response(symbol=symbol, context=context, live_failed=True)
+        return self._offline_chat_response(symbol=symbol, context=context, live_failed=False)
 
     async def generate_report(self, symbol: str, context: dict[str, Any]) -> str:
         if self._gemini and settings.gemini_api_key:
@@ -119,3 +116,31 @@ class AIAdapter:
             except Exception:
                 pass
         return "{}"
+
+    def _offline_chat_response(self, symbol: str, context: dict[str, Any], live_failed: bool) -> str:
+        smart = (context.get("smartScore") or {}) if isinstance(context, dict) else {}
+        risk = (context.get("riskScore") or {}) if isinstance(context, dict) else {}
+        metrics = (context.get("metrics") or {}) if isinstance(context, dict) else {}
+
+        smart_score = float(smart.get("score", 0.0) or 0.0)
+        risk_score = float(risk.get("score", 0.0) or 0.0)
+        pe_ratio = metrics.get("peRatio")
+        dividend_yield = metrics.get("dividendYield")
+
+        setup = "strong" if smart_score >= 4 else "balanced" if smart_score >= 2.5 else "weak"
+        risk_level = "low" if risk_score < 2 else "medium" if risk_score < 3.5 else "high"
+
+        pe_text = f"P/E is {float(pe_ratio):.2f}" if isinstance(pe_ratio, (int, float)) else "valuation needs a closer check"
+        dividend_text = (
+            f"dividend yield is {float(dividend_yield):.2f}%"
+            if isinstance(dividend_yield, (int, float))
+            else "income support is limited"
+        )
+
+        lead = "Live Gemini reply is unavailable right now." if live_failed else "AI chat fallback is active."
+        return (
+            f"{lead} {symbol.upper()} currently looks {setup} with a Smart Score of {smart_score:.1f}/5 "
+            f"and a Risk Score of {risk_score:.1f}/5, which means risk is {risk_level}. "
+            f"Right now {pe_text}, and {dividend_text}. "
+            "Before taking a position, check debt trend, margin stability, and profit consistency."
+        )
