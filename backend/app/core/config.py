@@ -16,12 +16,6 @@ class Settings(BaseSettings):
     fmp_api_key: str = ""
     news_api_key: str = ""
     yahoo_finance_base: str = "https://query1.finance.yahoo.com"
-    groww_access_token: str = ""
-    groww_api_key: str = ""
-    groww_api_secret: str = ""
-    groww_totp_token: str = ""
-    groww_totp_secret: str = ""
-    groww_auth_mode: str = "access_token"
 
     gemini_api_key: str = ""
     gemini_model: str = "gemini-1.5-flash"

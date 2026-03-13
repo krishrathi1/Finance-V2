@@ -64,8 +64,3 @@ npm run dev
 - Use `data-pipeline/scripts/fetch_market_data.py` and `data-pipeline/scripts/scrape_nse_bse.py` for snapshots/scraping.
 - Use `data-pipeline/scripts/scrape_google_market_news.py` for daily Google News market snapshots.
 - Use `data-pipeline/scripts/validate_scoring_engine.py` to monitor scoring quality across a symbol basket.
-- Groww integration now uses the official Python SDK (`growwapi`) instead of `GROWW_API_BASE`.
-- Configure one Groww auth flow in backend env:
-  - `GROWW_AUTH_MODE=access_token` + `GROWW_ACCESS_TOKEN`
-  - `GROWW_AUTH_MODE=api_secret` + `GROWW_API_KEY` + `GROWW_API_SECRET`
-  - `GROWW_AUTH_MODE=totp` + `GROWW_TOTP_TOKEN` + `GROWW_TOTP_SECRET`

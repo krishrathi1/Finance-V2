@@ -29,8 +29,6 @@ Base path: `/api/v1/stocks/*`
 | `Financial Modeling Prep` | Historical candles, quote fallback, quarterly results fallback |
 | `Yahoo Finance HTTP` | Quote fallback and chart fallback |
 | `yfinance` | Extended fallback bundle: profile, metrics, statements, candles, intraday, news, shareholding |
-| `Groww public chart API` | Extra daily candle fallback |
-| `Groww authenticated API` | Optional profile/shareholding/price enrichment when credentials exist |
 | `Google News RSS` | Primary market-wide news feed |
 | `NewsAPI` | Symbol-level news and market-news fallback |
 | `Gemini API` | Chat, Smart Score explanation, Risk Score explanation, profile enrichment, research report generation |
@@ -39,9 +37,9 @@ Base path: `/api/v1/stocks/*`
 
 | UI section | Primary source | Fallback / enrichment |
 |---|---|---|
-| Price CMP / change / 52W | NSE quote | Yahoo, yfinance, FMP, Groww |
-| Price chart / range chart | FMP candles | yfinance, Yahoo, Groww |
-| Company overview / profile | yfinance profile + Groww | Gemini fills missing incorporation/headquarters/chairman/previous name only when needed |
+| Price CMP / change / 52W | NSE quote | Yahoo, yfinance, FMP |
+| Price chart / range chart | FMP candles | yfinance, Yahoo |
+| Company overview / profile | yfinance profile | Gemini fills missing incorporation/headquarters/chairman/previous name only when needed |
 | Essentials metric cards | NSE + yfinance metrics | Trendlyne ratio trends used to fill bank-specific gaps like CASA/NIM |
 | Smart Score | Local backend scoring in `scoring.py` | Gemini explanation if runtime call succeeds |
 | Risk Score | Local backend scoring in `scoring.py` | Gemini explanation if runtime call succeeds |
@@ -50,7 +48,7 @@ Base path: `/api/v1/stocks/*`
 | Corporate actions | NSE corporate APIs | Trendlyne bulk/block deal merge |
 | Quarterly results | Trendlyne financials page | NSE quarterly results, then FMP quarterly fallback |
 | Financial statements / CAGR snapshot | Trendlyne financials | yfinance annual statements where needed |
-| Shareholding pattern / top holders | Trendlyne share-holding page | Groww / yfinance fallback data |
+| Shareholding pattern / top holders | Trendlyne share-holding page | yfinance fallback data |
 | Key ratio trends | Trendlyne annual ratio dump | Backend-derived fallback series where necessary |
 | Documents | Trendlyne documents and filings pages | None |
 | News | NewsAPI for symbol news | yfinance news items if needed |
@@ -58,11 +56,11 @@ Base path: `/api/v1/stocks/*`
 
 ## 4) Provider priority order in code
 
-- Live quote fields: `NSE -> Yahoo/yfinance -> FMP -> Groww`
-- Price history: `FMP -> yfinance -> Yahoo -> Groww`
+- Live quote fields: `NSE -> Yahoo/yfinance -> FMP`
+- Price history: `FMP -> yfinance -> Yahoo`
 - Quarterly results: `Trendlyne -> NSE -> FMP`
 - Corporate actions: `NSE -> Trendlyne merge for deals`
-- Shareholding: `Trendlyne -> Groww -> yfinance`
+- Shareholding: `Trendlyne -> yfinance`
 - Market news: `Google News RSS -> NewsAPI`
 - AI explanation layer: `Gemini -> backend fallback text`
 
@@ -73,17 +71,11 @@ Base path: `/api/v1/stocks/*`
 | `FMP_API_KEY` | set |
 | `NEWS_API_KEY` | set |
 | `GEMINI_API_KEY` | set |
-| `GROWW_ACCESS_TOKEN` | empty |
-| `GROWW_API_KEY` | empty |
-| `GROWW_API_SECRET` | empty |
-| `GROWW_TOTP_TOKEN` | empty |
-| `GROWW_TOTP_SECRET` | empty |
-
-## 6) Important runtime note
+## 5) Important runtime note
 
 `GEMINI_API_KEY` is configured, but Gemini can still fall back at runtime if the request is blocked, rate-limited, or rejected. The chatbot now exposes `AI Source: Gemini` or `AI Source: Fallback` in the UI so you can see the actual source used for each reply.
 
-## 7) Code reference starting points
+## 6) Code reference starting points
 
 - Backend endpoint router: [stocks.py](/c:/Users/KRISH/Desktop/Finance/backend/app/api/v1/endpoints/stocks.py)
 - Dashboard assembly: [dashboard.py](/c:/Users/KRISH/Desktop/Finance/backend/app/services/dashboard.py)

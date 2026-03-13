@@ -16,35 +16,28 @@ async def main():
     except Exception as e:
         print(f"[NSE Quote] ERROR: {e}")
 
-    # 2. Groww Candles
-    try:
-        result = await asyncio.wait_for(p.get_groww_candles(symbol), timeout=10)
-        print(f"[Groww Candles] {'OK - ' + str(len(result)) + ' candles' if result else 'None'}")
-    except Exception as e:
-        print(f"[Groww Candles] ERROR: {e}")
-
-    # 3. FMP Quote (new stable endpoint)
+    # 2. FMP Quote (new stable endpoint)
     try:
         result = await asyncio.wait_for(p.get_fmp_quote(symbol), timeout=10)
         print(f"[FMP Quote] {'OK - cmp=' + str(result.get('cmp')) if result else 'None'}")
     except Exception as e:
         print(f"[FMP Quote] ERROR: {e}")
 
-    # 4. FMP Candles (new stable endpoint)
+    # 3. FMP Candles (new stable endpoint)
     try:
         result = await asyncio.wait_for(p.get_fmp_candles(symbol, "5Y"), timeout=10)
         print(f"[FMP Candles] {'OK - ' + str(len(result)) + ' candles' if result else 'None'}")
     except Exception as e:
         print(f"[FMP Candles] ERROR: {e}")
 
-    # 5. Yahoo Quote
+    # 4. Yahoo Quote
     try:
         result = await asyncio.wait_for(p.get_yahoo_quote(symbol), timeout=10)
         print(f"[Yahoo Quote] {'OK' if result else 'None'}")
     except Exception as e:
         print(f"[Yahoo Quote] ERROR: {e}")
 
-    # 6. yfinance bundle
+    # 5. yfinance bundle
     try:
         result = await asyncio.wait_for(p.get_yfinance_bundle(symbol, 1825), timeout=30)
         if result:
@@ -56,7 +49,7 @@ async def main():
     except Exception as e:
         print(f"[yfinance Bundle] ERROR: {type(e).__name__}: {e}")
 
-    # 7. FMP Quarterly
+    # 6. FMP Quarterly
     try:
         result = await asyncio.wait_for(p.get_fmp_quarterly_results(symbol), timeout=10)
         print(f"[FMP Quarterly] {'OK - ' + str(len(result)) + ' quarters' if result else 'None'}")

@@ -338,12 +338,10 @@ class StockDashboardService:
             nse_quote,
             nse_events,
             nse_quarterly_results,
-            groww_candles,
             news_data,
             yahoo_quote,
             yahoo_candles,
             yfinance_bundle,
-            groww_data,
             fmp_quote,
             fmp_candles,
             fmp_quarterly_results,
@@ -359,7 +357,7 @@ class StockDashboardService:
             if yfinance_bundle and yfinance_bundle.get("candles"):
                 selected_candles = yfinance_bundle["candles"]
             else:
-                selected_candles = yahoo_candles or groww_candles
+                selected_candles = yahoo_candles
         
         if yfinance_bundle and yfinance_bundle.get("intraday"):
             data["price"]["intraday"] = yfinance_bundle["intraday"]
@@ -569,37 +567,6 @@ class StockDashboardService:
                 data["financials"]["quarterly"] = preferred_quarterly
             data["financials"]["keyRatioTrends"] = ratio_trends_consolidated or ratio_trends_standalone
 
-        if groww_data:
-            profile = groww_data.get("profile", {})
-            if profile:
-                data["profile"].update(
-                    {
-                        "incorporationYear": profile.get("incorporationYear", data["profile"]["incorporationYear"]),
-                        "headquarters": profile.get("headquarters", data["profile"]["headquarters"]),
-                        "website": profile.get("website", data["profile"]["website"]),
-                        "description": profile.get("description", data["profile"]["description"]),
-                    }
-                )
-                if profile.get("companyName"):
-                    data["companyName"] = profile["companyName"]
-            share = groww_data.get("shareholding", {})
-            if share:
-                data["shareholding"].update(share)
-            price = groww_data.get("price", {})
-            if price:
-                ltp = price.get("ltp") or price.get("lastPrice") or price.get("close")
-                if ltp:
-                    try:
-                        data["price"]["cmp"] = round(float(ltp), 2)
-                    except Exception:
-                        pass
-                day_change = price.get("dayChangePercent")
-                if day_change is not None:
-                    try:
-                        data["price"]["changePercent"] = round(float(day_change), 2)
-                    except Exception:
-                        pass
-
         if trendlyne_shareholding:
             data["shareholding"].update(trendlyne_shareholding)
 
@@ -680,12 +647,10 @@ class StockDashboardService:
             self._safe_provider_call(self.providers.get_nse_quote(symbol), timeout=10),
             self._safe_provider_call(self.providers.get_nse_corporate_events(symbol), timeout=15),
             self._safe_provider_call(self.providers.get_nse_quarterly_results(symbol), timeout=20),
-            self._safe_provider_call(self.providers.get_groww_candles(symbol), timeout=10),
             self._safe_provider_call(self.providers.get_news(f"{symbol} India stock"), timeout=8),
             self._safe_provider_call(self.providers.get_yahoo_quote(symbol), timeout=10),
             self._safe_provider_call(self.providers.get_yahoo_candles(symbol, history_days), timeout=15),
             self._safe_provider_call(self.providers.get_yfinance_bundle(symbol, history_days), timeout=45),
-            self._safe_provider_call(self.providers.get_groww_data(symbol), timeout=12),
             self._safe_provider_call(self.providers.get_fmp_quote(symbol), timeout=8),
             self._safe_provider_call(self.providers.get_fmp_candles(symbol, "5Y"), timeout=15),
             self._safe_provider_call(self.providers.get_fmp_quarterly_results(symbol), timeout=15),

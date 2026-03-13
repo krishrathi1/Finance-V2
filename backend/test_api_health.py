@@ -25,7 +25,6 @@ async def diag():
         ("FMP Quarterly Results", p.get_fmp_quarterly_results(symbol)),
         ("Yahoo Finance Quote", p.get_yahoo_quote(symbol)),
         ("yfinance Bundle", p.get_yfinance_bundle(symbol)),
-        ("Groww Candles", p.get_groww_candles(symbol)),
         ("Google News", p.get_news(f"{symbol} stock")),
     ]
     

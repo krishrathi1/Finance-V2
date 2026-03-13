@@ -43,7 +43,6 @@ WEB_PAGE_HEADERS = {
 class MarketDataProviders:
     def __init__(self) -> None:
         self._timeout = httpx.Timeout(5.0, connect=2.0)
-        self._groww_client: Any | None = None
         self._last_nse_quotes: dict[str, dict[str, Any]] = {}
         self._nse_xbrl_cache: dict[str, dict[str, float] | None] = {}
         self._nse_session: requests.Session | None = None
@@ -66,38 +65,6 @@ class MarketDataProviders:
             response = await client.get(url, params=params, headers=headers)
             response.raise_for_status()
             return response.json()
-
-    async def get_groww_candles(self, symbol: str) -> list[dict] | None:
-        symbol_raw = symbol.replace(".NS", "").replace(".BO", "").upper()
-        url = f"https://groww.in/v1/api/charting_service/v2/chart/exchange/NSE/segment/CASH/{symbol_raw}?intervalInMinutes=1440&minimal=true"
-        
-        try:
-            payload = await self._get(url)
-            if not payload or not isinstance(payload, dict):
-                return None
-                
-            candles = payload.get("candles", [])
-            if not candles:
-                return None
-                
-            formatted = []
-            for c in candles:
-                if len(c) >= 5:
-                    ts = float(c[0])
-                    if ts > 1_000_000_000_000:
-                        ts = ts / 1000
-                    dt = datetime.fromtimestamp(ts)
-                    formatted.append({
-                        "date": dt.strftime("%Y-%m-%d"),
-                        "open": float(c[1]),
-                        "high": float(c[2]),
-                        "low":  float(c[3]),
-                        "close": float(c[4]),
-                        "volume": float(c[5]) if len(c) > 5 else 0.0
-                    })
-            return sorted(formatted, key=lambda row: row["date"])
-        except Exception:
-            return None
 
     async def get_fmp_candles(self, symbol: str, timeframe: str = "1Y") -> list[dict] | None:
         # FMP uses SYMBOL.NS for NSE stocks
@@ -3025,96 +2992,4 @@ class MarketDataProviders:
             pass
         return result
 
-    async def get_groww_data(self, symbol: str) -> dict[str, Any] | None:
-        try:
-            client = await self._get_groww_client()
-            if client is None:
-                return None
-            return await asyncio.to_thread(self._fetch_groww_symbol_bundle, client, symbol)
-        except Exception:
-            return None
-
-    async def _get_groww_client(self) -> Any | None:
-        if self._groww_client is not None:
-            return self._groww_client
-        return await asyncio.to_thread(self._build_groww_client)
-
-    def _build_groww_client(self) -> Any | None:
-        try:
-            from growwapi import GrowwAPI  # type: ignore
-        except Exception:
-            return None
-
-        access_token = settings.groww_access_token.strip()
-        auth_mode = settings.groww_auth_mode.strip().lower()
-
-        if not access_token and auth_mode in {"api_secret", "api_key_secret"}:
-            if settings.groww_api_key and settings.groww_api_secret:
-                try:
-                    access_token = GrowwAPI.get_access_token(api_key=settings.groww_api_key, secret=settings.groww_api_secret)
-                except Exception:
-                    access_token = ""
-
-        if not access_token and auth_mode == "totp":
-            if settings.groww_totp_token and settings.groww_totp_secret:
-                try:
-                    import pyotp  # type: ignore
-
-                    totp = pyotp.TOTP(settings.groww_totp_secret).now()
-                    access_token = GrowwAPI.get_access_token(api_key=settings.groww_totp_token, totp=totp)
-                except Exception:
-                    access_token = ""
-
-        if not access_token:
-            return None
-
-        try:
-            self._groww_client = GrowwAPI(access_token)
-        except Exception:
-            self._groww_client = None
-        return self._groww_client
-
-    def _fetch_groww_symbol_bundle(self, client: Any, symbol: str) -> dict[str, Any]:
-        bundle: dict[str, Any] = {"profile": {}, "price": {}, "shareholding": {}}
-
-        try:
-            instrument = client.get_instrument_by_exchange_and_trading_symbol(exchange=client.EXCHANGE_NSE, trading_symbol=symbol.upper())
-            if isinstance(instrument, dict):
-                bundle["profile"].update(
-                    {
-                        "companyName": instrument.get("name"),
-                        "isin": instrument.get("isin"),
-                        "exchange": instrument.get("exchange"),
-                        "tradingSymbol": instrument.get("trading_symbol"),
-                        "series": instrument.get("series"),
-                    }
-                )
-        except Exception:
-            pass
-
-        try:
-            quote = client.get_quote(trading_symbol=symbol.upper(), exchange=client.EXCHANGE_NSE, segment=client.SEGMENT_CASH)
-            if isinstance(quote, dict):
-                bundle["price"] = {
-                    "ltp": quote.get("last_price"),
-                    "dayChangePercent": quote.get("day_change_perc"),
-                    "open": (quote.get("ohlc") or {}).get("open"),
-                    "high": (quote.get("ohlc") or {}).get("high"),
-                    "low": (quote.get("ohlc") or {}).get("low"),
-                    "close": (quote.get("ohlc") or {}).get("close"),
-                }
-        except Exception:
-            pass
-
-        try:
-            profile = client.get_user_profile()
-            if isinstance(profile, dict):
-                bundle["userProfile"] = {
-                    "name": profile.get("name"),
-                    "clientId": profile.get("client_id"),
-                }
-        except Exception:
-            pass
-
-        return bundle
 
