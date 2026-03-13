@@ -40,7 +40,7 @@ export default async function StockDetailsPage({ params }: Props) {
     data = await fetchDashboard(symbol);
   } catch (error) {
     return (
-      <div className="space-y-4">
+      <div className="stagger-fade space-y-4">
         <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
           <p className="text-sm text-muted">
             <Link href="/" className="hover:text-text">
@@ -64,7 +64,7 @@ export default async function StockDetailsPage({ params }: Props) {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="stagger-fade space-y-4">
       <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
         <p className="text-sm text-muted">
           <Link href="/" className="hover:text-text">
