@@ -41,7 +41,7 @@ export default async function StockDetailsPage({ params }: Props) {
   } catch (error) {
     return (
       <div className="stagger-fade space-y-4">
-        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+        <div className="relative z-30 overflow-visible flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
           <p className="text-sm text-muted">
             <Link href="/" className="hover:text-text">
               Dashboard
@@ -65,7 +65,7 @@ export default async function StockDetailsPage({ params }: Props) {
 
   return (
     <div className="stagger-fade space-y-4">
-      <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+      <div className="relative z-30 overflow-visible flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
         <p className="text-sm text-muted">
           <Link href="/" className="hover:text-text">
             Dashboard

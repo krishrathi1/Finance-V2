@@ -27,8 +27,8 @@ export function StockSearch({ className = "" }: { className?: string }) {
   const canSubmit = useMemo(() => query.trim().length > 0, [query]);
 
   return (
-    <div className={`relative z-40 ${className}`}>
-      <div className="relative z-10 flex items-center rounded-2xl border border-border/70 bg-panel px-3 shadow-sm">
+    <div className={`stock-search-shell relative z-[80] ${className}`}>
+      <div className="search-bar relative z-10 flex items-center rounded-2xl border border-border/70 bg-panel px-3 shadow-sm">
         <Search className="mr-2 h-4 w-4 text-muted" />
         <input
           value={query}
@@ -40,7 +40,7 @@ export function StockSearch({ className = "" }: { className?: string }) {
             }
           }}
           placeholder="Search NSE/BSE symbol, e.g. HDFCBANK"
-          className="h-12 w-full bg-transparent text-sm outline-none"
+          className="search-input h-12 w-full bg-transparent text-sm outline-none"
         />
         <button
           onClick={() => canSubmit && router.push(`/stocks/${query.toUpperCase()}`)}
@@ -51,7 +51,7 @@ export function StockSearch({ className = "" }: { className?: string }) {
       </div>
 
       {open && results.length > 0 && (
-        <div className="smooth-panel-enter absolute left-0 right-0 top-full z-50 mt-2 overflow-hidden rounded-2xl border border-border/80 bg-panel/95 p-2 shadow-xl">
+        <div className="search-dropdown smooth-panel-enter absolute left-0 right-0 top-full z-[95] mt-3 overflow-hidden rounded-2xl border border-border/80 bg-panel p-2 shadow-xl">
           <div className="search-scroll max-h-[290px] overflow-y-auto pr-1">
             {results.map((item) => (
             <button

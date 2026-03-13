@@ -5,7 +5,7 @@ import { StockSearch } from "@/components/stock-search";
 export default function HomePage() {
   return (
     <div className="stagger-fade space-y-8 py-8">
-      <section className="rounded-[28px] border border-border/70 bg-panel/70 p-8">
+      <section className="relative z-20 overflow-visible rounded-[28px] border border-border/70 bg-panel/70 p-8">
         <p className="text-xs uppercase tracking-[0.3em] text-accent">Indian Equity Intelligence</p>
         <h1 className="mt-3 font-[var(--font-space)] text-4xl font-bold md:text-5xl">AI Stock Research For NSE and BSE</h1>
         <p className="mt-3 max-w-3xl text-sm text-muted md:text-base">

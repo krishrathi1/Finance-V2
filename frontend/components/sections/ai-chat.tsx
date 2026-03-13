@@ -1,7 +1,8 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { Bot, Send, X } from "lucide-react";
+import { Send, X } from "lucide-react";
+import Image from "next/image";
 import { useState } from "react";
 
 import { sendAiQuestion } from "@/lib/api";
@@ -31,9 +32,13 @@ export function AIChat({ symbol }: { symbol: string }) {
     <>
       <button
         onClick={() => setOpen((value) => !value)}
-        className="fixed bottom-5 right-5 z-50 inline-flex h-14 w-14 items-center justify-center rounded-full bg-accent text-white shadow-xl"
+        className="fixed bottom-5 right-5 z-50 inline-flex h-16 w-16 items-center justify-center rounded-full border border-border/60 bg-panel p-1.5 shadow-xl"
       >
-        {open ? <X className="h-5 w-5" /> : <Bot className="h-6 w-6" />}
+        {open ? (
+          <X className="h-5 w-5 text-text" />
+        ) : (
+          <Image src="/chatbot-logo.svg" alt="Chatbot" width={52} height={52} className="h-12 w-12 object-contain" priority />
+        )}
       </button>
 
       <AnimatePresence>
@@ -44,9 +49,14 @@ export function AIChat({ symbol }: { symbol: string }) {
             exit={{ opacity: 0, y: 20, scale: 0.98 }}
             className="fixed bottom-24 right-5 z-50 flex h-[540px] w-[360px] flex-col rounded-2xl border border-border bg-panel p-3 shadow-2xl"
           >
-            <div className="border-b border-border pb-2">
-              <p className="font-semibold">Financial Forensics AI</p>
-              <p className="text-xs text-muted">Gemini-powered market assistant</p>
+            <div className="flex items-center gap-3 border-b border-border pb-3">
+              <div className="rounded-2xl border border-border/60 bg-bg p-2">
+                <Image src="/chatbot-logo.svg" alt="Financial Forensics AI" width={42} height={42} className="h-10 w-10 object-contain" />
+              </div>
+              <div>
+                <p className="font-semibold">Financial Forensics AI</p>
+                <p className="text-xs text-muted">Gemini-powered market assistant</p>
+              </div>
             </div>
             <div className="mt-2 flex-1 space-y-2 overflow-y-auto pr-1">
               {messages.map((message, index) => (

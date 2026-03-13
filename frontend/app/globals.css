@@ -82,6 +82,29 @@ textarea:focus {
   box-shadow: 0 0 0 4px rgba(245, 143, 51, 0.12);
 }
 
+.stock-search-shell {
+  isolation: isolate;
+}
+
+.search-bar {
+  transition-property: border-color, box-shadow, background-color, transform;
+  transition-duration: 180ms;
+  transition-timing-function: var(--ease-smooth);
+}
+
+.search-bar:focus-within {
+  border-color: hsl(var(--accent) / 0.45);
+  box-shadow: 0 10px 26px rgba(19, 27, 54, 0.08);
+}
+
+.search-input:focus {
+  box-shadow: none;
+}
+
+.search-dropdown {
+  transform-origin: top center;
+}
+
 .card-surface {
   transition-property: transform, box-shadow, border-color, background-color;
   transition-duration: 160ms;
