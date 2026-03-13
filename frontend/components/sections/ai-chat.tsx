@@ -6,7 +6,7 @@ import { useState } from "react";
 
 import { sendAiQuestion } from "@/lib/api";
 
-type ChatMessage = { role: "user" | "ai"; text: string };
+type ChatMessage = { role: "user" | "ai"; text: string; source?: "gemini" | "fallback" };
 
 export function AIChat({ symbol }: { symbol: string }) {
   const [open, setOpen] = useState(false);
@@ -22,8 +22,8 @@ export function AIChat({ symbol }: { symbol: string }) {
     setInput("");
     setMessages((prev) => [...prev, { role: "user", text: question }]);
     setLoading(true);
-    const answer = await sendAiQuestion(symbol, question);
-    setMessages((prev) => [...prev, { role: "ai", text: answer }]);
+    const response = await sendAiQuestion(symbol, question);
+    setMessages((prev) => [...prev, { role: "ai", text: response.answer, source: response.source }]);
     setLoading(false);
   }
 
@@ -55,6 +55,11 @@ export function AIChat({ symbol }: { symbol: string }) {
                   className={`rounded-xl px-3 py-2 text-sm ${message.role === "user" ? "ml-8 bg-accent text-white" : "mr-8 bg-bg text-text"}`}
                 >
                   {message.text}
+                  {message.role === "ai" && message.source ? (
+                    <p className="mt-2 text-[11px] uppercase tracking-wide text-muted">
+                      AI Source: {message.source === "gemini" ? "Gemini" : "Fallback"}
+                    </p>
+                  ) : null}
                 </div>
               ))}
               {loading && <div className="mr-8 rounded-xl bg-bg px-3 py-2 text-sm text-muted">Analyzing...</div>}

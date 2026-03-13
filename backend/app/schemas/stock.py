@@ -7,6 +7,7 @@ class ChatRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     answer: str
+    source: str = "fallback"
 
 
 class ReportResponse(BaseModel):

@@ -91,7 +91,7 @@ export async function searchStocks(query: string): Promise<Array<{ symbol: strin
   }
 }
 
-export async function sendAiQuestion(symbol: string, question: string): Promise<string> {
+export async function sendAiQuestion(symbol: string, question: string): Promise<{ answer: string; source: "gemini" | "fallback" }> {
   try {
     const res = await fetch(`${PUBLIC_BASE}/api/v1/stocks/${symbol}/chat`, {
       method: "POST",
@@ -100,9 +100,15 @@ export async function sendAiQuestion(symbol: string, question: string): Promise<
     });
     if (!res.ok) throw new Error("chat failed");
     const payload = await res.json();
-    return payload.answer || "No response.";
+    return {
+      answer: payload.answer || "No response.",
+      source: payload.source === "gemini" ? "gemini" : "fallback"
+    };
   } catch {
-    return "AI engine unavailable right now. Check debt trend, revenue quality, and promoter/FII movement before decision.";
+    return {
+      answer: "AI engine unavailable right now. Check debt trend, revenue quality, and promoter/FII movement before decision.",
+      source: "fallback"
+    };
   }
 }
 

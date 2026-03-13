@@ -24,13 +24,14 @@ class AIAdapter:
     def __init__(self) -> None:
         self._gemini = GeminiService(api_key=settings.gemini_api_key, model=settings.gemini_model) if GeminiService else None
 
-    async def chat(self, symbol: str, question: str, context: dict[str, Any]) -> str:
+    async def chat(self, symbol: str, question: str, context: dict[str, Any]) -> tuple[str, str]:
         if self._gemini and settings.gemini_api_key:
             try:
-                return await self._gemini.chat(symbol=symbol, question=question, context=context)
+                answer = await self._gemini.chat(symbol=symbol, question=question, context=context)
+                return answer, "gemini"
             except Exception:
-                return self._offline_chat_response(symbol=symbol, context=context, live_failed=True)
-        return self._offline_chat_response(symbol=symbol, context=context, live_failed=False)
+                return self._offline_chat_response(symbol=symbol, context=context, live_failed=True), "fallback"
+        return self._offline_chat_response(symbol=symbol, context=context, live_failed=False), "fallback"
 
     async def generate_report(self, symbol: str, context: dict[str, Any]) -> str:
         if self._gemini and settings.gemini_api_key:

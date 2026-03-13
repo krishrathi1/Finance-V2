@@ -478,8 +478,8 @@ async def get_stock_dashboard(
 @router.post("/{symbol}/chat", response_model=ChatResponse)
 async def chat_with_ai(symbol: str, payload: ChatRequest) -> ChatResponse:
     dashboard = await dashboard_service.get_dashboard(symbol=symbol)
-    answer = await ai_adapter.chat(symbol=symbol, question=payload.question, context=dashboard)
-    return ChatResponse(answer=answer)
+    answer, source = await ai_adapter.chat(symbol=symbol, question=payload.question, context=dashboard)
+    return ChatResponse(answer=answer, source=source)
 
 
 @router.get("/{symbol}/research-report", response_model=ReportResponse)
