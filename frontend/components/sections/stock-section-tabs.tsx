@@ -6,7 +6,6 @@ const sections = [
   { id: "financials", label: "Financials" },
   { id: "shareholding", label: "Shareholding" },
   { id: "key-ratios", label: "Key Ratios" },
-  { id: "competitors", label: "Competitors" },
   { id: "documents", label: "Documents" }
 ];
 
