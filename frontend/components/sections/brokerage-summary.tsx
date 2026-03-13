@@ -63,7 +63,7 @@ export function BrokerageSummary({ brokerage }: { brokerage?: BrokeragePayload }
       </div>
 
       {reports.length ? (
-        <div className="brokerage-scroll mt-4 max-h-[360px] overflow-y-auto pr-1">
+        <div className="brokerage-scroll mt-4 min-h-0 max-h-[31rem] overflow-y-auto pr-1">
           <div className="space-y-2">
             {reports.map((row, idx) => (
               <div key={`${row.broker}-${row.date}-${idx}`} className="rounded-lg border border-border/70 bg-bg p-3">
@@ -85,7 +85,7 @@ export function BrokerageSummary({ brokerage }: { brokerage?: BrokeragePayload }
           </div>
         </div>
       ) : (
-        <div className="mt-4 rounded-lg border border-dashed border-border/80 p-3 text-sm text-muted">
+        <div className="mt-4 flex min-h-0 flex-1 items-center rounded-lg border border-dashed border-border/80 p-3 text-sm text-muted">
           No brokerage reports were found for this stock right now.
         </div>
       )}

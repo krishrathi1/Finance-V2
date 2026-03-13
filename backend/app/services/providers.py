@@ -743,43 +743,70 @@ class MarketDataProviders:
 
         metric_aliases = {
             "promoters": [
-                "promoter",
-                "promoters",
-                "promoter group",
-                "promoter and promoter group",
-                "promoter & promoter group",
+                ("promoter and promoter group", 100),
+                ("promoter & promoter group", 100),
+                ("promoters", 90),
+                ("promoter", 80),
+                ("promoter group", 30),
             ],
             "fii": [
-                "fii",
-                "fii/fpi",
-                "fii + fpi",
-                "foreign institutions",
-                "foreign institutional investors",
-                "foreign portfolio investors",
+                ("fii/fpi", 100),
+                ("fii + fpi", 95),
+                ("foreign institutional investors", 95),
+                ("foreign portfolio investors", 90),
+                ("foreign institutions", 80),
+                ("fii", 70),
             ],
             "dii": [
-                "dii",
-                "domestic institutions",
-                "domestic institutional investors",
+                ("domestic institutional investors", 95),
+                ("domestic institutions", 85),
+                ("mutual funds", 75),
+                ("insurance companies", 70),
+                ("banks / financial institutions", 65),
+                ("banks and financial institutions", 65),
+                ("dii", 60),
             ],
             "public": [
-                "public",
-                "public holding",
-                "others",
-                "other investors",
-                "retail and others",
+                ("public shareholding", 100),
+                ("public holding", 95),
+                ("public shareholders", 90),
+                ("public & others", 85),
+                ("public and others", 85),
+                ("retail and others", 80),
+                ("retail investors", 75),
+                ("non institutions", 70),
+                ("non-institutions", 70),
+                ("non institutional investors", 70),
+                ("other investors", 60),
+                ("public", 50),
             ],
         }
 
-        def resolve_metric(label: str) -> str | None:
-            normalized = " ".join(str(label or "").lower().replace("&", " & ").split())
+        def normalize_label(value: Any) -> str:
+            normalized = str(value or "").lower().replace("&", " & ").replace("/", " / ")
+            normalized = normalized.replace("-", " ").replace("_", " ")
+            return " ".join(normalized.split())
+
+        def resolve_metric(label: str) -> tuple[str | None, int]:
+            normalized = normalize_label(label)
+            best_target: str | None = None
+            best_score = -1
+            wrapped = f" {normalized} "
             for target, aliases in metric_aliases.items():
-                if normalized == target:
-                    return target
-                for alias in aliases:
-                    if alias in normalized:
-                        return target
-            return None
+                for alias, score in aliases:
+                    alias_normalized = normalize_label(alias)
+                    if normalized == alias_normalized:
+                        candidate_score = score + 1000
+                    elif normalized.startswith(f"{alias_normalized} "):
+                        candidate_score = score + 200
+                    elif len(alias_normalized) >= 8 and f" {alias_normalized} " in wrapped:
+                        candidate_score = score
+                    else:
+                        continue
+                    if candidate_score > best_score:
+                        best_target = target
+                        best_score = candidate_score
+            return best_target, best_score
 
         def parse_pct(value: Any) -> float:
             text = str(value or "").replace("%", "").replace(",", "").strip()
@@ -791,12 +818,17 @@ class MarketDataProviders:
         for quarter in quarter_columns:
             entry = {"quarter": quarter, "promoters": 0.0, "fii": 0.0, "dii": 0.0, "public": 0.0}
             seen_metrics: set[str] = set()
+            match_scores: dict[str, int] = {}
             for _, row in summary_table.iterrows():
-                label = str(row.iloc[0] or "").strip().lower()
-                mapped = resolve_metric(label)
+                label = str(row.iloc[0] or "").strip()
+                mapped, score = resolve_metric(label)
                 if not mapped:
                     continue
-                entry[mapped] = parse_pct(row.get(quarter))
+                value = parse_pct(row.get(quarter))
+                current_score = match_scores.get(mapped, -1)
+                if score > current_score or (score == current_score and value > entry[mapped]):
+                    entry[mapped] = value
+                    match_scores[mapped] = score
                 seen_metrics.add(mapped)
 
             known_total = round(entry["promoters"] + entry["fii"] + entry["dii"] + entry["public"], 2)

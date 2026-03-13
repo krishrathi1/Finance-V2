@@ -603,6 +603,8 @@ class StockDashboardService:
         if trendlyne_shareholding:
             data["shareholding"].update(trendlyne_shareholding)
 
+        data["shareholding"] = self._normalize_shareholding(data["shareholding"])
+
         if trendlyne_documents:
             data["documents"].update(trendlyne_documents)
 
@@ -984,6 +986,39 @@ class StockDashboardService:
             return numeric
         except Exception:
             return None
+
+    def _normalize_shareholding(self, shareholding: dict[str, Any]) -> dict[str, Any]:
+        if not shareholding:
+            return shareholding
+
+        normalized = dict(shareholding)
+        history = normalized.get("history") or []
+        latest = history[0] if history else {}
+
+        if latest:
+            if latest.get("quarter"):
+                normalized["quarter"] = latest.get("quarter")
+            for key in ("promoters", "fii", "dii", "public"):
+                latest_value = self._num(latest.get(key))
+                if latest_value is not None:
+                    normalized[key] = round(latest_value, 2)
+
+        promoters = self._num(normalized.get("promoters")) or 0.0
+        fii = self._num(normalized.get("fii")) or 0.0
+        dii = self._num(normalized.get("dii")) or 0.0
+        public_value = self._num(normalized.get("public"))
+
+        if public_value is None or public_value <= 0:
+            inferred_public = round(max(0.0, 100.0 - (promoters + fii + dii)), 2)
+            if inferred_public > 0:
+                normalized["public"] = inferred_public
+                public_value = inferred_public
+
+        total = promoters + fii + dii + (public_value or 0.0)
+        if total > 100.5 and (public_value or 0.0) > 0:
+            normalized["public"] = round(max(0.0, (public_value or 0.0) - (total - 100.0)), 2)
+
+        return normalized
 
     def _finalize_key_metrics(
         self,
