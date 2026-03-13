@@ -5,6 +5,7 @@ import { Maximize2, X } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { PriceChart } from "@/components/charts/price-chart";
+import { MarketStatusBadge } from "@/components/market-status-badge";
 import { Card } from "@/components/ui/card";
 import { formatCurrency, formatPercent } from "@/lib/format";
 import type { DashboardData } from "@/lib/types";
@@ -91,9 +92,12 @@ export function PriceSidebar({ data }: { data: DashboardData }) {
         <div className="flex items-start justify-between">
           <div className="space-y-1">
             <p className="font-[var(--font-space)] text-2xl font-bold">{data.companyName}</p>
-            <p className="text-sm text-muted">
-              {data.symbol} • {data.exchange}
-            </p>
+            <div className="flex flex-wrap items-center gap-2 text-sm text-muted">
+              <p>
+                {data.symbol} • {data.exchange}
+              </p>
+              <MarketStatusBadge compact />
+            </div>
           </div>
           <button
             onClick={() => setIsExpanded(true)}

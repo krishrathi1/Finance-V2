@@ -24,7 +24,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <div className="mx-auto flex max-w-[1640px] items-center justify-between px-4 py-3 md:px-6">
               <div>
                 <p className="font-[var(--font-space)] text-xl font-bold tracking-tight">Financial Forensics AI</p>
-                <p className="text-xs text-muted">NSE/BSE Intelligence Platform</p>
+                <p className="mt-1 text-xs text-muted">NSE/BSE Intelligence Platform</p>
               </div>
               <ModeToggle />
             </div>

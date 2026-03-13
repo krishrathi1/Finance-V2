@@ -13,7 +13,6 @@ class Settings(BaseSettings):
     database_url: str = "sqlite+aiosqlite:///financial_forensics.db"
     redis_url: str = "redis://localhost:6379/0"
 
-    polygon_api_key: str = ""
     fmp_api_key: str = ""
     news_api_key: str = ""
     yahoo_finance_base: str = "https://query1.finance.yahoo.com"

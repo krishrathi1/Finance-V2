@@ -58,13 +58,6 @@ async def main():
     await test_postgres()
     await test_redis()
     
-    # Polygon
-    poly_key = os.getenv("POLYGON_API_KEY")
-    if poly_key:
-        await test_api("Polygon API", f"https://api.polygon.io/v3/reference/tickers?apiKey={poly_key}&limit=1")
-    else:
-        print("[FAILED] Polygon: missing POLYGON_API_KEY")
-        
     # FMP
     fmp_key = os.getenv("FMP_API_KEY")
     if fmp_key:
