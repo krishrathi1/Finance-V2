@@ -9,14 +9,13 @@ import { DocumentsSection } from "@/components/sections/documents-section";
 import { KeyRatiosSection } from "@/components/sections/key-ratios-section";
 import { MetricsGrid } from "@/components/sections/metrics-grid";
 import { NewsSection } from "@/components/sections/news-section";
-import { ResearchReportSection } from "@/components/sections/research-report-section";
 import { BrokerageSummary } from "@/components/sections/brokerage-summary";
 import { ReturnsPanel } from "@/components/sections/returns-panel";
 import { RiskScore } from "@/components/sections/risk-score";
 import { SmartScore } from "@/components/sections/smart-score";
 import { StockSectionTabs } from "@/components/sections/stock-section-tabs";
 import { TechnicalsSection } from "@/components/sections/technicals-section";
-import { fetchDashboard, fetchResearchReport } from "@/lib/api";
+import { fetchDashboard } from "@/lib/api";
 
 const PriceSidebar = dynamic(() => import("@/components/sections/price-sidebar").then((m) => m.PriceSidebar), { ssr: false });
 const FinancialsSection = dynamic(() => import("@/components/sections/financials-section").then((m) => m.FinancialsSection), { ssr: false });
@@ -37,9 +36,8 @@ export default async function StockDetailsPage({ params }: Props) {
   if (!symbol) notFound();
 
   let data;
-  let report = "";
   try {
-    [data, report] = await Promise.all([fetchDashboard(symbol), fetchResearchReport(symbol)]);
+    data = await fetchDashboard(symbol);
   } catch (error) {
     return (
       <div className="space-y-4">
@@ -200,7 +198,6 @@ export default async function StockDetailsPage({ params }: Props) {
           </section>
 
           <NewsSection news={data.news} />
-          <ResearchReportSection report={report} />
         </section>
       </div>
 
