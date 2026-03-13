@@ -34,6 +34,10 @@ class GeminiService:
         prompt = self._build_risk_score_prompt(symbol=symbol, context=context)
         return await self._generate(prompt)
 
+    async def extract_profile_details(self, symbol: str, context: dict[str, Any]) -> str:
+        prompt = self._build_profile_prompt(symbol=symbol, context=context)
+        return await self._generate(prompt)
+
     async def _generate(self, prompt: str) -> str:
         payload = {"contents": [{"parts": [{"text": prompt}]}]}
         params = {"key": self.api_key}
@@ -227,4 +231,27 @@ class GeminiService:
             "5) Give one simple safety tip (for example: invest slowly).\n"
             "6) Do not use markdown, bullets, or investment guarantees.\n"
             "7) Keep under 70 words."
+        )
+
+    def _build_profile_prompt(self, symbol: str, context: dict[str, Any]) -> str:
+        compact_context = json.dumps(
+            {
+                "symbol": context.get("symbol", symbol),
+                "companyName": context.get("companyName"),
+                "sector": context.get("sector"),
+                "profile": context.get("profile"),
+                "description": (context.get("profile") or {}).get("description") if isinstance(context.get("profile"), dict) else "",
+            }
+        )
+        return (
+            "You are extracting company profile facts for an Indian listed stock.\n"
+            f"Stock symbol: {symbol}\n"
+            f"Context JSON: {compact_context}\n\n"
+            "Task: Return only strict JSON with these keys:\n"
+            '{"incorporationYear": number|null, "headquarters": string|null, "chairman": string|null, "previousName": string|null}\n'
+            "Rules:\n"
+            "1) Use the existing context first.\n"
+            "2) If a field is uncertain, use null.\n"
+            "3) Do not invent facts.\n"
+            "4) Return JSON only, no markdown."
         )

@@ -1,5 +1,6 @@
 import asyncio
 from datetime import datetime, timedelta, timezone
+import json
 import re
 
 from fastapi import APIRouter, HTTPException, Query
@@ -40,9 +41,94 @@ async def _refresh_dashboard_cache(symbol: str, timeframe: str, cache_key: str, 
 
 
 async def _enrich_score_explanations(symbol: str, data: dict) -> dict:
+    data = await _enrich_profile_details(symbol=symbol, data=data)
     data = await _enrich_smart_score_explanation(symbol=symbol, data=data)
     data = await _enrich_risk_score_explanation(symbol=symbol, data=data)
     return data
+
+
+async def _enrich_profile_details(symbol: str, data: dict) -> dict:
+    if not isinstance(data, dict):
+        return data
+
+    profile = data.get("profile")
+    if not isinstance(profile, dict):
+        return data
+
+    changed = False
+
+    description = str(profile.get("description") or "").strip()
+    if (not profile.get("incorporationYear")) and description:
+        match = re.search(r"\bincorporated in (\d{4})\b", description, flags=re.IGNORECASE)
+        if match:
+            try:
+                profile["incorporationYear"] = int(match.group(1))
+                changed = True
+            except Exception:
+                pass
+
+    if not str(profile.get("headquarters") or "").strip() and description:
+        match = re.search(r"\bheadquartered in ([A-Za-z ,.-]+?)(?:\.|, and| and is| with|$)", description, flags=re.IGNORECASE)
+        if match:
+            headquarters = " ".join(match.group(1).split()).strip(" ,.")
+            if headquarters:
+                profile["headquarters"] = headquarters
+                changed = True
+
+    needs_ai = (
+        not profile.get("incorporationYear")
+        or not str(profile.get("headquarters") or "").strip()
+        or str(profile.get("chairman") or "").strip() in {"", "N/A"}
+        or str(profile.get("previousName") or "").strip() in {"", "N/A"}
+    )
+
+    if needs_ai and bool(str(settings.gemini_api_key or "").strip()):
+        try:
+            raw = await asyncio.wait_for(ai_adapter.extract_profile_details(symbol=symbol, context=data), timeout=12)
+            parsed = _parse_profile_json(raw)
+            year_value = parsed.get("incorporationYear")
+            if not profile.get("incorporationYear") and isinstance(year_value, int) and 1800 <= year_value <= datetime.now().year:
+                profile["incorporationYear"] = year_value
+                changed = True
+
+            headquarters_value = str(parsed.get("headquarters") or "").strip()
+            if not str(profile.get("headquarters") or "").strip() and headquarters_value:
+                profile["headquarters"] = headquarters_value
+                changed = True
+
+            chairman_value = str(parsed.get("chairman") or "").strip()
+            if str(profile.get("chairman") or "").strip() in {"", "N/A"} and chairman_value:
+                profile["chairman"] = chairman_value
+                changed = True
+
+            previous_name_value = str(parsed.get("previousName") or "").strip()
+            if str(profile.get("previousName") or "").strip() in {"", "N/A"} and previous_name_value:
+                profile["previousName"] = previous_name_value
+                changed = True
+        except Exception:
+            pass
+
+    if not str(profile.get("chairman") or "").strip():
+        profile["chairman"] = "N/A"
+    if not str(profile.get("previousName") or "").strip():
+        profile["previousName"] = "N/A"
+
+    if changed:
+        data["profile"] = profile
+    return data
+
+
+def _parse_profile_json(raw: str) -> dict:
+    text = str(raw or "").strip()
+    if not text:
+        return {}
+    fenced = re.search(r"\{.*\}", text, flags=re.DOTALL)
+    candidate = fenced.group(0) if fenced else text
+    try:
+        parsed = json.loads(candidate)
+        return parsed if isinstance(parsed, dict) else {}
+    except Exception:
+        return {}
 
 
 async def _enrich_smart_score_explanation(symbol: str, data: dict) -> dict:

@@ -5,8 +5,6 @@ import { useEffect, useMemo, useState } from "react";
 
 import { fetchTickerTape } from "@/lib/api";
 
-const FALLBACK_SYMBOLS = ["NIFTY 50", "HDFCBANK", "RELIANCE", "SBIN", "TCS", "INFY", "ICICIBANK", "LT", "BHARTIARTL", "ITC"];
-
 type TickerRow = { symbol: string; cmp: number; change: number; changePercent: number };
 
 function formatSigned(value: number) {
@@ -56,14 +54,17 @@ export function MarketTicker() {
   }, []);
 
   const tape = useMemo(() => {
-    const source = rows.length ? rows : FALLBACK_SYMBOLS.map((symbol) => ({ symbol, cmp: 0, change: 0, changePercent: 0 }));
-    return [...source, ...source];
+    return rows.length ? [...rows, ...rows] : [];
   }, [rows]);
 
   const durationSeconds = useMemo(() => {
     // Extra-slow tape for better readability across large symbol sets.
     return Math.max(80, Math.min(1800, Math.round(tape.length * 0.3)));
   }, [tape.length]);
+
+  if (!tape.length) {
+    return null;
+  }
 
   return (
     <div className="ticker-shell border-t border-border/60 bg-panel/70">

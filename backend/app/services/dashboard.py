@@ -157,52 +157,12 @@ class StockDashboardService:
         self.providers = MarketDataProviders()
 
     async def search_stocks(self, query: str) -> list[dict[str, str]]:
-        fallback_universe = [
-            {"symbol": "HDFCBANK", "name": "HDFC Bank Ltd", "exchange": "NSE"},
-            {"symbol": "RELIANCE", "name": "Reliance Industries Ltd", "exchange": "NSE"},
-            {"symbol": "TCS", "name": "Tata Consultancy Services Ltd", "exchange": "NSE"},
-            {"symbol": "INFY", "name": "Infosys Ltd", "exchange": "NSE"},
-            {"symbol": "ICICIBANK", "name": "ICICI Bank Ltd", "exchange": "NSE"},
-        ]
         q = query.strip().lower()
         if not q:
-            return fallback_universe
+            return []
 
         provider_results = await self.providers.search_indian_stocks(query, limit=25)
-        if provider_results:
-            return provider_results
-
-        peer_rows = [{"symbol": item["symbol"], "name": item["name"], "exchange": "NSE"} for item in PEER_COMPANY_CATALOG]
-        combined = peer_rows + fallback_universe
-        seen: set[str] = set()
-        deduped: list[dict[str, str]] = []
-        for item in combined:
-            symbol = item["symbol"].upper()
-            if symbol in seen:
-                continue
-            seen.add(symbol)
-            deduped.append(item)
-
-        def score(item: dict[str, str]) -> tuple[int, int, str]:
-            symbol = item["symbol"].lower()
-            name = item["name"].lower()
-            if symbol == q:
-                rank = 0
-            elif symbol.startswith(q):
-                rank = 1
-            elif any(part.startswith(q) for part in name.split()):
-                rank = 2
-            elif q in symbol:
-                rank = 3
-            elif q in name:
-                rank = 4
-            else:
-                rank = 9
-            return (rank, len(symbol), item["symbol"])
-
-        matches = [item for item in deduped if q in item["symbol"].lower() or q in item["name"].lower()]
-        matches.sort(key=score)
-        return matches[:25]
+        return provider_results
 
     async def get_ticker_tape(self, symbols: list[str] | None = None) -> list[dict[str, Any]]:
         default_symbols = ["NIFTY 50", "HDFCBANK", "RELIANCE", "SBIN", "TCS", "INFY", "ICICIBANK", "LT", "BHARTIARTL", "ITC"]
@@ -479,6 +439,7 @@ class StockDashboardService:
                 "pbRatio",
                 "bookValue",
                 "eps",
+                "ebitdaMargin",
                 "dividendYield",
                 "roe",
                 "roce",
@@ -694,6 +655,7 @@ class StockDashboardService:
             data["price"]["history"],
             data.get("sector", ""),
         )
+        data["metrics"] = self._enrich_metrics_from_ratio_trends(data["metrics"], data["financials"]["keyRatioTrends"])
         growth_snapshot = self._build_financial_growth_snapshot(
             trendlyne_financials,
             data["returnsSummary"],
@@ -1135,6 +1097,40 @@ class StockDashboardService:
         for key, value in list(out.items()):
             numeric = self._num(value)
             out[key] = round(numeric, 2) if numeric is not None else None
+
+        return out
+
+    def _enrich_metrics_from_ratio_trends(self, metrics: dict[str, Any], ratio_trends: dict[str, Any] | None) -> dict[str, Any]:
+        out = dict(metrics)
+        trends = ratio_trends if isinstance(ratio_trends, dict) else {}
+        liquidity_cards = trends.get("liquidity") if isinstance(trends.get("liquidity"), list) else []
+
+        def latest_or_average(label: str) -> float | None:
+            for card in liquidity_cards:
+                if not isinstance(card, dict):
+                    continue
+                if str(card.get("label") or "").strip().lower() != label.strip().lower():
+                    continue
+                series = card.get("series") if isinstance(card.get("series"), list) else []
+                for point in reversed(series):
+                    if not isinstance(point, dict):
+                        continue
+                    value = self._num(point.get("value"))
+                    if value is not None:
+                        return round(value, 2)
+                average = self._num(card.get("average3Y"))
+                return round(average, 2) if average is not None else None
+            return None
+
+        if self._num(out.get("casaRatio")) is None:
+            casa_ratio = latest_or_average("CASA Ratio")
+            if casa_ratio is not None:
+                out["casaRatio"] = casa_ratio
+
+        if self._num(out.get("netInterestMargin")) is None:
+            net_interest_margin = latest_or_average("Net Interest Margin")
+            if net_interest_margin is not None:
+                out["netInterestMargin"] = net_interest_margin
 
         return out
 

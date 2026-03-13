@@ -18,16 +18,16 @@ export function CompanyOverview({
   previousName: string;
 }) {
   return (
-    <div className="grid gap-3 lg:grid-cols-3">
-      <Card className="flex h-[230px] flex-col p-4 lg:col-span-2">
+    <div className="grid gap-3 xl:grid-cols-3">
+      <Card className="flex h-[230px] flex-col p-4 xl:col-span-2">
         <h3 className="text-lg font-semibold">Company Overview</h3>
-        <div className="mt-2 min-h-0 flex-1 overflow-y-auto pr-1">
+        <div className="company-scroll mt-2 min-h-0 flex-1 overflow-y-auto pr-1">
           <p className="text-sm leading-6 text-muted">{description}</p>
         </div>
       </Card>
-      <Card className="h-[230px] p-4">
+      <Card className="flex h-[230px] flex-col p-4">
         <h3 className="text-lg font-semibold">Profile</h3>
-        <div className="mt-2 space-y-2 text-sm">
+        <div className="company-scroll mt-2 space-y-2 overflow-y-auto pr-1 text-sm">
           <p>
             <span className="text-muted">Incorporation:</span> {incorporationYear}
           </p>
@@ -42,9 +42,13 @@ export function CompanyOverview({
           </p>
           <p>
             <span className="text-muted">Website:</span>{" "}
-            <Link href={website} className="text-accent hover:underline">
-              {website}
-            </Link>
+            {website ? (
+              <Link href={website} className="break-all text-accent hover:underline">
+                {website}
+              </Link>
+            ) : (
+              <span>N/A</span>
+            )}
           </p>
         </div>
       </Card>

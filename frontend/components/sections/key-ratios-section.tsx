@@ -69,48 +69,17 @@ export function KeyRatiosSection({
   metrics: Record<string, number | null>;
   trends?: KeyRatioTrends;
 }) {
-  const fallback: KeyRatioTrends = {
-    profitability: [
-      {
-        label: "ROE",
-        average3Y: Number(metrics.roe || 0),
-        series: Array.from({ length: 5 }, (_, index) => ({ period: String(2021 + index), value: Number(metrics.roe || 0) }))
-      },
-      {
-        label: "ROCE",
-        average3Y: Number(metrics.roce || 0),
-        series: Array.from({ length: 5 }, (_, index) => ({ period: String(2021 + index), value: Number(metrics.roce || 0) }))
-      },
-      {
-        label: "ROA",
-        average3Y: Number(metrics.roa || 0),
-        series: Array.from({ length: 5 }, (_, index) => ({ period: String(2021 + index), value: Number(metrics.roa || 0) }))
-      },
-      {
-        label: "NPM",
-        average3Y: Number(metrics.profitMargin || 0),
-        series: Array.from({ length: 5 }, (_, index) => ({ period: String(2021 + index), value: Number(metrics.profitMargin || 0) }))
-      }
-    ],
-    valuation: [
-      { label: "P/E Ratio", average3Y: Number(metrics.peRatio || 0), series: Array.from({ length: 5 }, (_, index) => ({ period: String(2021 + index), value: Number(metrics.peRatio || 0) })) },
-      { label: "EV/EBITDA", average3Y: 0, series: Array.from({ length: 5 }, (_, index) => ({ period: String(2021 + index), value: 0 })) },
-      { label: "Price to Book Value", average3Y: Number(metrics.pbRatio || 0), series: Array.from({ length: 5 }, (_, index) => ({ period: String(2021 + index), value: Number(metrics.pbRatio || 0) })) },
-      { label: "Price to Cash Flow", average3Y: 0, series: Array.from({ length: 5 }, (_, index) => ({ period: String(2021 + index), value: 0 })) }
-    ],
-    liquidity: [
-      { label: "Current Ratio", average3Y: Number(metrics.currentRatio || 0), series: Array.from({ length: 5 }, (_, index) => ({ period: String(2021 + index), value: Number(metrics.currentRatio || 0) })) },
-      { label: "Debt to Equity", average3Y: Number(metrics.debtToEquity || 0), series: Array.from({ length: 5 }, (_, index) => ({ period: String(2021 + index), value: Number(metrics.debtToEquity || 0) })) },
-      { label: "Asset Turnover", average3Y: 0, series: Array.from({ length: 5 }, (_, index) => ({ period: String(2021 + index), value: 0 })) },
-      { label: "Operating CF Margin", average3Y: 0, series: Array.from({ length: 5 }, (_, index) => ({ period: String(2021 + index), value: 0 })) }
-    ]
+  const ratioData: KeyRatioTrends = {
+    profitability: (trends?.profitability || []).filter((card) => card.series.some((point) => Number.isFinite(Number(point.value)))),
+    valuation: (trends?.valuation || []).filter((card) => card.series.some((point) => Number.isFinite(Number(point.value)))),
+    liquidity: (trends?.liquidity || []).filter((card) => card.series.some((point) => Number.isFinite(Number(point.value)))),
   };
-
-  const ratioData = trends || fallback;
+  const hasAnyData = ratioData.profitability.length || ratioData.valuation.length || ratioData.liquidity.length;
 
   return (
     <Card className="p-4">
       <h3 className="text-lg font-semibold">Key Ratios</h3>
+      {!hasAnyData ? <p className="mt-3 text-sm text-muted">Trend data is not available from the live providers for this stock right now.</p> : null}
       <Tabs defaultValue="profitability" className="mt-3">
         <TabsList>
           <TabsTrigger value="profitability">Profitability</TabsTrigger>
@@ -118,13 +87,13 @@ export function KeyRatiosSection({
           <TabsTrigger value="liquidity">Liquidity</TabsTrigger>
         </TabsList>
         <TabsContent value="profitability" className="mt-4">
-          <RatioGrid cards={ratioData.profitability} color="violet" />
+          {ratioData.profitability.length ? <RatioGrid cards={ratioData.profitability} color="violet" /> : <p className="text-sm text-muted">No live profitability trend data.</p>}
         </TabsContent>
         <TabsContent value="valuation" className="mt-4">
-          <RatioGrid cards={ratioData.valuation} color="blue" />
+          {ratioData.valuation.length ? <RatioGrid cards={ratioData.valuation} color="blue" /> : <p className="text-sm text-muted">No live valuation trend data.</p>}
         </TabsContent>
         <TabsContent value="liquidity" className="mt-4">
-          <RatioGrid cards={ratioData.liquidity} color="violet" />
+          {ratioData.liquidity.length ? <RatioGrid cards={ratioData.liquidity} color="violet" /> : <p className="text-sm text-muted">No live liquidity trend data.</p>}
         </TabsContent>
       </Tabs>
     </Card>

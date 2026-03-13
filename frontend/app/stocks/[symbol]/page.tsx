@@ -41,7 +41,7 @@ export default async function StockDetailsPage({ params }: Props) {
   } catch (error) {
     return (
       <div className="space-y-4">
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
           <p className="text-sm text-muted">
             <Link href="/" className="hover:text-text">
               Dashboard
@@ -63,26 +63,9 @@ export default async function StockDetailsPage({ params }: Props) {
     );
   }
 
-  // Calculate historic CAGR from the longest available timeframe
-  let historicalCagr = 12; // fallback
-  if (data.returnsSummary && data.returnsSummary.length > 0) {
-    const fiveYear = data.returnsSummary.find((r: any) => r.label === "5 Years");
-    const threeYear = data.returnsSummary.find((r: any) => r.label === "3 Years");
-    const oneYear = data.returnsSummary.find((r: any) => r.label === "1 Year");
-
-    // Choose the longest reliable timeframe
-    if (fiveYear && fiveYear.value !== null && fiveYear.value > -100) {
-      historicalCagr = ((Math.pow(1 + fiveYear.value / 100, 1 / 5) - 1) * 100);
-    } else if (threeYear && threeYear.value !== null && threeYear.value > -100) {
-      historicalCagr = ((Math.pow(1 + threeYear.value / 100, 1 / 3) - 1) * 100);
-    } else if (oneYear && oneYear.value !== null) {
-      historicalCagr = oneYear.value;
-    }
-  }
-
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
         <p className="text-sm text-muted">
           <Link href="/" className="hover:text-text">
             Dashboard
@@ -94,12 +77,12 @@ export default async function StockDetailsPage({ params }: Props) {
         </div>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[360px_1fr]">
-        <aside>
+      <div className="grid gap-4 2xl:grid-cols-[minmax(300px,360px)_minmax(0,1fr)]">
+        <aside className="min-w-0">
           <PriceSidebar data={data} />
         </aside>
 
-        <section className="space-y-4">
+        <section className="min-w-0 space-y-4">
           <StockSectionTabs />
 
           <section id="overview" className="space-y-4">
@@ -111,7 +94,7 @@ export default async function StockDetailsPage({ params }: Props) {
               chairman={data.profile.chairman}
               previousName={data.profile.previousName}
             />
-            <MetricsGrid metrics={data.metrics} />
+            <MetricsGrid metrics={data.metrics} keyRatioTrends={data.financials.keyRatioTrends} />
           </section>
 
           <div className="grid gap-4 xl:grid-cols-2">

@@ -741,13 +741,45 @@ class MarketDataProviders:
             return None
         summary_table.columns = columns
 
-        metric_map = {
-            "promoter": "promoters",
-            "promoters": "promoters",
-            "fii": "fii",
-            "dii": "dii",
-            "public": "public",
+        metric_aliases = {
+            "promoters": [
+                "promoter",
+                "promoters",
+                "promoter group",
+                "promoter and promoter group",
+                "promoter & promoter group",
+            ],
+            "fii": [
+                "fii",
+                "fii/fpi",
+                "fii + fpi",
+                "foreign institutions",
+                "foreign institutional investors",
+                "foreign portfolio investors",
+            ],
+            "dii": [
+                "dii",
+                "domestic institutions",
+                "domestic institutional investors",
+            ],
+            "public": [
+                "public",
+                "public holding",
+                "others",
+                "other investors",
+                "retail and others",
+            ],
         }
+
+        def resolve_metric(label: str) -> str | None:
+            normalized = " ".join(str(label or "").lower().replace("&", " & ").split())
+            for target, aliases in metric_aliases.items():
+                if normalized == target:
+                    return target
+                for alias in aliases:
+                    if alias in normalized:
+                        return target
+            return None
 
         def parse_pct(value: Any) -> float:
             text = str(value or "").replace("%", "").replace(",", "").strip()
@@ -758,16 +790,45 @@ class MarketDataProviders:
         history: list[dict[str, Any]] = []
         for quarter in quarter_columns:
             entry = {"quarter": quarter, "promoters": 0.0, "fii": 0.0, "dii": 0.0, "public": 0.0}
+            seen_metrics: set[str] = set()
             for _, row in summary_table.iterrows():
                 label = str(row.iloc[0] or "").strip().lower()
-                mapped = metric_map.get(label)
+                mapped = resolve_metric(label)
                 if not mapped:
                     continue
                 entry[mapped] = parse_pct(row.get(quarter))
+                seen_metrics.add(mapped)
+
+            known_total = round(entry["promoters"] + entry["fii"] + entry["dii"] + entry["public"], 2)
+            if "public" not in seen_metrics and 0 < known_total < 100:
+                entry["public"] = round(max(0.0, 100.0 - (entry["promoters"] + entry["fii"] + entry["dii"])), 2)
+            if "promoters" not in seen_metrics:
+                other_total = round(entry["fii"] + entry["dii"] + entry["public"], 2)
+                if 0 < other_total < 100:
+                    entry["promoters"] = round(max(0.0, 100.0 - other_total), 2)
+
+            recomputed_total = entry["promoters"] + entry["fii"] + entry["dii"] + entry["public"]
+            if recomputed_total > 100.5 and entry["public"] > 0:
+                overflow = recomputed_total - 100.0
+                entry["public"] = round(max(0.0, entry["public"] - overflow), 2)
             history.append(entry)
 
         if not history:
             return None
+
+        def parse_quarter_label(raw: str) -> datetime | None:
+            text = str(raw or "").strip()
+            for fmt in ("%b %Y", "%b %y", "%B %Y"):
+                try:
+                    return datetime.strptime(text, fmt)
+                except Exception:
+                    continue
+            return None
+
+        history.sort(
+            key=lambda item: parse_quarter_label(str(item.get("quarter") or "")) or datetime.min,
+            reverse=True,
+        )
 
         top_holders: list[dict[str, Any]] = []
         if len(tables) >= 3:
@@ -2854,6 +2915,11 @@ class MarketDataProviders:
                 "pbRatio": self._to_float(chosen_info.get("priceToBook")),
                 "bookValue": book_value,
                 "eps": self._to_float(chosen_info.get("trailingEps")),
+                "ebitdaMargin": (
+                    self._to_float(chosen_info.get("ebitdaMargins")) * 100
+                    if self._to_float(chosen_info.get("ebitdaMargins")) is not None
+                    else None
+                ),
                 "dividendYield": dividend_yield,
                 "roe": (roe * 100) if roe is not None else derived_roe,
                 "roa": (roa * 100) if roa is not None else derived_roa,

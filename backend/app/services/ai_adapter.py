@@ -111,3 +111,11 @@ class AIAdapter:
             f"The main risk now is {high_text}, while {low_text} looks better. "
             "To stay safe, invest in small parts instead of all at once."
         )
+
+    async def extract_profile_details(self, symbol: str, context: dict[str, Any]) -> str:
+        if self._gemini and settings.gemini_api_key:
+            try:
+                return await self._gemini.extract_profile_details(symbol=symbol, context=context)
+            except Exception:
+                pass
+        return "{}"

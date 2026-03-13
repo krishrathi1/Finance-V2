@@ -76,25 +76,6 @@ export async function fetchDashboard(symbol: string): Promise<DashboardData> {
   throw (lastError instanceof Error ? lastError : new Error("Dashboard request failed"));
 }
 
-export async function fetchResearchReport(symbol: string): Promise<string> {
-  try {
-    const res = await fetchWithTimeout(
-      `${INTERNAL_BASE}/api/v1/stocks/${symbol}/research-report`,
-      {
-        cache: "no-store"
-      },
-      90_000
-    );
-    if (!res.ok) {
-      throw new Error("report failed");
-    }
-    const payload = await res.json();
-    return payload.report_markdown || "";
-  } catch {
-    return `# ${symbol.toUpperCase()} Research Report\nData source is temporarily unavailable.`;
-  }
-}
-
 export async function searchStocks(query: string): Promise<Array<{ symbol: string; name: string; exchange: string }>> {
   if (!query.trim()) return [];
   try {
@@ -106,10 +87,7 @@ export async function searchStocks(query: string): Promise<Array<{ symbol: strin
     const payload = await res.json();
     return payload.results || [];
   } catch {
-    return [
-      { symbol: "HDFCBANK", name: "HDFC Bank Ltd", exchange: "NSE" },
-      { symbol: "RELIANCE", name: "Reliance Industries Ltd", exchange: "NSE" }
-    ].filter((item) => item.symbol.toLowerCase().includes(query.toLowerCase()));
+    return [];
   }
 }
 

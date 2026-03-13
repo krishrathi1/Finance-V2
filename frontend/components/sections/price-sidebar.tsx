@@ -67,10 +67,9 @@ export function PriceSidebar({ data }: { data: DashboardData }) {
   const changeLabel = isOneDay ? "1D" : selected.key;
   const isPositive = pointChange >= 0;
 
-  const bearish = data.riskScore?.components?.sentiment
-    ? Math.round((data.riskScore.components.sentiment / 5) * 100)
-    : 100 - Math.min(90, Math.max(10, Math.round((data.smartScore.score / 5) * 100)));
-  const bullish = 100 - bearish;
+  const sentimentComponent = data.riskScore?.components?.sentiment;
+  const bearish = typeof sentimentComponent === "number" ? Math.round((sentimentComponent / 5) * 100) : null;
+  const bullish = bearish === null ? null : 100 - bearish;
 
   const rangeSelector = (
     <div className="mt-3 grid grid-cols-5 gap-1">
@@ -136,14 +135,20 @@ export function PriceSidebar({ data }: { data: DashboardData }) {
 
         <div className="mt-4 rounded-xl border border-border/70 p-3">
           <p className="text-sm font-semibold">Investor Sentiment</p>
-          <div className="mt-2 flex h-3 w-full overflow-hidden rounded-full bg-bg">
-            <div className="bg-success" style={{ width: `${bullish}%` }} />
-            <div className="bg-danger" style={{ width: `${bearish}%` }} />
-          </div>
-          <div className="mt-2 flex justify-between text-xs">
-            <p className="text-success">{bullish}% Bullish</p>
-            <p className="text-danger">{bearish}% Bearish</p>
-          </div>
+          {bullish === null || bearish === null ? (
+            <p className="mt-2 text-xs text-muted">Live sentiment data is unavailable right now.</p>
+          ) : (
+            <>
+              <div className="mt-2 flex h-3 w-full overflow-hidden rounded-full bg-bg">
+                <div className="bg-success" style={{ width: `${bullish}%` }} />
+                <div className="bg-danger" style={{ width: `${bearish}%` }} />
+              </div>
+              <div className="mt-2 flex justify-between text-xs">
+                <p className="text-success">{bullish}% Bullish</p>
+                <p className="text-danger">{bearish}% Bearish</p>
+              </div>
+            </>
+          )}
         </div>
       </Card>
       <AnimatePresence>

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { ShareholdingPie } from "@/components/charts/shareholding-pie";
 import { Card } from "@/components/ui/card";
@@ -32,6 +32,10 @@ export function ShareholdingSection({
   }, [history, quarter, promoters, fii, dii, publicHolding]);
 
   const [selectedQuarter, setSelectedQuarter] = useState(points[0]?.quarter || quarter);
+
+  useEffect(() => {
+    setSelectedQuarter(points[0]?.quarter || quarter);
+  }, [points, quarter]);
 
   const activePoint = points.find((item) => item.quarter === selectedQuarter) || points[0];
 
@@ -70,6 +74,7 @@ export function ShareholdingSection({
 
       <div className="mt-4 grid items-center gap-4 md:grid-cols-2">
         <ShareholdingPie
+          key={activePoint?.quarter || "shareholding"}
           promoters={activePoint?.promoters || 0}
           fii={activePoint?.fii || 0}
           dii={activePoint?.dii || 0}
