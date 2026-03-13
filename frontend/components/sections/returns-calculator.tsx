@@ -2,7 +2,6 @@
 
 import { useMemo, useState } from "react";
 
-import { ReturnsProjectionChart } from "@/components/charts/returns-projection-chart";
 import { Card } from "@/components/ui/card";
 import { formatCurrency } from "@/lib/format";
 
@@ -85,44 +84,40 @@ export function ReturnsCalculator({
             <p className={`break-words text-[clamp(2.15rem,4vw,3.3rem)] font-bold leading-tight ${trendTone}`}>{formatCurrency(future)}</p>
             <p className={`mt-1 text-base font-medium ${trendTone}`}>Future Price: {formatCurrency(simulatedFuturePrice)} per share</p>
           </div>
-          <div className="grid min-w-[170px] gap-2 sm:grid-cols-2">
-            <div className="rounded-xl border border-border/50 bg-panel/70 px-3 py-2">
+          <div className="grid min-w-[210px] gap-3 sm:grid-cols-2">
+            <div className="flex min-h-[104px] flex-col justify-between rounded-2xl border border-border/50 bg-panel/72 px-4 py-3">
               <p className="text-[11px] uppercase tracking-wide text-muted">3Y Return</p>
-              <p className={`text-lg font-semibold ${trendTone}`}>{futureGain >= 0 ? "+" : ""}{futureGain.toFixed(2)}%</p>
+              <p className={`text-[clamp(1.75rem,2vw,2.15rem)] font-semibold ${trendTone}`}>{futureGain >= 0 ? "+" : ""}{futureGain.toFixed(2)}%</p>
             </div>
-            <div className="rounded-xl border border-border/50 bg-panel/70 px-3 py-2">
+            <div className="flex min-h-[104px] flex-col justify-between rounded-2xl border border-border/50 bg-panel/72 px-4 py-3">
               <p className="text-[11px] uppercase tracking-wide text-muted">ML Confidence</p>
-              <p className="text-lg font-semibold text-text">{confidencePct}%</p>
+              <p className="text-[clamp(1.75rem,2vw,2.15rem)] font-semibold text-text">{confidencePct}%</p>
             </div>
           </div>
         </div>
 
-        <div className="mt-4 grid gap-2 sm:grid-cols-4">
-          <div className="rounded-xl border border-border/50 bg-panel/65 px-3 py-2">
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="flex min-h-[112px] flex-col justify-between rounded-2xl border border-border/50 bg-panel/68 px-4 py-3">
             <p className="text-[11px] uppercase tracking-wide text-muted">Invested</p>
-            <p className="text-sm font-semibold text-text">{formatCurrency(amount)}</p>
+            <p className="text-xl font-semibold text-text">{formatCurrency(amount)}</p>
           </div>
-          <div className="rounded-xl border border-border/50 bg-panel/65 px-3 py-2">
+          <div className="flex min-h-[112px] flex-col justify-between rounded-2xl border border-border/50 bg-panel/68 px-4 py-3">
             <p className="text-[11px] uppercase tracking-wide text-muted">Shares</p>
-            <p className="text-sm font-semibold text-text">{sharesBought.toFixed(2)}</p>
+            <p className="text-xl font-semibold text-text">{sharesBought.toFixed(2)}</p>
           </div>
-          <div className="rounded-xl border border-border/50 bg-panel/65 px-3 py-2">
+          <div className="flex min-h-[112px] flex-col justify-between rounded-2xl border border-border/50 bg-panel/68 px-4 py-3">
             <p className="text-[11px] uppercase tracking-wide text-muted">Current Price</p>
-            <p className="text-sm font-semibold text-text">{formatCurrency(currentPrice)}</p>
+            <p className="text-xl font-semibold text-text">{formatCurrency(currentPrice)}</p>
           </div>
-          <div className="rounded-xl border border-border/50 bg-panel/65 px-3 py-2">
+          <div className="flex min-h-[112px] flex-col justify-between rounded-2xl border border-border/50 bg-panel/68 px-4 py-3">
             <p className="text-[11px] uppercase tracking-wide text-muted">Model View</p>
-            <p className={`text-sm font-semibold ${trendTone}`}>{futureGain >= 0 ? "Positive" : "Negative"}</p>
+            <p className={`text-xl font-semibold ${trendTone}`}>{futureGain >= 0 ? "Positive" : "Negative"}</p>
           </div>
         </div>
 
         <p className="mt-3 text-xs text-muted">
           {symbol} implied 3-year path uses the same bounded ML signal used in score validation. This is a scenario view, not a guaranteed outcome.
         </p>
-
-        <div className="mt-4 min-h-0 flex-1 rounded-xl border border-border/50 bg-panel/75 p-3">
-          <ReturnsProjectionChart data={series} positive={futureGain >= 0} height="100%" />
-        </div>
       </div>
     </Card>
   );
