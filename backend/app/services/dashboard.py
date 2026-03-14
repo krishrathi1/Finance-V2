@@ -27,130 +27,6 @@ INDEX_ALIASES = {
     "S&P BSE BANKEX": "S&P BSE BANKEX",
 }
 
-INDEX_FALLBACK_SYMBOLS = {
-    "NIFTY BANK": [
-        "HDFCBANK",
-        "ICICIBANK",
-        "SBIN",
-        "KOTAKBANK",
-        "AXISBANK",
-        "INDUSINDBK",
-        "BANKBARODA",
-        "PNB",
-        "IDFCFIRSTB",
-        "AUBANK",
-        "FEDERALBNK",
-        "CANBK",
-    ],
-    "NIFTY FINANCIAL SERVICES": [
-        "HDFCBANK",
-        "ICICIBANK",
-        "SBIN",
-        "KOTAKBANK",
-        "AXISBANK",
-        "BAJFINANCE",
-        "BAJAJFINSV",
-        "JIOFIN",
-        "CHOLAFIN",
-        "SHRIRAMFIN",
-        "RECLTD",
-        "PFC",
-        "SBILIFE",
-        "HDFCLIFE",
-        "ICICIPRULI",
-        "MUTHOOTFIN",
-        "HDFCAMC",
-    ],
-    "BSE SENSEX": [
-        "RELIANCE",
-        "TCS",
-        "HDFCBANK",
-        "INFY",
-        "ICICIBANK",
-        "HINDUNILVR",
-        "ITC",
-        "SBIN",
-        "BHARTIARTL",
-        "LT",
-        "KOTAKBANK",
-        "AXISBANK",
-        "BAJFINANCE",
-        "ASIANPAINT",
-        "MARUTI",
-        "NESTLEIND",
-        "ULTRACEMCO",
-        "M&M",
-        "TITAN",
-        "SUNPHARMA",
-        "WIPRO",
-        "NTPC",
-        "POWERGRID",
-        "TATAMOTORS",
-        "TATASTEEL",
-        "HCLTECH",
-        "TECHM",
-        "ADANIPORTS",
-        "INDUSINDBK",
-        "JSWSTEEL",
-    ],
-    "S&P BSE BANKEX": [
-        "HDFCBANK",
-        "ICICIBANK",
-        "SBIN",
-        "KOTAKBANK",
-        "AXISBANK",
-        "INDUSINDBK",
-        "BANKBARODA",
-        "PNB",
-        "IDFCFIRSTB",
-        "FEDERALBNK",
-    ],
-}
-
-PEER_COMPANY_CATALOG = [
-    {"symbol": "HDFCBANK", "name": "HDFC Bank Ltd", "sector": "Financial Services", "industry": "Private Sector Bank"},
-    {"symbol": "ICICIBANK", "name": "ICICI Bank Ltd", "sector": "Financial Services", "industry": "Private Sector Bank"},
-    {"symbol": "KOTAKBANK", "name": "Kotak Mahindra Bank Ltd", "sector": "Financial Services", "industry": "Private Sector Bank"},
-    {"symbol": "AXISBANK", "name": "Axis Bank Ltd", "sector": "Financial Services", "industry": "Private Sector Bank"},
-    {"symbol": "INDUSINDBK", "name": "IndusInd Bank Ltd", "sector": "Financial Services", "industry": "Private Sector Bank"},
-    {"symbol": "IDFCFIRSTB", "name": "IDFC First Bank Ltd", "sector": "Financial Services", "industry": "Private Sector Bank"},
-    {"symbol": "SBIN", "name": "State Bank of India", "sector": "Financial Services", "industry": "Public Sector Bank"},
-    {"symbol": "BANKBARODA", "name": "Bank of Baroda", "sector": "Financial Services", "industry": "Public Sector Bank"},
-    {"symbol": "PNB", "name": "Punjab National Bank", "sector": "Financial Services", "industry": "Public Sector Bank"},
-    {"symbol": "CANBK", "name": "Canara Bank", "sector": "Financial Services", "industry": "Public Sector Bank"},
-    {"symbol": "BAJFINANCE", "name": "Bajaj Finance Ltd", "sector": "Financial Services", "industry": "NBFC"},
-    {"symbol": "BAJAJFINSV", "name": "Bajaj Finserv Ltd", "sector": "Financial Services", "industry": "NBFC"},
-    {"symbol": "SHRIRAMFIN", "name": "Shriram Finance Ltd", "sector": "Financial Services", "industry": "NBFC"},
-    {"symbol": "JIOFIN", "name": "Jio Financial Services Ltd", "sector": "Financial Services", "industry": "NBFC"},
-    {"symbol": "PFC", "name": "Power Finance Corporation Ltd", "sector": "Financial Services", "industry": "NBFC"},
-    {"symbol": "RECLTD", "name": "REC Ltd", "sector": "Financial Services", "industry": "NBFC"},
-    {"symbol": "TCS", "name": "Tata Consultancy Services Ltd", "sector": "Technology", "industry": "IT Services"},
-    {"symbol": "INFY", "name": "Infosys Ltd", "sector": "Technology", "industry": "IT Services"},
-    {"symbol": "HCLTECH", "name": "HCL Technologies Ltd", "sector": "Technology", "industry": "IT Services"},
-    {"symbol": "WIPRO", "name": "Wipro Ltd", "sector": "Technology", "industry": "IT Services"},
-    {"symbol": "TECHM", "name": "Tech Mahindra Ltd", "sector": "Technology", "industry": "IT Services"},
-    {"symbol": "LTIM", "name": "LTIMindtree Ltd", "sector": "Technology", "industry": "IT Services"},
-    {"symbol": "PERSISTENT", "name": "Persistent Systems Ltd", "sector": "Technology", "industry": "IT Services"},
-    {"symbol": "RELIANCE", "name": "Reliance Industries Ltd", "sector": "Energy", "industry": "Integrated Oil & Gas"},
-    {"symbol": "ONGC", "name": "Oil and Natural Gas Corporation Ltd", "sector": "Energy", "industry": "Oil Exploration"},
-    {"symbol": "BPCL", "name": "Bharat Petroleum Corporation Ltd", "sector": "Energy", "industry": "Refining & Marketing"},
-    {"symbol": "IOC", "name": "Indian Oil Corporation Ltd", "sector": "Energy", "industry": "Refining & Marketing"},
-    {"symbol": "HINDPETRO", "name": "Hindustan Petroleum Corporation Ltd", "sector": "Energy", "industry": "Refining & Marketing"},
-    {"symbol": "SUNPHARMA", "name": "Sun Pharmaceutical Industries Ltd", "sector": "Healthcare", "industry": "Pharmaceuticals"},
-    {"symbol": "DRREDDY", "name": "Dr. Reddy's Laboratories Ltd", "sector": "Healthcare", "industry": "Pharmaceuticals"},
-    {"symbol": "CIPLA", "name": "Cipla Ltd", "sector": "Healthcare", "industry": "Pharmaceuticals"},
-    {"symbol": "DIVISLAB", "name": "Divi's Laboratories Ltd", "sector": "Healthcare", "industry": "Pharmaceuticals"},
-    {"symbol": "TATAMOTORS", "name": "Tata Motors Ltd", "sector": "Automobile", "industry": "Passenger & Commercial Vehicles"},
-    {"symbol": "MARUTI", "name": "Maruti Suzuki India Ltd", "sector": "Automobile", "industry": "Passenger Vehicles"},
-    {"symbol": "M&M", "name": "Mahindra & Mahindra Ltd", "sector": "Automobile", "industry": "Passenger & Commercial Vehicles"},
-    {"symbol": "EICHERMOT", "name": "Eicher Motors Ltd", "sector": "Automobile", "industry": "Two Wheelers"},
-    {"symbol": "HEROMOTOCO", "name": "Hero MotoCorp Ltd", "sector": "Automobile", "industry": "Two Wheelers"},
-    {"symbol": "ITC", "name": "ITC Ltd", "sector": "Consumer Staples", "industry": "Diversified FMCG"},
-    {"symbol": "HINDUNILVR", "name": "Hindustan Unilever Ltd", "sector": "Consumer Staples", "industry": "FMCG"},
-    {"symbol": "NESTLEIND", "name": "Nestle India Ltd", "sector": "Consumer Staples", "industry": "FMCG"},
-    {"symbol": "BRITANNIA", "name": "Britannia Industries Ltd", "sector": "Consumer Staples", "industry": "FMCG"},
-]
-
 
 class StockDashboardService:
     def __init__(self) -> None:
@@ -246,14 +122,9 @@ class StockDashboardService:
         canonical = self._canonical_index_name(index_name)
         rows: list[dict[str, Any]] = []
 
-        if canonical in {"BSE SENSEX", "S&P BSE BANKEX"}:
-            rows = await self.get_ticker_tape(INDEX_FALLBACK_SYMBOLS.get(canonical, []))
-        else:
-            provider_rows = await self.providers.get_nse_index_constituents(canonical)
-            if provider_rows:
-                rows = provider_rows
-            elif canonical in INDEX_FALLBACK_SYMBOLS:
-                rows = await self.get_ticker_tape(INDEX_FALLBACK_SYMBOLS[canonical])
+        provider_rows = await self.providers.get_nse_index_constituents(canonical)
+        if provider_rows:
+            rows = provider_rows
 
         normalized_rows = self._normalize_ticker_rows(rows)
         normalized_rows.sort(key=lambda row: row["changePercent"], reverse=True)
@@ -584,21 +455,13 @@ class StockDashboardService:
         if trendlyne_documents:
             data["documents"].update(trendlyne_documents)
 
-        catalog_entry = next((item for item in PEER_COMPANY_CATALOG if item["symbol"] == symbol.upper()), None)
-        if catalog_entry:
-            if not data.get("sector"):
-                data["sector"] = catalog_entry["sector"]
-            if not (data.get("profile") or {}).get("industry"):
-                data["profile"]["industry"] = catalog_entry["industry"]
-
-        competitor_profile = self._build_competitors_block(
-            symbol=symbol,
-            company_name=data.get("companyName", symbol),
-            sector=data.get("sector", ""),
-            industry=(data.get("profile") or {}).get("industry", ""),
-            existing=data.get("competitors"),
-        )
-        data["competitors"] = competitor_profile
+        data["competitors"] = {
+            "table": [],
+            "sectorName": str(data.get("sector") or ""),
+            "industryName": str((data.get("profile") or {}).get("industry") or ""),
+            "sectorCompanies": [],
+            "industryCompanies": [],
+        }
 
         if self._num(data["price"].get("change")) is None:
             pct = self._num(data["price"].get("changePercent"))
@@ -648,26 +511,51 @@ class StockDashboardService:
             brokerage_research=data.get("brokerageResearch"),
         )
         data["timeframe"] = timeframe
+        if not self._has_live_dashboard_core(data):
+            raise ValueError(f"Live dashboard data is incomplete for {symbol.upper()}")
         return data
+
+    def _has_live_dashboard_core(self, data: dict[str, Any]) -> bool:
+        price = data.get("price") if isinstance(data, dict) else {}
+        history = price.get("history") if isinstance(price, dict) else []
+        cmp_value = self._num(price.get("cmp")) if isinstance(price, dict) else None
+        company_name = str(data.get("companyName") or "").strip() if isinstance(data, dict) else ""
+        symbol = str(data.get("symbol") or "").strip().upper() if isinstance(data, dict) else ""
+        has_real_company_name = bool(company_name and company_name.upper() != symbol)
+        return bool(cmp_value and cmp_value > 0 and isinstance(history, list) and len(history) >= 30 and has_real_company_name)
 
     async def _fetch_provider_data(self, symbol: str, timeframe: str = "5Y") -> tuple:
         history_days = max(self._timeframe_days(timeframe), 1825)
-        return await asyncio.gather(
-            self._safe_provider_call(self.providers.get_nse_quote(symbol), timeout=10),
-            self._safe_provider_call(self.providers.get_nse_corporate_events(symbol), timeout=15),
-            self._safe_provider_call(self.providers.get_nse_quarterly_results(symbol), timeout=20),
-            self._safe_provider_call(self.providers.get_news(f"{symbol} India stock"), timeout=8),
-            self._safe_provider_call(self.providers.get_yahoo_quote(symbol), timeout=10),
-            self._safe_provider_call(self.providers.get_yahoo_candles(symbol, history_days), timeout=15),
-            self._safe_provider_call(self.providers.get_yfinance_bundle(symbol, history_days), timeout=45),
-            self._safe_provider_call(self.providers.get_fmp_quote(symbol), timeout=8),
-            self._safe_provider_call(self.providers.get_fmp_candles(symbol, "5Y"), timeout=15),
-            self._safe_provider_call(self.providers.get_fmp_quarterly_results(symbol), timeout=15),
-            self._safe_provider_call(self.providers.get_trendlyne_brokerage(symbol), timeout=14),
-            self._safe_provider_call(self.providers.get_trendlyne_financials(symbol), timeout=18),
-            self._safe_provider_call(self.providers.get_trendlyne_shareholding(symbol), timeout=14),
-            self._safe_provider_call(self.providers.get_trendlyne_documents(symbol), timeout=16),
-        )
+        calls: list[tuple[Awaitable[Any], float]] = [
+            (self.providers.get_nse_quote(symbol), 5),
+            (self.providers.get_nse_corporate_events(symbol), 7),
+            (self.providers.get_nse_quarterly_results(symbol), 7),
+            (self.providers.get_news(f"{symbol} India stock"), 5),
+            (self.providers.get_yahoo_quote(symbol), 5),
+            (self.providers.get_yahoo_candles(symbol, history_days), 7),
+            (self.providers.get_yfinance_bundle(symbol, history_days), 10),
+            (self.providers.get_fmp_quote(symbol), 5),
+            (self.providers.get_fmp_candles(symbol, "5Y"), 7),
+            (self.providers.get_fmp_quarterly_results(symbol), 7),
+            (self.providers.get_trendlyne_brokerage(symbol), 6),
+            (self.providers.get_trendlyne_financials(symbol), 8),
+            (self.providers.get_trendlyne_shareholding(symbol), 6),
+            (self.providers.get_trendlyne_documents(symbol), 6),
+        ]
+        tasks = [asyncio.create_task(self._safe_provider_call(coro, timeout=timeout)) for coro, timeout in calls]
+        done, pending = await asyncio.wait(tasks, timeout=11)
+        for task in pending:
+            task.cancel()
+        results: list[Any | None] = []
+        for task in tasks:
+            if task in done and not task.cancelled():
+                try:
+                    results.append(task.result())
+                except Exception:
+                    results.append(None)
+            else:
+                results.append(None)
+        return tuple(results)
 
     async def _safe_provider_call(self, coro: Awaitable[Any], timeout: float) -> Any | None:
         try:
@@ -886,69 +774,6 @@ class StockDashboardService:
             )
             seen.add(symbol)
         return normalized
-
-    def _normalize_peer_label(self, value: str) -> str:
-        text = re.sub(r"[^a-z0-9]+", " ", str(value or "").strip().lower())
-        return re.sub(r"\s+", " ", text).strip()
-
-    def _build_competitors_block(
-        self,
-        symbol: str,
-        company_name: str,
-        sector: str,
-        industry: str,
-        existing: Any,
-    ) -> dict[str, Any]:
-        existing_table: list[dict[str, Any]] = []
-        if isinstance(existing, dict):
-            raw_table = existing.get("table") or []
-            if isinstance(raw_table, list):
-                existing_table = [row for row in raw_table if isinstance(row, dict)]
-        elif isinstance(existing, list):
-            existing_table = [row for row in existing if isinstance(row, dict)]
-
-        symbol_upper = str(symbol or "").strip().upper()
-        catalog_entry = next((item for item in PEER_COMPANY_CATALOG if item["symbol"] == symbol_upper), None)
-        sector_name = str(sector or (catalog_entry or {}).get("sector") or "").strip()
-        industry_name = str(industry or (catalog_entry or {}).get("industry") or "").strip()
-        current_name = str(company_name or (catalog_entry or {}).get("name") or symbol_upper).strip() or symbol_upper
-
-        normalized_sector = self._normalize_peer_label(sector_name)
-        normalized_industry = self._normalize_peer_label(industry_name)
-
-        def matches(item: dict[str, str], field: str, target: str) -> bool:
-            if not target:
-                return False
-            return self._normalize_peer_label(item.get(field, "")) == target
-
-        def compact_company(item: dict[str, str]) -> dict[str, str]:
-            return {"symbol": item["symbol"], "name": item["name"]}
-
-        sector_companies = [compact_company(item) for item in PEER_COMPANY_CATALOG if matches(item, "sector", normalized_sector)]
-        industry_companies = [compact_company(item) for item in PEER_COMPANY_CATALOG if matches(item, "industry", normalized_industry)]
-
-        current_company = {"symbol": symbol_upper, "name": current_name}
-
-        def ensure_current(rows: list[dict[str, str]], enabled: bool) -> list[dict[str, str]]:
-            if not enabled:
-                return []
-            deduped: list[dict[str, str]] = []
-            seen: set[str] = set()
-            for row in [current_company, *rows]:
-                row_symbol = str(row.get("symbol") or "").strip().upper()
-                if not row_symbol or row_symbol in seen:
-                    continue
-                deduped.append({"symbol": row_symbol, "name": str(row.get("name") or row_symbol).strip() or row_symbol})
-                seen.add(row_symbol)
-            return deduped[:8]
-
-        return {
-            "table": existing_table,
-            "sectorName": sector_name,
-            "industryName": industry_name,
-            "sectorCompanies": ensure_current(sector_companies, bool(sector_name)),
-            "industryCompanies": ensure_current(industry_companies, bool(industry_name)),
-        }
 
     def _num(self, value: Any) -> float | None:
         try:

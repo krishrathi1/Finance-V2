@@ -106,7 +106,7 @@ export async function sendAiQuestion(symbol: string, question: string): Promise<
     };
   } catch {
     return {
-      answer: "AI engine unavailable right now. Check debt trend, revenue quality, and promoter/FII movement before decision.",
+      answer: "AI engine unavailable right now.",
       source: "fallback"
     };
   }
@@ -116,11 +116,7 @@ export async function fetchReturnsProjection(symbol: string, amount: number, cag
   const url = `${PUBLIC_BASE}/api/v1/stocks/${symbol}/returns-projection?amount=${amount}&cagr=${cagr}&years=${years}`;
   const res = await fetch(url, { cache: "no-store" });
   if (!res.ok) {
-    const series = Array.from({ length: years + 1 }, (_, y) => ({
-      year: y,
-      value: Number((amount * (1 + cagr / 100) ** y).toFixed(2))
-    }));
-    return { series, futureValue: series[series.length - 1].value };
+    throw new Error(`Returns projection request failed: ${res.status}`);
   }
   return res.json();
 }

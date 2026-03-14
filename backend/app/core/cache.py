@@ -15,8 +15,15 @@ class RedisCache:
         if self._client is None:
             settings = get_settings()
             try:
-                self._client = Redis.from_url(settings.redis_url, decode_responses=True)
-                await self._client.ping() # Test connection immediately
+                self._client = Redis.from_url(
+                    settings.redis_url,
+                    decode_responses=True,
+                    socket_connect_timeout=1,
+                    socket_timeout=1,
+                    retry_on_timeout=False,
+                    health_check_interval=0,
+                )
+                await self._client.ping()
             except Exception as e:
                 print(f"Redis connection failed, caching disabled: {e}")
                 self._client = None
