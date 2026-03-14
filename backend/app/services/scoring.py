@@ -285,61 +285,118 @@ def _sigmoid(value: float) -> float:
     return 1.0 / (1.0 + math.exp(-value))
 
 
-NEGATION_TOKENS = {"no", "not", "avoids", "cleared", "denies", "dismisses", "rejects", "without", "free"}
-HIGH_RISK_WORDS = {"fraud", "default", "bankruptcy", "scam", "downgrade", "probe", "collapse"}
-MEDIUM_RISK_WORDS = {"decline", "debt", "penalty", "delay", "loss", "miss", "cut", "weak"}
+def _compute_earnings_surprise(quarterly_detailed: list[dict[str, Any]] | None) -> float:
+    if not isinstance(quarterly_detailed, list) or len(quarterly_detailed) < 2:
+        return 0.0
 
+    actual_keys = [
+        "eps_actual",
+        "eps",
+        "reportedEPS",
+        "reported_eps",
+        "epsActual",
+        "basicEps",
+        "dilutedEps",
+    ]
+    estimate_keys = [
+        "eps_estimate",
+        "estimatedEPS",
+        "estimated_eps",
+        "epsEstimate",
+        "consensus_eps",
+    ]
 
-def _article_risk_weight(text: str) -> float:
-    words = [word.strip(".,;:!?()[]{}\"'") for word in str(text or "").lower().split()]
-    words = [word for word in words if word]
-    for idx, word in enumerate(words):
-        context = set(words[max(0, idx - 4):idx])
-        if word in HIGH_RISK_WORDS:
-            if context & NEGATION_TOKENS:
-                return 0.35
-            return 0.85
-        if word in MEDIUM_RISK_WORDS:
-            if context & NEGATION_TOKENS:
-                return 0.25
-            return 0.65
-    return 0.35
-
-
-def _walk_forward_ml_adjustment(
-    price_history: list[dict[str, Any]] | None,
-    financial_health_score: float,
-    valuation_score: float,
-) -> tuple[float, float, dict[str, Any]]:
-    history = price_history or []
-    closes = [float(item.get("close")) for item in history if _num(item.get("close")) is not None]
-    if len(closes) < 220:
-        return 0.0, 0.0, {"samples": 0, "horizonDays": 63, "hitRate": None}
-
-    samples: list[tuple[list[float], int]] = []
-    horizon = 63
-    for idx in range(130, len(closes) - horizon):
-        p_now = closes[idx]
-        p_1m = closes[idx - 21]
-        p_3m = closes[idx - 63]
-        p_6m = closes[idx - 126]
-        future = closes[idx + horizon]
-        if min(p_now, p_1m, p_3m, p_6m) <= 0:
+    surprises: list[float] = []
+    for row in quarterly_detailed[-4:]:
+        if not isinstance(row, dict):
             continue
-        mom_1m = (p_now / p_1m) - 1.0
-        mom_3m = (p_now / p_3m) - 1.0
-        mom_6m = (p_now / p_6m) - 1.0
-        window_returns = _daily_returns(closes[idx - 63:idx + 1])
-        vol = _std(window_returns) or 0.0
-        drawdown = _max_drawdown(closes[idx - 126:idx + 1]) or 0.0
-        label = 1 if ((future / p_now) - 1.0) > 0 else 0
-        samples.append(([mom_1m, mom_3m, mom_6m, vol, drawdown], label))
 
-    if len(samples) < 60:
-        return 0.0, 0.0, {"samples": len(samples), "horizonDays": 63, "hitRate": None}
+        actual = None
+        for key in actual_keys:
+            actual = _num(row.get(key))
+            if actual is not None:
+                break
 
-    features = [row[0] for row in samples]
-    labels = [row[1] for row in samples]
+        estimate = None
+        for key in estimate_keys:
+            estimate = _num(row.get(key))
+            if estimate is not None:
+                break
+
+        if actual is None or estimate is None or abs(estimate) < 0.01:
+            continue
+
+        surprise = _clamp((actual - estimate) / abs(estimate), -1.0, 1.0)
+        surprises.append(surprise)
+
+    if not surprises:
+        return 0.0
+
+    return _clamp(mean(surprises) * 0.5, -0.5, 0.5)
+
+
+def _compute_volume_price_divergence(
+    closes: list[float],
+    volumes: list[float],
+    window: int = 20,
+) -> float:
+    if not closes or not volumes:
+        return 0.0
+
+    n = min(len(closes), len(volumes))
+    if n < 4:
+        return 0.0
+    if n < window:
+        window = n
+    if window % 2 == 1:
+        window -= 1
+    if window < 4:
+        return 0.0
+
+    closes_w = closes[-window:]
+    volumes_w = volumes[-window:]
+    half = window // 2
+    if half <= 0:
+        return 0.0
+
+    price_start = closes_w[0]
+    price_end = closes_w[-1]
+    if price_start <= 0:
+        return 0.0
+    price_change = (price_end - price_start) / price_start
+
+    prior_vol = volumes_w[:half]
+    recent_vol = volumes_w[half:]
+    if not prior_vol or not recent_vol:
+        return 0.0
+
+    avg_prior = mean(prior_vol)
+    avg_recent = mean(recent_vol)
+    if avg_prior <= 0:
+        return 0.0
+
+    vol_change = (avg_recent - avg_prior) / avg_prior
+    return _clamp(price_change - vol_change, -1.0, 1.0)
+
+
+def _historical_earnings_surprise(
+    quarterly_detailed: list[dict[str, Any]] | None,
+    trading_days_from_end: int,
+) -> float:
+    if not isinstance(quarterly_detailed, list) or not quarterly_detailed:
+        return 0.0
+
+    quarters_back = max(0, trading_days_from_end // 63)
+    cutoff = max(0, len(quarterly_detailed) - quarters_back)
+    visible_rows = quarterly_detailed[:cutoff] if cutoff > 0 else []
+    return _compute_earnings_surprise(visible_rows)
+
+
+def _fit_logistic_probability(
+    features: list[list[float]],
+    labels: list[int],
+    latest_row: list[float],
+) -> tuple[float, float]:
     mins = [min(col) for col in zip(*features)]
     maxs = [max(col) for col in zip(*features)]
 
@@ -377,27 +434,177 @@ def _walk_forward_ml_adjustment(
         if (pred >= 0.5 and label == 1) or (pred < 0.5 and label == 0):
             correct += 1
     accuracy = correct / len(labels)
-    confidence = _clamp((abs(accuracy - 0.5) * 2.0) * min(1.0, len(labels) / 220.0), 0.0, 1.0)
 
-    latest_idx = len(closes) - 1
-    latest_row = [
-        (closes[latest_idx] / closes[latest_idx - 21]) - 1.0,
-        (closes[latest_idx] / closes[latest_idx - 63]) - 1.0,
-        (closes[latest_idx] / closes[latest_idx - 126]) - 1.0,
-        _std(_daily_returns(closes[-64:])) or 0.0,
-        _max_drawdown(closes[-127:]) or 0.0,
-    ]
     latest_scaled = scale_row(latest_row)
     z_latest = weights[0] + sum(w * x for w, x in zip(weights[1:], latest_scaled))
-    p_up = _sigmoid(z_latest)
+    return _sigmoid(z_latest), accuracy
+
+
+NEGATION_TOKENS = {"no", "not", "avoids", "cleared", "denies", "dismisses", "rejects", "without", "free"}
+HIGH_RISK_WORDS = {"fraud", "default", "bankruptcy", "scam", "downgrade", "probe", "collapse"}
+MEDIUM_RISK_WORDS = {"decline", "debt", "penalty", "delay", "loss", "miss", "cut", "weak"}
+
+
+def _article_risk_weight(text: str) -> float:
+    words = [word.strip(".,;:!?()[]{}\"'") for word in str(text or "").lower().split()]
+    words = [word for word in words if word]
+    for idx, word in enumerate(words):
+        context = set(words[max(0, idx - 4):idx])
+        if word in HIGH_RISK_WORDS:
+            if context & NEGATION_TOKENS:
+                return 0.35
+            return 0.85
+        if word in MEDIUM_RISK_WORDS:
+            if context & NEGATION_TOKENS:
+                return 0.25
+            return 0.65
+    return 0.35
+
+
+def _walk_forward_ml_adjustment(
+    price_history: list[dict[str, Any]] | None,
+    financial_health_score: float,
+    valuation_score: float,
+    quarterly_detailed: list[dict[str, Any]] | None = None,
+) -> tuple[float, float, dict[str, Any]]:
+    history = price_history or []
+    closes: list[float] = []
+    volumes: list[float] = []
+    for item in history:
+        if not isinstance(item, dict):
+            continue
+        close = _num(item.get("close"))
+        if close is None:
+            continue
+        volume = (
+            _num(item.get("volume"))
+            or _num(item.get("vol"))
+            or _num(item.get("traded_quantity"))
+            or _num(item.get("tradedQuantity"))
+            or 0.0
+        )
+        closes.append(float(close))
+        volumes.append(float(volume))
+
+    if len(closes) < 220:
+        return 0.0, 0.0, {"samples": 0, "horizonDays": 63, "hitRate": None}
+
+    latest_eps_surprise = _compute_earnings_surprise(quarterly_detailed)
+    latest_vpd = _compute_volume_price_divergence(closes, volumes)
+    latest_row = [
+        (closes[-1] / closes[-22]) - 1.0,
+        (closes[-1] / closes[-64]) - 1.0,
+        (closes[-1] / closes[-127]) - 1.0,
+        _std(_daily_returns(closes[-64:])) or 0.0,
+        _max_drawdown(closes[-127:]) or 0.0,
+        latest_eps_surprise,
+        latest_vpd,
+    ]
+
+    horizon_specs = (
+        (21, "short", 0.25),
+        (63, "base", 0.40),
+        (126, "long", 0.35),
+    )
+    horizon_results: list[dict[str, Any]] = []
+
+    for horizon, label, weight in horizon_specs:
+        samples: list[tuple[list[float], int]] = []
+        for idx in range(130, len(closes) - horizon):
+            p_now = closes[idx]
+            p_1m = closes[idx - 21]
+            p_3m = closes[idx - 63]
+            p_6m = closes[idx - 126]
+            future = closes[idx + horizon]
+            if min(p_now, p_1m, p_3m, p_6m) <= 0:
+                continue
+
+            mom_1m = (p_now / p_1m) - 1.0
+            mom_3m = (p_now / p_3m) - 1.0
+            mom_6m = (p_now / p_6m) - 1.0
+            window_returns = _daily_returns(closes[idx - 63:idx + 1])
+            vol = _std(window_returns) or 0.0
+            drawdown = _max_drawdown(closes[idx - 126:idx + 1]) or 0.0
+            sample_eps_surprise = _historical_earnings_surprise(
+                quarterly_detailed,
+                (len(closes) - 1) - idx,
+            )
+            sample_vpd = _compute_volume_price_divergence(closes[:idx + 1], volumes[:idx + 1])
+            label_value = 1 if ((future / p_now) - 1.0) > 0 else 0
+            samples.append(
+                (
+                    [
+                        mom_1m,
+                        mom_3m,
+                        mom_6m,
+                        vol,
+                        drawdown,
+                        sample_eps_surprise,
+                        sample_vpd,
+                    ],
+                    label_value,
+                )
+            )
+
+        if len(samples) < 60:
+            continue
+
+        features = [row[0] for row in samples]
+        labels = [row[1] for row in samples]
+        p_up, accuracy = _fit_logistic_probability(features, labels, latest_row)
+        horizon_results.append(
+            {
+                "label": label,
+                "days": horizon,
+                "weight": weight,
+                "samples": len(samples),
+                "hitRate": accuracy,
+                "upProbability": p_up,
+            }
+        )
+
+    if not horizon_results:
+        return 0.0, 0.0, {"samples": 0, "horizonDays": 63, "hitRate": None}
+
+    total_weight = sum(item["weight"] for item in horizon_results)
+    blended_probability = (
+        sum(item["upProbability"] * item["weight"] for item in horizon_results) / total_weight
+        if total_weight > 0
+        else 0.5
+    )
+    blended_hit_rate = (
+        sum(item["hitRate"] * item["weight"] for item in horizon_results) / total_weight
+        if total_weight > 0
+        else 0.5
+    )
+    total_samples = sum(int(item["samples"]) for item in horizon_results)
+    coverage = len(horizon_results) / len(horizon_specs)
+    confidence = _clamp(
+        (abs(blended_hit_rate - 0.5) * 2.0) * coverage * min(1.0, total_samples / 320.0),
+        0.0,
+        1.0,
+    )
 
     fundamentals_bias = (financial_health_score - 0.5) * 0.08 + (valuation_score - 0.5) * 0.06
-    raw_adjustment = ((p_up - 0.5) * 0.20) + fundamentals_bias
+    raw_adjustment = ((blended_probability - 0.5) * 0.20) + fundamentals_bias
     details = {
-        "samples": len(samples),
-        "horizonDays": horizon,
-        "hitRate": round(accuracy, 4),
-        "upProbability": round(p_up, 4),
+        "samples": total_samples,
+        "horizonDays": 63,
+        "hitRate": round(blended_hit_rate, 4),
+        "upProbability": round(blended_probability, 4),
+        "availableHorizons": [int(item["days"]) for item in horizon_results],
+        "horizons": {
+            f"{int(item['days'])}d": {
+                "samples": int(item["samples"]),
+                "hitRate": round(float(item["hitRate"]), 4),
+                "upProbability": round(float(item["upProbability"]), 4),
+            }
+            for item in horizon_results
+        },
+        "features": {
+            "earningsSurprise": round(latest_eps_surprise, 4),
+            "volumePriceDivergence": round(latest_vpd, 4),
+        },
     }
     return _clamp(raw_adjustment, -0.08, 0.08), confidence, details
 
@@ -418,6 +625,9 @@ def compute_smart_score(
 
     growth_features = _extract_growth_features(financials)
     price_features = _extract_price_features(price_history)
+    quarterly_detailed = _latest_nonempty_rows(financials.get("quarterlyDetailedConsolidated")) or _latest_nonempty_rows(
+        financials.get("quarterlyDetailedStandalone")
+    )
 
     roe = _num(metrics.get("roe"))
     roa = _num(metrics.get("roa"))
@@ -520,7 +730,12 @@ def compute_smart_score(
         + 0.15 * financial_health
     )
 
-    ml_adjustment, ml_confidence, validation = _walk_forward_ml_adjustment(price_history, financial_health, valuation)
+    ml_adjustment, ml_confidence, validation = _walk_forward_ml_adjustment(
+        price_history,
+        financial_health,
+        valuation,
+        quarterly_detailed=quarterly_detailed,
+    )
     final_score_01 = _clamp(base_score_01 + (ml_adjustment * ml_confidence), 0.0, 1.0)
     score_5 = round(final_score_01 * 5.0, 2)
 
@@ -538,13 +753,14 @@ def compute_smart_score(
         "label": "Strong" if score_5 >= 4 else "Moderate" if score_5 >= 2.5 else "Weak",
         "explanation": (
             "Factor score uses normalized profitability, growth, valuation, momentum, and balance-sheet health. "
-            "A bounded walk-forward ML signal validates trend persistence before applying a small score adjustment."
+            "A bounded multi-horizon walk-forward ML signal blends price trend persistence with earnings surprise "
+            "and volume confirmation before applying a small score adjustment."
         ),
         "score10": round(final_score_01 * 10.0, 2),
         "mlAdjustment": round(ml_adjustment * ml_confidence * 5.0, 2),
         "mlConfidence": round(ml_confidence, 2),
         "validation": validation,
-        "modelVersion": "factor-v2",
+        "modelVersion": "factor-v3",
     }
 
 

@@ -29,7 +29,7 @@ export function BrokerageSummary({ brokerage }: { brokerage?: BrokeragePayload }
   const reports = brokerage?.reports || [];
 
   return (
-    <Card className="flex h-full flex-col p-4">
+    <Card className="flex h-[54rem] flex-col overflow-hidden p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
           <h3 className="text-lg font-semibold">Brokerage Summary</h3>
@@ -63,29 +63,31 @@ export function BrokerageSummary({ brokerage }: { brokerage?: BrokeragePayload }
       </div>
 
       {reports.length ? (
-        <div className="brokerage-scroll mt-4 min-h-0 max-h-[31rem] overflow-y-auto pr-1">
-          <div className="space-y-2">
-            {reports.map((row, idx) => (
-              <div key={`${row.broker}-${row.date}-${idx}`} className="rounded-lg border border-border/70 bg-bg p-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-semibold">{row.broker}</p>
-                    <p className="text-xs text-muted">{formatDate(row.date)}</p>
+        <div className="mt-4 flex min-h-0 flex-1 flex-col rounded-xl border border-border/60 bg-bg/55 p-2">
+          <div className="brokerage-scroll min-h-0 flex-1 overflow-y-auto pr-1">
+            <div className="space-y-2">
+              {reports.map((row, idx) => (
+                <div key={`${row.broker}-${row.date}-${idx}`} className="rounded-lg border border-border/70 bg-bg p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold">{row.broker}</p>
+                      <p className="text-xs text-muted">{formatDate(row.date)}</p>
+                    </div>
+                    <div className="text-right">
+                      <span className={`inline-flex rounded-md px-2 py-0.5 text-xs font-semibold uppercase ${actionStyles(row.action)}`}>
+                        {row.action || "hold"}
+                      </span>
+                      <p className="mt-1 text-xs text-muted">Target: {formatTarget(row.targetPrice)}</p>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <span className={`inline-flex rounded-md px-2 py-0.5 text-xs font-semibold uppercase ${actionStyles(row.action)}`}>
-                      {row.action || "hold"}
-                    </span>
-                    <p className="mt-1 text-xs text-muted">Target: {formatTarget(row.targetPrice)}</p>
-                  </div>
+                  <p className="mt-2 line-clamp-2 text-xs text-muted">{row.summary || row.headline}</p>
                 </div>
-                <p className="mt-2 line-clamp-2 text-xs text-muted">{row.summary || row.headline}</p>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </div>
       ) : (
-        <div className="mt-4 flex min-h-0 flex-1 items-center rounded-lg border border-dashed border-border/80 p-3 text-sm text-muted">
+        <div className="mt-4 flex min-h-0 flex-1 items-center rounded-xl border border-dashed border-border/80 bg-bg/40 p-3 text-sm text-muted">
           No brokerage reports were found for this stock right now.
         </div>
       )}

@@ -80,7 +80,7 @@ export function ReturnsCalculator({
   const confidencePct = (simulation.confidence * 100).toFixed(0);
 
   return (
-    <Card className="flex h-full flex-col p-4">
+    <Card className="flex h-[52rem] flex-col overflow-hidden p-4">
       <h3 className="text-lg font-semibold">Predictive ROI Simulator</h3>
       <p className="mt-1 text-sm text-muted">3-year path shaped by the same bounded ML trend signal used in the stock score.</p>
 
@@ -107,41 +107,41 @@ export function ReturnsCalculator({
         </label>
       </div>
 
-        <div className={`mt-4 flex min-h-0 flex-1 flex-col rounded-xl p-4 ${panelTone}`}>
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0">
+      <div className={`mt-4 flex min-h-0 flex-col rounded-xl p-4 ${panelTone}`}>
+        <div className="grid gap-3 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+          <div className="rounded-2xl border border-border/45 bg-panel/38 px-4 py-4">
             <p className="text-sm text-muted">Projected Value</p>
-            <p className={`break-words text-[clamp(2.15rem,4vw,3.3rem)] font-bold leading-tight ${trendTone}`}>{formatCurrency(future)}</p>
-            <p className={`mt-1 text-base font-medium ${trendTone}`}>Future Price: {formatCurrency(simulatedFuturePrice)} per share</p>
+            <p className={`mt-1 break-words text-[clamp(1.95rem,3vw,2.8rem)] font-bold leading-tight ${trendTone}`}>{formatCurrency(future)}</p>
+            <p className={`mt-2 text-sm font-medium ${trendTone}`}>Future Price: {formatCurrency(simulatedFuturePrice)} per share</p>
           </div>
-          <div className="grid min-w-[210px] gap-3 sm:grid-cols-2">
-            <div className="flex min-h-[104px] flex-col justify-between rounded-2xl border border-border/50 bg-panel/72 px-4 py-3">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
+            <div className="flex min-h-[86px] flex-col justify-between rounded-2xl border border-border/45 bg-panel/68 px-4 py-3">
               <p className="text-[11px] uppercase tracking-wide text-muted">3Y Return</p>
-              <p className={`text-[clamp(1.75rem,2vw,2.15rem)] font-semibold ${trendTone}`}>{futureGain >= 0 ? "+" : ""}{futureGain.toFixed(2)}%</p>
+              <p className={`text-[clamp(1.35rem,1.6vw,1.7rem)] font-semibold ${trendTone}`}>{futureGain >= 0 ? "+" : ""}{futureGain.toFixed(2)}%</p>
             </div>
-            <div className="flex min-h-[104px] flex-col justify-between rounded-2xl border border-border/50 bg-panel/72 px-4 py-3">
+            <div className="flex min-h-[86px] flex-col justify-between rounded-2xl border border-border/45 bg-panel/68 px-4 py-3">
               <p className="text-[11px] uppercase tracking-wide text-muted">ML Confidence</p>
-              <p className="text-[clamp(1.75rem,2vw,2.15rem)] font-semibold text-text">{confidencePct}%</p>
+              <p className="text-[clamp(1.35rem,1.6vw,1.7rem)] font-semibold text-text">{confidencePct}%</p>
             </div>
           </div>
         </div>
 
-        <div className="mt-4 rounded-2xl border border-border/50 bg-panel/58 p-3">
+        <div className="mt-4 rounded-2xl border border-border/45 bg-panel/54 p-3">
           <div className="grid gap-3 md:grid-cols-3">
-            <div className="rounded-2xl border border-border/50 bg-panel/72 px-4 py-3">
+            <div className="rounded-2xl border border-border/45 bg-panel/72 px-4 py-3">
               <p className="text-[11px] uppercase tracking-wide text-muted">Bear Case</p>
-              <p className="mt-2 text-lg font-semibold text-rose-500">{formatCurrency(bearFuture)}</p>
+              <p className="mt-2 text-[15px] font-semibold text-rose-500">{formatCurrency(bearFuture)}</p>
             </div>
-            <div className="rounded-2xl border border-border/50 bg-panel/72 px-4 py-3">
+            <div className="rounded-2xl border border-border/45 bg-panel/72 px-4 py-3">
               <p className="text-[11px] uppercase tracking-wide text-muted">Base Case</p>
-              <p className={`mt-2 text-lg font-semibold ${trendTone}`}>{formatCurrency(future)}</p>
+              <p className={`mt-2 text-[15px] font-semibold ${trendTone}`}>{formatCurrency(future)}</p>
             </div>
-            <div className="rounded-2xl border border-border/50 bg-panel/72 px-4 py-3">
+            <div className="rounded-2xl border border-border/45 bg-panel/72 px-4 py-3">
               <p className="text-[11px] uppercase tracking-wide text-muted">Bull Case</p>
-              <p className="mt-2 text-lg font-semibold text-emerald-500">{formatCurrency(bullFuture)}</p>
+              <p className="mt-2 text-[15px] font-semibold text-emerald-500">{formatCurrency(bullFuture)}</p>
             </div>
           </div>
-          <div className="mt-4 h-52 w-full">
+          <div className="mt-4 h-40 w-full">
             <ResponsiveContainer>
               <AreaChart data={simulation.series}>
                 <defs>
@@ -151,9 +151,9 @@ export function ReturnsCalculator({
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="4 4" stroke="rgba(130, 148, 179, 0.18)" />
-                <XAxis dataKey="yearLabel" tick={{ fill: "currentColor", fontSize: 11 }} axisLine={false} tickLine={false} />
+                <XAxis dataKey="yearLabel" tick={{ fill: "currentColor", fontSize: 10 }} axisLine={false} tickLine={false} />
                 <YAxis
-                  tick={{ fill: "currentColor", fontSize: 11 }}
+                  tick={{ fill: "currentColor", fontSize: 10 }}
                   axisLine={false}
                   tickLine={false}
                   tickFormatter={(value) => formatCurrency(Number(value))}
@@ -165,6 +165,7 @@ export function ReturnsCalculator({
                     background: "hsl(var(--panel))",
                     border: "1px solid hsl(var(--border))",
                     borderRadius: 12,
+                    fontSize: 12,
                   }}
                 />
                 <Area type="monotone" dataKey="bull" stroke="transparent" fillOpacity={0} />
@@ -177,26 +178,26 @@ export function ReturnsCalculator({
           </div>
         </div>
 
-        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <div className="flex min-h-[112px] flex-col justify-between rounded-2xl border border-border/50 bg-panel/68 px-4 py-3">
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="flex min-h-[90px] flex-col justify-between rounded-2xl border border-border/45 bg-panel/68 px-4 py-3">
             <p className="text-[11px] uppercase tracking-wide text-muted">Invested</p>
-            <p className="text-xl font-semibold text-text">{formatCurrency(amount)}</p>
+            <p className="text-[1.05rem] font-semibold text-text">{formatCurrency(amount)}</p>
           </div>
-          <div className="flex min-h-[112px] flex-col justify-between rounded-2xl border border-border/50 bg-panel/68 px-4 py-3">
+          <div className="flex min-h-[90px] flex-col justify-between rounded-2xl border border-border/45 bg-panel/68 px-4 py-3">
             <p className="text-[11px] uppercase tracking-wide text-muted">Shares</p>
-            <p className="text-xl font-semibold text-text">{sharesBought.toFixed(2)}</p>
+            <p className="text-[1.05rem] font-semibold text-text">{sharesBought.toFixed(2)}</p>
           </div>
-          <div className="flex min-h-[112px] flex-col justify-between rounded-2xl border border-border/50 bg-panel/68 px-4 py-3">
+          <div className="flex min-h-[90px] flex-col justify-between rounded-2xl border border-border/45 bg-panel/68 px-4 py-3">
             <p className="text-[11px] uppercase tracking-wide text-muted">Current Price</p>
-            <p className="text-xl font-semibold text-text">{formatCurrency(currentPrice)}</p>
+            <p className="text-[1.05rem] font-semibold text-text">{formatCurrency(currentPrice)}</p>
           </div>
-          <div className="flex min-h-[112px] flex-col justify-between rounded-2xl border border-border/50 bg-panel/68 px-4 py-3">
+          <div className="flex min-h-[90px] flex-col justify-between rounded-2xl border border-border/45 bg-panel/68 px-4 py-3">
             <p className="text-[11px] uppercase tracking-wide text-muted">Model View</p>
-            <p className={`text-xl font-semibold ${trendTone}`}>{futureGain >= 0 ? "Positive" : "Negative"}</p>
+            <p className={`text-[1.05rem] font-semibold ${trendTone}`}>{futureGain >= 0 ? "Positive" : "Negative"}</p>
           </div>
         </div>
 
-        <p className="mt-3 text-xs text-muted">
+        <p className="mt-3 text-[11px] leading-5 text-muted">
           {symbol} implied 3-year path uses the same bounded ML signal used in score validation. This is a scenario view, not a guaranteed outcome.
         </p>
       </div>
