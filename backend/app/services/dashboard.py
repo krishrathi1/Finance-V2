@@ -685,8 +685,17 @@ class StockDashboardService:
         elif trend == "Bearish":
             base_cagr -= 0.01
 
-        # Bounds check (-10% to +30% sanity rails)
-        final_cagr = max(-0.10, min(0.30, base_cagr))
+        final_cagr = base_cagr
+        if pe_ratio is not None:
+            if pe_ratio > 50:
+                final_cagr = min(final_cagr, 0.10)
+            elif pe_ratio < 0:
+                final_cagr = min(final_cagr, 0.05)
+
+        conservative_anchor = 0.10
+        blend_weight = 0.60
+        final_cagr = (blend_weight * final_cagr) + ((1 - blend_weight) * conservative_anchor)
+        final_cagr = max(-0.10, min(0.30, final_cagr))
         
         # Return 3-Year Future Value
         target_price = cmp_value * ((1 + final_cagr) ** 3)

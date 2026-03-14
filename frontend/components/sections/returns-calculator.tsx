@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { Area, AreaChart, CartesianGrid, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 import { Card } from "@/components/ui/card";
 import { formatCurrency } from "@/lib/format";
@@ -24,7 +25,7 @@ export function ReturnsCalculator({
     return Number.isFinite(numeric) && numeric > 0 ? numeric : 0;
   }, [amountInput]);
 
-  const series = useMemo(() => {
+  const simulation = useMemo(() => {
     const safeCurrent = currentPrice > 0 ? currentPrice : 1;
     const principal = amount > 0 ? amount : 0;
     const sharesBought = principal / safeCurrent;
@@ -32,26 +33,51 @@ export function ReturnsCalculator({
     const confidence = Math.max(0, Math.min(1, mlConfidence));
     const probabilityBias = Math.max(-1, Math.min(1, ((upProbability ?? 0.5) - 0.5) * 2));
     const bend = 0.7 + (confidence * 0.55) + (Math.abs(probabilityBias) * 0.2);
+    const mlStdDev = 0.08;
 
-    return [0, 1, 2, 3].map((year) => {
+    const simulateValue = (curve: number, year: number, volatilityFactor = 0) => {
       const progress = year / 3;
-      const curvedProgress = progress === 0 ? 0 : Math.min(1, Math.pow(progress, bend));
+      const curvedProgress = progress === 0 ? 0 : Math.min(1, Math.pow(progress, Math.max(0.2, curve)));
       const simulatedPrice = safeCurrent + ((aiTarget - safeCurrent) * curvedProgress);
       const stabilizer = year === 0 ? 0 : direction * probabilityBias * confidence * safeCurrent * 0.02 * year;
+      const scenarioPrice = simulatedPrice + stabilizer
+      const scenarioValue = sharesBought * scenarioPrice * (1 + (volatilityFactor * year));
+      return Math.max(0, scenarioValue);
+    };
+
+    const baseBend = bend;
+    const bearBend = bend - (confidence * 0.3);
+    const bullBend = bend + (confidence * 0.3);
+
+    const series = [0, 1, 2, 3].map((year) => {
+      const base = simulateValue(baseBend, year, 0);
+      const bear = simulateValue(bearBend, year, -mlStdDev);
+      const bull = simulateValue(bullBend, year, mlStdDev);
       return {
         year,
-        value: sharesBought * (simulatedPrice + stabilizer),
-        };
-      });
-    }, [amount, currentPrice, aiTarget, mlConfidence, upProbability]);
+        yearLabel: `Y${year}`,
+        base,
+        bear,
+        bull,
+      };
+    });
 
-  const future = series[series.length - 1].value;
+    return {
+      confidence,
+      sharesBought,
+      series,
+    };
+  }, [amount, currentPrice, aiTarget, mlConfidence, upProbability]);
+
+  const future = simulation.series[simulation.series.length - 1]?.base ?? 0;
+  const bearFuture = simulation.series[simulation.series.length - 1]?.bear ?? 0;
+  const bullFuture = simulation.series[simulation.series.length - 1]?.bull ?? 0;
   const simulatedFuturePrice = currentPrice > 0 ? future / Math.max(amount / currentPrice, 1e-9) : 0;
   const futureGain = amount > 0 ? ((future - amount) / amount) * 100 : 0;
   const panelTone = futureGain >= 0 ? "bg-success/20" : "bg-danger/15";
   const trendTone = futureGain >= 0 ? "text-success" : "text-danger";
-  const sharesBought = amount > 0 ? amount / Math.max(currentPrice, 1) : 0;
-  const confidencePct = (Math.max(0, Math.min(1, mlConfidence)) * 100).toFixed(0);
+  const sharesBought = simulation.sharesBought;
+  const confidencePct = (simulation.confidence * 100).toFixed(0);
 
   return (
     <Card className="flex h-full flex-col p-4">
@@ -81,7 +107,7 @@ export function ReturnsCalculator({
         </label>
       </div>
 
-      <div className={`mt-4 flex min-h-0 flex-1 flex-col rounded-xl p-4 ${panelTone}`}>
+        <div className={`mt-4 flex min-h-0 flex-1 flex-col rounded-xl p-4 ${panelTone}`}>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="text-sm text-muted">Projected Value</p>
@@ -97,6 +123,57 @@ export function ReturnsCalculator({
               <p className="text-[11px] uppercase tracking-wide text-muted">ML Confidence</p>
               <p className="text-[clamp(1.75rem,2vw,2.15rem)] font-semibold text-text">{confidencePct}%</p>
             </div>
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-2xl border border-border/50 bg-panel/58 p-3">
+          <div className="grid gap-3 md:grid-cols-3">
+            <div className="rounded-2xl border border-border/50 bg-panel/72 px-4 py-3">
+              <p className="text-[11px] uppercase tracking-wide text-muted">Bear Case</p>
+              <p className="mt-2 text-lg font-semibold text-rose-500">{formatCurrency(bearFuture)}</p>
+            </div>
+            <div className="rounded-2xl border border-border/50 bg-panel/72 px-4 py-3">
+              <p className="text-[11px] uppercase tracking-wide text-muted">Base Case</p>
+              <p className={`mt-2 text-lg font-semibold ${trendTone}`}>{formatCurrency(future)}</p>
+            </div>
+            <div className="rounded-2xl border border-border/50 bg-panel/72 px-4 py-3">
+              <p className="text-[11px] uppercase tracking-wide text-muted">Bull Case</p>
+              <p className="mt-2 text-lg font-semibold text-emerald-500">{formatCurrency(bullFuture)}</p>
+            </div>
+          </div>
+          <div className="mt-4 h-52 w-full">
+            <ResponsiveContainer>
+              <AreaChart data={simulation.series}>
+                <defs>
+                  <linearGradient id="roiBandFill" x1="0" x2="0" y1="0" y2="1">
+                    <stop offset="0%" stopColor="#58d68d" stopOpacity={0.22} />
+                    <stop offset="100%" stopColor="#58d68d" stopOpacity={0.03} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="4 4" stroke="rgba(130, 148, 179, 0.18)" />
+                <XAxis dataKey="yearLabel" tick={{ fill: "currentColor", fontSize: 11 }} axisLine={false} tickLine={false} />
+                <YAxis
+                  tick={{ fill: "currentColor", fontSize: 11 }}
+                  axisLine={false}
+                  tickLine={false}
+                  tickFormatter={(value) => formatCurrency(Number(value))}
+                  width={90}
+                />
+                <Tooltip
+                  formatter={(value: number | string | undefined, name: string | undefined) => [formatCurrency(Number(value ?? 0)), name ?? "Value"]}
+                  contentStyle={{
+                    background: "hsl(var(--panel))",
+                    border: "1px solid hsl(var(--border))",
+                    borderRadius: 12,
+                  }}
+                />
+                <Area type="monotone" dataKey="bull" stroke="transparent" fillOpacity={0} />
+                <Area type="monotone" dataKey="bear" stroke="transparent" fill="url(#roiBandFill)" fillOpacity={1} />
+                <Line type="monotone" dataKey="bear" stroke="#f97316" strokeWidth={1.5} dot={false} />
+                <Line type="monotone" dataKey="base" stroke="#22c55e" strokeWidth={2.4} dot={{ r: 2 }} activeDot={{ r: 4 }} />
+                <Line type="monotone" dataKey="bull" stroke="#60a5fa" strokeWidth={1.5} dot={false} />
+              </AreaChart>
+            </ResponsiveContainer>
           </div>
         </div>
 

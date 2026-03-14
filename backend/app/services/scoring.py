@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 import re
 from datetime import datetime, timedelta, timezone
-from statistics import mean
+from statistics import mean, median
 from typing import Any
 
 
@@ -29,6 +29,11 @@ def _num(value: Any, default: float | None = None) -> float | None:
 def _avg(values: list[float | None], fallback: float) -> float:
     valid = [float(value) for value in values if value is not None and math.isfinite(float(value))]
     return mean(valid) if valid else fallback
+
+
+def _median(values: list[float | None], fallback: float) -> float:
+    valid = [float(value) for value in values if value is not None and math.isfinite(float(value))]
+    return float(median(valid)) if valid else fallback
 
 
 def _normalize(value: float | None, low: float, high: float) -> float | None:
@@ -280,6 +285,27 @@ def _sigmoid(value: float) -> float:
     return 1.0 / (1.0 + math.exp(-value))
 
 
+NEGATION_TOKENS = {"no", "not", "avoids", "cleared", "denies", "dismisses", "rejects", "without", "free"}
+HIGH_RISK_WORDS = {"fraud", "default", "bankruptcy", "scam", "downgrade", "probe", "collapse"}
+MEDIUM_RISK_WORDS = {"decline", "debt", "penalty", "delay", "loss", "miss", "cut", "weak"}
+
+
+def _article_risk_weight(text: str) -> float:
+    words = [word.strip(".,;:!?()[]{}\"'") for word in str(text or "").lower().split()]
+    words = [word for word in words if word]
+    for idx, word in enumerate(words):
+        context = set(words[max(0, idx - 4):idx])
+        if word in HIGH_RISK_WORDS:
+            if context & NEGATION_TOKENS:
+                return 0.35
+            return 0.85
+        if word in MEDIUM_RISK_WORDS:
+            if context & NEGATION_TOKENS:
+                return 0.25
+            return 0.65
+    return 0.35
+
+
 def _walk_forward_ml_adjustment(
     price_history: list[dict[str, Any]] | None,
     financial_health_score: float,
@@ -420,7 +446,7 @@ def compute_smart_score(
             if ebit is not None and interest is not None and abs(interest) > 1e-9:
                 interest_coverage = ebit / abs(interest)
 
-    profitability = _avg(
+    profitability = _median(
         [
             _normalize(roe, 5.0, 25.0),
             _normalize(roa, 1.0, 10.0),
@@ -430,7 +456,7 @@ def compute_smart_score(
         fallback=0.5,
     )
 
-    growth = _avg(
+    growth = _median(
         [
             _normalize(growth_features.get("revenueGrowth"), 0.0, 25.0),
             _normalize(growth_features.get("profitGrowth"), 0.0, 25.0),
@@ -440,7 +466,7 @@ def compute_smart_score(
         fallback=0.5,
     )
 
-    valuation = _avg(
+    valuation = _median(
         [
             _inverse_normalize(pe_ratio, 8.0, 45.0),
             _inverse_normalize(pb_ratio, 1.0, 8.0),
@@ -462,7 +488,7 @@ def compute_smart_score(
     if ema20 is not None and ema50 is not None:
         ema_score = 1.0 if ema20 >= ema50 else 0.25
 
-    momentum = _avg(
+    momentum = _median(
         [
             rsi_score,
             macd_score,
@@ -474,7 +500,7 @@ def compute_smart_score(
         fallback=0.5,
     )
 
-    financial_health = _avg(
+    financial_health = _median(
         [
             _inverse_normalize(debt_to_equity, 0.0, 2.5),
             _normalize(current_ratio, 1.0, 3.0),
@@ -534,41 +560,16 @@ def compute_risk_score(
     sentiments: list[float] = []
     narrative_risk_scores: list[float] = []
 
-    high_risk_keywords = [
-        "fraud",
-        "default",
-        "lawsuit",
-        "forensic",
-        "bankruptcy",
-        "insolvency",
-        "probe",
-        "raid",
-        "downgrade",
-        "restatement",
-    ]
-    medium_risk_keywords = [
-        "decline",
-        "fall",
-        "debt",
-        "pledge",
-        "regulatory",
-        "penalty",
-        "miss",
-        "volatility",
-        "outflow",
-        "delay",
-    ]
-
     for article in news_items:
         sentiment = _num(article.get("sentimentScore"), 0.5)
         sentiments.append(_clamp(sentiment if sentiment is not None else 0.5, 0.0, 1.0))
         text = (str(article.get("title", "")) + " " + str(article.get("summary", ""))).lower()
-        if any(key in text for key in high_risk_keywords):
+        if any(token in text for token in ["lawsuit", "forensic", "insolvency", "raid", "restatement"]):
             narrative_risk_scores.append(0.85)
-        elif any(key in text for key in medium_risk_keywords):
+        elif any(token in text for token in ["fall", "pledge", "regulatory", "volatility", "outflow"]):
             narrative_risk_scores.append(0.65)
         else:
-            narrative_risk_scores.append(0.35)
+            narrative_risk_scores.append(_article_risk_weight(text))
 
     if isinstance(brokerage_research, dict):
         summary = brokerage_research.get("summary") or {}
