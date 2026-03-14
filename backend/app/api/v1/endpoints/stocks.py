@@ -33,21 +33,40 @@ async def _refresh_market_news_cache(today: str, cache_key: str, stale_key: str)
 async def _refresh_dashboard_cache(symbol: str, timeframe: str, cache_key: str, stale_key: str) -> None:
     try:
         data = await asyncio.wait_for(dashboard_service.get_dashboard(symbol=symbol, timeframe=timeframe), timeout=55)
-        data = await _enrich_score_explanations(symbol=symbol, data=data)
+        data = await _enrich_score_explanations(symbol=symbol, data=data, allow_gemini=True)
         await redis_cache.set_json(cache_key, data, ttl_seconds=settings.cache_ttl_seconds)
         await redis_cache.set_json(stale_key, data, ttl_seconds=60 * 60 * 24 * 7)
     except Exception:
         return
 
 
-async def _enrich_score_explanations(symbol: str, data: dict) -> dict:
-    data = await _enrich_profile_details(symbol=symbol, data=data)
-    data = await _enrich_smart_score_explanation(symbol=symbol, data=data)
-    data = await _enrich_risk_score_explanation(symbol=symbol, data=data)
+async def _enrich_score_explanations(symbol: str, data: dict, allow_gemini: bool = True) -> dict:
+    data = await _enrich_profile_details(symbol=symbol, data=data, allow_gemini=allow_gemini)
+    data = await _enrich_smart_score_explanation(symbol=symbol, data=data, allow_gemini=allow_gemini)
+    data = await _enrich_risk_score_explanation(symbol=symbol, data=data, allow_gemini=allow_gemini)
     return data
 
 
-async def _enrich_profile_details(symbol: str, data: dict) -> dict:
+def _dashboard_needs_ai_refresh(data: dict) -> bool:
+    if not isinstance(data, dict):
+        return False
+
+    profile = data.get("profile") if isinstance(data.get("profile"), dict) else {}
+    smart = data.get("smartScore") if isinstance(data.get("smartScore"), dict) else {}
+    risk = data.get("riskScore") if isinstance(data.get("riskScore"), dict) else {}
+
+    profile_missing = (
+        not profile.get("incorporationYear")
+        or not str(profile.get("headquarters") or "").strip()
+        or str(profile.get("chairman") or "").strip() in {"", "N/A"}
+        or str(profile.get("previousName") or "").strip() in {"", "N/A"}
+    )
+    smart_missing = not str(smart.get("aiExplanation") or "").strip() or str(smart.get("aiSource") or "").strip().lower() != "gemini"
+    risk_missing = not str(risk.get("aiExplanation") or "").strip() or str(risk.get("aiSource") or "").strip().lower() != "gemini"
+    return profile_missing or smart_missing or risk_missing
+
+
+async def _enrich_profile_details(symbol: str, data: dict, allow_gemini: bool = True) -> dict:
     if not isinstance(data, dict):
         return data
 
@@ -82,7 +101,7 @@ async def _enrich_profile_details(symbol: str, data: dict) -> dict:
         or str(profile.get("previousName") or "").strip() in {"", "N/A"}
     )
 
-    if needs_ai and bool(str(settings.gemini_api_key or "").strip()):
+    if needs_ai and allow_gemini and bool(str(settings.gemini_api_key or "").strip()):
         try:
             raw = await asyncio.wait_for(ai_adapter.extract_profile_details(symbol=symbol, context=data), timeout=12)
             parsed = _parse_profile_json(raw)
@@ -131,7 +150,7 @@ def _parse_profile_json(raw: str) -> dict:
         return {}
 
 
-async def _enrich_smart_score_explanation(symbol: str, data: dict) -> dict:
+async def _enrich_smart_score_explanation(symbol: str, data: dict, allow_gemini: bool = True) -> dict:
     smart = data.get("smartScore") if isinstance(data, dict) else None
     if not isinstance(smart, dict):
         return data
@@ -152,7 +171,7 @@ async def _enrich_smart_score_explanation(symbol: str, data: dict) -> dict:
     ai_source = str(smart.get("aiSource") or "").strip().lower()
 
     # If Gemini is now enabled, refresh non-Gemini (or missing) explanations once and cache them.
-    if gemini_enabled and (not ai_explanation or ai_source != "gemini"):
+    if allow_gemini and gemini_enabled and (not ai_explanation or ai_source != "gemini"):
         try:
             generated = await asyncio.wait_for(ai_adapter.explain_smart_score(symbol=symbol, context=data), timeout=12)
             if generated and str(generated).strip():
@@ -236,7 +255,7 @@ def _to_plain_language_ai_text(symbol: str, score: float, label: str, text: str,
     return simplified
 
 
-async def _enrich_risk_score_explanation(symbol: str, data: dict) -> dict:
+async def _enrich_risk_score_explanation(symbol: str, data: dict, allow_gemini: bool = True) -> dict:
     risk = data.get("riskScore") if isinstance(data, dict) else None
     if not isinstance(risk, dict):
         return data
@@ -257,7 +276,7 @@ async def _enrich_risk_score_explanation(symbol: str, data: dict) -> dict:
     ai_source = str(risk.get("aiSource") or "").strip().lower()
 
     # If Gemini is now enabled, refresh non-Gemini (or missing) explanations once and cache them.
-    if gemini_enabled and (not ai_explanation or ai_source != "gemini"):
+    if allow_gemini and gemini_enabled and (not ai_explanation or ai_source != "gemini"):
         try:
             generated = await asyncio.wait_for(ai_adapter.explain_risk_score(symbol=symbol, context=data), timeout=12)
             if generated and str(generated).strip():
@@ -456,16 +475,20 @@ async def get_stock_dashboard(
     stale_key = f"dashboard:last:{symbol.upper()}:{timeframe}"
     cached = await redis_cache.get_json(cache_key) if not refresh else None
     if cached:
-        cached = await _enrich_score_explanations(symbol=symbol, data=cached)
+        cached = await _enrich_score_explanations(symbol=symbol, data=cached, allow_gemini=False)
+        if _dashboard_needs_ai_refresh(cached):
+            asyncio.create_task(_refresh_dashboard_cache(symbol=symbol, timeframe=timeframe, cache_key=cache_key, stale_key=stale_key))
         await redis_cache.set_json(cache_key, cached, ttl_seconds=settings.cache_ttl_seconds)
         await redis_cache.set_json(stale_key, cached, ttl_seconds=60 * 60 * 24 * 7)
         return {"cached": True, "data": cached}
 
     try:
         data = await asyncio.wait_for(dashboard_service.get_dashboard(symbol=symbol, timeframe=timeframe), timeout=45)
-        data = await _enrich_score_explanations(symbol=symbol, data=data)
+        data = await _enrich_score_explanations(symbol=symbol, data=data, allow_gemini=False)
         await redis_cache.set_json(cache_key, data, ttl_seconds=settings.cache_ttl_seconds)
         await redis_cache.set_json(stale_key, data, ttl_seconds=60 * 60 * 24 * 7)
+        if bool(str(settings.gemini_api_key or "").strip()):
+            asyncio.create_task(_refresh_dashboard_cache(symbol=symbol, timeframe=timeframe, cache_key=cache_key, stale_key=stale_key))
         return {"cached": False, "data": data}
     except Exception as exc:
         stale = await redis_cache.get_json(stale_key)
