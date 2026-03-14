@@ -456,6 +456,8 @@ class StockDashboardService:
             data["shareholding"].update(trendlyne_shareholding)
 
         data["shareholding"] = self._normalize_shareholding(data["shareholding"])
+        self._backfill_quarterly_financials(data["financials"])
+        self._backfill_statement_tables(data["financials"], trendlyne_financials)
 
         if trendlyne_documents:
             data["documents"].update(trendlyne_documents)
@@ -490,6 +492,7 @@ class StockDashboardService:
         data["metrics"] = self._enrich_metrics_from_ratio_trends(data["metrics"], data["financials"]["keyRatioTrends"])
         growth_snapshot = self._build_financial_growth_snapshot(
             trendlyne_financials,
+            data["financials"],
             data["returnsSummary"],
             data["corporateActions"].get("dividends") or [],
         )
@@ -797,7 +800,32 @@ class StockDashboardService:
 
         normalized = dict(shareholding)
         history = normalized.get("history") or []
-        latest = history[0] if history else {}
+        normalized_history: list[dict[str, Any]] = []
+
+        for row in history:
+            if not isinstance(row, dict):
+                continue
+            normalized_row = dict(row)
+            promoters = self._num(normalized_row.get("promoters")) or 0.0
+            fii = self._num(normalized_row.get("fii")) or 0.0
+            dii = self._num(normalized_row.get("dii")) or 0.0
+            public_value = self._num(normalized_row.get("public"))
+
+            if public_value is None or public_value <= 0:
+                public_value = max(0.0, 100.0 - (promoters + fii + dii))
+
+            total = promoters + fii + dii + public_value
+            if total > 100.5 and public_value > 0:
+                public_value = max(0.0, public_value - (total - 100.0))
+
+            normalized_row["promoters"] = round(promoters, 2)
+            normalized_row["fii"] = round(fii, 2)
+            normalized_row["dii"] = round(dii, 2)
+            normalized_row["public"] = round(public_value, 2)
+            normalized_history.append(normalized_row)
+
+        normalized["history"] = normalized_history
+        latest = normalized_history[0] if normalized_history else {}
 
         if latest:
             if latest.get("quarter"):
@@ -823,6 +851,156 @@ class StockDashboardService:
             normalized["public"] = round(max(0.0, (public_value or 0.0) - (total - 100.0)), 2)
 
         return normalized
+
+    def _backfill_quarterly_financials(self, financials: dict[str, Any]) -> None:
+        if not isinstance(financials, dict):
+            return
+
+        def clean_summary(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+            cleaned: list[dict[str, Any]] = []
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                period = str(row.get("period") or "").strip()
+                revenue = self._num(row.get("revenue"))
+                profit = self._num(row.get("profit"))
+                if not period or (revenue is None and profit is None):
+                    continue
+                cleaned.append({"period": period, "revenue": revenue, "profit": profit})
+            return cleaned[-4:]
+
+        def summary_from_details(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+            summary: list[dict[str, Any]] = []
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                period = str(row.get("period") or "").strip()
+                revenue = self._num(row.get("totalRevenue"))
+                profit = self._num(row.get("netProfit"))
+                if not period or (revenue is None and profit is None):
+                    continue
+                summary.append(
+                    {
+                        "period": period,
+                        "revenue": round(revenue, 2) if revenue is not None else None,
+                        "profit": round(profit, 2) if profit is not None else None,
+                    }
+                )
+            return summary[-4:]
+
+        financials["quarterlyConsolidated"] = clean_summary(financials.get("quarterlyConsolidated") or [])
+        financials["quarterlyStandalone"] = clean_summary(financials.get("quarterlyStandalone") or [])
+        financials["quarterly"] = clean_summary(financials.get("quarterly") or [])
+
+        if not financials.get("quarterlyConsolidated") and financials.get("quarterlyDetailedConsolidated"):
+            financials["quarterlyConsolidated"] = summary_from_details(financials["quarterlyDetailedConsolidated"])
+        if not financials.get("quarterlyStandalone") and financials.get("quarterlyDetailedStandalone"):
+            financials["quarterlyStandalone"] = summary_from_details(financials["quarterlyDetailedStandalone"])
+        if not financials.get("quarterly"):
+            financials["quarterly"] = financials.get("quarterlyConsolidated") or financials.get("quarterlyStandalone") or []
+
+    def _backfill_statement_tables(self, financials: dict[str, Any], trendlyne_financials: dict[str, Any] | None) -> None:
+        if not isinstance(financials, dict):
+            return
+
+        def clean_rows(rows: list[dict[str, Any]], numeric_keys: tuple[str, ...]) -> list[dict[str, Any]]:
+            cleaned: list[dict[str, Any]] = []
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                period = str(row.get("period") or "").strip()
+                if not period:
+                    continue
+                if not any(self._num(row.get(key)) is not None for key in numeric_keys):
+                    continue
+                cleaned.append(row)
+            return cleaned
+
+        annual_rows: list[dict[str, Any]] = []
+        if isinstance(trendlyne_financials, dict):
+            annual_rows = (
+                trendlyne_financials.get("annualConsolidated")
+                or trendlyne_financials.get("annualStandalone")
+                or []
+            )
+
+        financials["yearly"] = clean_rows(financials.get("yearly") or [], ("revenue", "profit", "assets", "cashFlow"))
+        financials["incomeStatement"] = clean_rows(financials.get("incomeStatement") or [], ("revenue", "ebit", "netIncome"))
+        financials["balanceSheet"] = clean_rows(financials.get("balanceSheet") or [], ("totalAssets", "totalDebt", "equity", "currentAssets", "currentLiabilities"))
+        financials["cashFlow"] = clean_rows(financials.get("cashFlow") or [], ("operatingCashFlow", "investingCashFlow", "financingCashFlow", "freeCashFlow"))
+
+        yearly_rows = financials.get("yearly") or []
+        if not yearly_rows and annual_rows:
+            financials["yearly"] = [
+                {
+                    "period": str(row.get("period") or ""),
+                    "revenue": self._num(row.get("totalRevenue")),
+                    "profit": self._num(row.get("netProfit")),
+                    "assets": self._num(row.get("assets")),
+                    "cashFlow": self._num(row.get("operatingCashFlow")) or self._num(row.get("financingProfit")),
+                }
+                for row in annual_rows
+                if isinstance(row, dict) and row.get("period")
+            ]
+            yearly_rows = financials["yearly"]
+
+        if not financials.get("incomeStatement"):
+            statement_rows = []
+            source_rows = annual_rows or yearly_rows
+            for row in source_rows:
+                if not isinstance(row, dict):
+                    continue
+                period = str(row.get("period") or "").strip()
+                if not period:
+                    continue
+                statement_rows.append(
+                    {
+                        "period": period,
+                        "revenue": self._num(row.get("revenue")) if row in yearly_rows else self._num(row.get("totalRevenue")),
+                        "ebit": self._num(row.get("ebit")) if row in yearly_rows else self._num(row.get("ebit")),
+                        "netIncome": self._num(row.get("profit")) if row in yearly_rows else self._num(row.get("netProfit")),
+                    }
+                )
+            financials["incomeStatement"] = [row for row in statement_rows if any(self._num(row.get(key)) is not None for key in ("revenue", "ebit", "netIncome"))]
+
+        if not financials.get("balanceSheet") and annual_rows:
+            balance_rows = []
+            for row in annual_rows:
+                if not isinstance(row, dict):
+                    continue
+                period = str(row.get("period") or "").strip()
+                if not period:
+                    continue
+                balance_rows.append(
+                    {
+                        "period": period,
+                        "totalAssets": self._num(row.get("assets")),
+                        "totalDebt": self._num(row.get("totalDebt")),
+                        "equity": self._num(row.get("equity")),
+                        "currentAssets": self._num(row.get("currentAssets")),
+                        "currentLiabilities": self._num(row.get("currentLiabilities")),
+                    }
+                )
+            financials["balanceSheet"] = [row for row in balance_rows if any(self._num(row.get(key)) is not None for key in ("totalAssets", "totalDebt", "equity", "currentAssets", "currentLiabilities"))]
+
+        if not financials.get("cashFlow") and annual_rows:
+            cash_rows = []
+            for row in annual_rows:
+                if not isinstance(row, dict):
+                    continue
+                period = str(row.get("period") or "").strip()
+                if not period:
+                    continue
+                cash_rows.append(
+                    {
+                        "period": period,
+                        "operatingCashFlow": self._num(row.get("operatingCashFlow")),
+                        "investingCashFlow": self._num(row.get("investingCashFlow")),
+                        "financingCashFlow": self._num(row.get("financingCashFlow")) or self._num(row.get("financingProfit")),
+                        "freeCashFlow": self._num(row.get("freeCashFlow")),
+                    }
+                )
+            financials["cashFlow"] = [row for row in cash_rows if any(self._num(row.get(key)) is not None for key in ("operatingCashFlow", "investingCashFlow", "financingCashFlow", "freeCashFlow"))]
 
     def _finalize_key_metrics(
         self,
@@ -1195,24 +1373,38 @@ class StockDashboardService:
                 },
             ]
 
+        for group in ("profitability", "valuation", "liquidity"):
+            normalized[group] = [card for card in normalized.get(group, []) if not card_is_blank(card)]
+
         return normalized
 
     def _build_financial_growth_snapshot(
         self,
         trendlyne_financials: dict[str, Any] | None,
+        financials: dict[str, Any] | None,
         returns_summary: list[dict[str, Any]],
         dividends: list[dict[str, Any]],
     ) -> dict[str, Any] | None:
-        if not isinstance(trendlyne_financials, dict):
-            return None
-
-        annual_consolidated = trendlyne_financials.get("annualConsolidated") or []
-        annual_standalone = trendlyne_financials.get("annualStandalone") or []
+        annual_consolidated = trendlyne_financials.get("annualConsolidated") or [] if isinstance(trendlyne_financials, dict) else []
+        annual_standalone = trendlyne_financials.get("annualStandalone") or [] if isinstance(trendlyne_financials, dict) else []
         annual_rows = annual_consolidated if annual_consolidated else annual_standalone
+        basis = "consolidated" if annual_consolidated else "standalone"
+
+        if not annual_rows and isinstance(financials, dict):
+            yearly_rows = financials.get("yearly") or []
+            annual_rows = [
+                {
+                    "period": row.get("period"),
+                    "totalRevenue": row.get("revenue"),
+                    "netProfit": row.get("profit"),
+                    "dividend": None,
+                }
+                for row in yearly_rows
+                if isinstance(row, dict) and row.get("period")
+            ]
+            basis = "standalone"
         if not annual_rows:
             return None
-
-        basis = "consolidated" if annual_consolidated else "standalone"
 
         def annual_value(index_from_end: int, key: str) -> float | None:
             if len(annual_rows) <= index_from_end:

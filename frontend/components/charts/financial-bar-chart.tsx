@@ -7,7 +7,7 @@ export function FinancialBarChart({
   firstKey,
   secondKey
 }: {
-  data: Array<Record<string, string | number>>;
+  data: Array<Record<string, string | number | null>>;
   firstKey: string;
   secondKey: string;
 }) {

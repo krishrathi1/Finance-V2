@@ -73,17 +73,17 @@ export type DashboardData = {
     pivotLevels: Record<string, number>;
   };
   financials: {
-    quarterly: Array<{ period: string; revenue: number; profit: number }>;
-    quarterlyStandalone?: Array<{ period: string; revenue: number; profit: number }>;
-    quarterlyConsolidated?: Array<{ period: string; revenue: number; profit: number }>;
+    quarterly: Array<{ period: string; revenue: number | null; profit: number | null }>;
+    quarterlyStandalone?: Array<{ period: string; revenue: number | null; profit: number | null }>;
+    quarterlyConsolidated?: Array<{ period: string; revenue: number | null; profit: number | null }>;
     quarterlyDetailedStandalone?: QuarterlyDetailedPoint[];
     quarterlyDetailedConsolidated?: QuarterlyDetailedPoint[];
     growthSnapshot?: FinancialGrowthSnapshot;
     keyRatioTrends?: KeyRatioTrends;
-    yearly: Array<{ period: string; revenue: number; profit: number; assets: number; cashFlow: number }>;
-    incomeStatement: Array<Record<string, string | number>>;
-    balanceSheet: Array<Record<string, string | number>>;
-    cashFlow: Array<Record<string, string | number>>;
+    yearly: Array<{ period: string; revenue: number | null; profit: number | null; assets: number | null; cashFlow: number | null }>;
+    incomeStatement: Array<Record<string, string | number | null>>;
+    balanceSheet: Array<Record<string, string | number | null>>;
+    cashFlow: Array<Record<string, string | number | null>>;
   };
   corporateActions: {
     boardMeetings: ActionRow[];

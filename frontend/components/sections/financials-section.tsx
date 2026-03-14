@@ -6,7 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatNumber } from "@/lib/format";
 import type { FinancialGrowthSnapshot } from "@/lib/types";
 
-function DataTable({ rows }: { rows: Array<Record<string, string | number>> }) {
+function DataTable({ rows }: { rows: Array<Record<string, string | number | null>> }) {
   if (!rows.length) return <p className="text-sm text-muted">No data available.</p>;
   const columns = Object.keys(rows[0]);
   return (
@@ -26,7 +26,7 @@ function DataTable({ rows }: { rows: Array<Record<string, string | number>> }) {
             <tr key={index} className="border-b border-border/50 last:border-none">
               {columns.map((col) => (
                 <td key={col} className="p-2">
-                  {typeof row[col] === "number" ? formatNumber(row[col] as number) : String(row[col])}
+                  {row[col] === null || row[col] === undefined ? "-" : typeof row[col] === "number" ? formatNumber(row[col] as number) : String(row[col])}
                 </td>
               ))}
             </tr>
@@ -46,11 +46,11 @@ export function FinancialsSection({
   cashFlow
 }: {
   growthSnapshot?: FinancialGrowthSnapshot;
-  quarterly: Array<{ period: string; revenue: number; profit: number }>;
-  yearly: Array<{ period: string; revenue: number; profit: number; assets: number; cashFlow: number }>;
-  incomeStatement: Array<Record<string, string | number>>;
-  balanceSheet: Array<Record<string, string | number>>;
-  cashFlow: Array<Record<string, string | number>>;
+  quarterly: Array<{ period: string; revenue: number | null; profit: number | null }>;
+  yearly: Array<{ period: string; revenue: number | null; profit: number | null; assets: number | null; cashFlow: number | null }>;
+  incomeStatement: Array<Record<string, string | number | null>>;
+  balanceSheet: Array<Record<string, string | number | null>>;
+  cashFlow: Array<Record<string, string | number | null>>;
 }) {
   const formatGrowthValue = (value: number | null) => {
     if (value === null || Number.isNaN(value)) return "N/A";

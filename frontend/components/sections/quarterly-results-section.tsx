@@ -6,7 +6,7 @@ import { FinancialBarChart } from "@/components/charts/financial-bar-chart";
 import { Card } from "@/components/ui/card";
 import type { QuarterlyDetailedPoint } from "@/lib/types";
 
-type QuarterlyPoint = { period: string; revenue: number; profit: number };
+type QuarterlyPoint = { period: string; revenue: number | null; profit: number | null };
 type ValueType = "number" | "percent" | "eps" | "npa";
 type ParentRowId = "totalRevenue" | "operatingProfit" | "profitBeforeTax" | "netProfit";
 

@@ -1162,40 +1162,49 @@ class MarketDataProviders:
                 if not isinstance(raw, dict):
                     continue
 
-                revenue = as_float(raw, "TOTAL_SR_Q", "SR_Q", "OperatingIncome_Q") or 0.0
-                profit = as_float(raw, "NP_Q", "PL_After_TaxFromOrdineryActivities_Q") or 0.0
+                revenue = as_float(raw, "TOTAL_SR_Q", "SR_Q", "OperatingIncome_Q", "TOTAL_INCOME_Q", "Income_Q")
+                profit = as_float(
+                    raw,
+                    "NP_Q",
+                    "PAT_Q",
+                    "PL_After_TaxFromOrdineryActivities_Q",
+                    "ProfitAfterTax_Q",
+                    "NetProfit_Q",
+                )
                 pbt = as_float(raw, "PBT_Q")
                 tax = as_float(raw, "TAX_Q")
+                if revenue is None and profit is None and pbt is None:
+                    continue
 
                 summary_rows.append(
                     {
                         "period": period_label(raw_period),
-                        "revenue": round(revenue, 2),
-                        "profit": round(profit, 2),
+                        "revenue": round(revenue or 0.0, 2),
+                        "profit": round(profit or 0.0, 2),
                     }
                 )
 
                 detailed_rows.append(
                     {
                         "period": period_label(raw_period),
-                        "totalRevenue": as_float(raw, "TOTAL_SR_Q", "SR_Q"),
+                        "totalRevenue": as_float(raw, "TOTAL_SR_Q", "SR_Q", "TOTAL_INCOME_Q", "Income_Q"),
                         "totalRevenueGrowthPct": as_float(raw, "REV4Q_Q"),
-                        "operatingRevenue": as_float(raw, "OperatingIncome_Q", "SR_Q"),
-                        "otherIncome": as_float(raw, "OI_Q", "Others_Q", "IncomeOnInvestment_Q"),
+                        "operatingRevenue": as_float(raw, "OperatingIncome_Q", "SR_Q", "RevenueFromOperations_Q"),
+                        "otherIncome": as_float(raw, "OI_Q", "Others_Q", "IncomeOnInvestment_Q", "OtherIncome_Q"),
                         "expenses": as_float(raw, "OEXPNS_Q"),
                         "interestExpended": as_float(raw, "INT_Q"),
                         "operatingExpenses": as_float(raw, "OEXPNS_Q"),
-                        "operatingProfit": as_float(raw, "OP_Q", "OperatingProfitBeforeProvisionsAndContingencies_Q"),
-                        "opmPct": as_float(raw, "OPMPCT_Q"),
+                        "operatingProfit": as_float(raw, "OP_Q", "OperatingProfitBeforeProvisionsAndContingencies_Q", "EBITDA_Q", "EBIT_Q"),
+                        "opmPct": as_float(raw, "OPMPCT_Q", "EBITDAMargin_Q", "OperatingMargin_Q"),
                         "depreciations": as_float(raw, "DEP_Q"),
                         "profitBeforeTax": pbt,
                         "tax": tax,
                         "taxPct": round((tax / pbt) * 100, 2) if tax is not None and pbt not in {None, 0} else None,
-                        "netProfit": as_float(raw, "NP_Q", "PL_After_TaxFromOrdineryActivities_Q"),
+                        "netProfit": as_float(raw, "NP_Q", "PAT_Q", "PL_After_TaxFromOrdineryActivities_Q", "ProfitAfterTax_Q", "NetProfit_Q"),
                         "netProfitGrowthPct": as_float(raw, "NP_Q_GROWTH"),
                         "netProfitMarginPct": as_float(raw, "NETPCT_Q"),
-                        "epsAdjusted": as_float(raw, "EPS_adj_Q"),
-                        "basicEps": as_float(raw, "EPS_Q"),
+                        "epsAdjusted": as_float(raw, "EPS_adj_Q", "EPSAdjusted_Q"),
+                        "basicEps": as_float(raw, "EPS_Q", "BasicEPS_Q"),
                         "dilutedEps": as_float(raw, "AfterDilutedEPS_Q"),
                         "netProfitTtm": as_float(raw, "NP_TTM"),
                         "basicEpsTtm": as_float(raw, "EPS_TTM"),
@@ -1225,10 +1234,19 @@ class MarketDataProviders:
                 annual_rows.append(
                     {
                         "period": period_label(raw_period),
-                        "totalRevenue": as_float(raw, "TOTAL_SR_A", "SR_A", "TotalOperatingRevenues_A"),
-                        "netProfit": as_float(raw, "NP_A", "PAT_A"),
-                        "financingProfit": as_float(raw, "CFA_A"),
-                        "dividend": as_float(raw, "DividendPerShare_A", "DIV_A", "EquityShareDividend_A"),
+                        "totalRevenue": as_float(raw, "TOTAL_SR_A", "SR_A", "TotalOperatingRevenues_A", "TOTAL_INCOME_A", "Income_A"),
+                        "netProfit": as_float(raw, "NP_A", "PAT_A", "NetProfit_A", "ProfitAfterTax_A"),
+                        "ebit": as_float(raw, "OP_A", "EBIT_A", "EBITDA_A", "OperatingProfit_A"),
+                        "assets": as_float(raw, "TA_A", "TotalAssets_A", "TOT_ASSETS_A"),
+                        "totalDebt": as_float(raw, "TD_A", "TotalDebt_A", "Borrowings_A"),
+                        "equity": as_float(raw, "NW_A", "NetWorth_A", "Equity_A"),
+                        "currentAssets": as_float(raw, "CA_A", "CurrentAssets_A"),
+                        "currentLiabilities": as_float(raw, "CL_A", "CurrentLiabilities_A"),
+                        "operatingCashFlow": as_float(raw, "CFO_A", "OperatingCashFlow_A", "OCF_A"),
+                        "investingCashFlow": as_float(raw, "CFI_A", "InvestingCashFlow_A", "ICF_A"),
+                        "financingProfit": as_float(raw, "CFA_A", "CashFlowFromFinancingActivities_A"),
+                        "freeCashFlow": as_float(raw, "FCF_A", "FreeCashFlow_A"),
+                        "dividend": as_float(raw, "DividendPerShare_A", "DIV_A", "EquityShareDividend_A", "Dividend_A"),
                     }
                 )
 
@@ -1275,14 +1293,14 @@ class MarketDataProviders:
                 values = [self._to_float(point.get(key)) for point in annual_points[-3:]]
                 values = [value for value in values if value is not None]
                 if not values:
-                    return 0.0
+                    return None
                 return round(sum(values) / len(values), 2)
 
             def to_series(key: str) -> list[dict[str, Any]]:
                 series = []
                 for point in annual_points[-5:]:
                     value = self._to_float(point.get(key))
-                    series.append({"period": point["period"], "value": round(value, 2) if value is not None else 0.0})
+                    series.append({"period": point["period"], "value": round(value, 2) if value is not None else None})
                 return series
 
             advance_series: list[dict[str, Any]] = []
@@ -1290,7 +1308,7 @@ class MarketDataProviders:
             for idx, point in enumerate(latest_five):
                 current_adv = self._to_float(point.get("advances"))
                 previous_adv = self._to_float(annual_points[-6 + idx].get("advances")) if len(annual_points) >= 6 else None
-                growth = 0.0
+                growth = None
                 if current_adv is not None and previous_adv not in {None, 0}:
                     growth = round(((current_adv - previous_adv) / previous_adv) * 100, 2)
                 elif idx > 0:
@@ -1299,8 +1317,9 @@ class MarketDataProviders:
                         growth = round(((current_adv - fallback_prev) / fallback_prev) * 100, 2)
                 advance_series.append({"period": point["period"], "value": growth})
 
-            advance_avg_values = [self._to_float(item.get("value")) or 0.0 for item in advance_series[-3:]]
-            advance_avg = round(sum(advance_avg_values) / len(advance_avg_values), 2) if advance_avg_values else 0.0
+            advance_avg_values = [self._to_float(item.get("value")) for item in advance_series[-3:]]
+            advance_avg_values = [value for value in advance_avg_values if value is not None]
+            advance_avg = round(sum(advance_avg_values) / len(advance_avg_values), 2) if advance_avg_values else None
 
             return {
                 "profitability": [
@@ -2873,6 +2892,12 @@ class MarketDataProviders:
 
         financials = {"quarterly": [], "yearly": [], "incomeStatement": [], "balanceSheet": [], "cashFlow": []}
 
+        def scaled_amount(value: Any) -> float | None:
+            numeric = self._to_float(value)
+            if numeric is None:
+                return None
+            return round(numeric / 10_000_000, 2)
+
         if quarterly_cols:
             ordered_quarterly = list(reversed(quarterly_cols[:8]))
             for col in ordered_quarterly:
@@ -2883,8 +2908,8 @@ class MarketDataProviders:
                 financials["quarterly"].append(
                     {
                         "period": col.strftime("%b %y"),
-                        "revenue": round((revenue or 0) / 10_000_000, 2),
-                        "profit": round((profit or 0) / 10_000_000, 2),
+                        "revenue": scaled_amount(revenue),
+                        "profit": scaled_amount(profit),
                     }
                 )
 
@@ -2900,10 +2925,10 @@ class MarketDataProviders:
                 financials["yearly"].append(
                     {
                         "period": col.strftime("%b %y"),
-                        "revenue": round((revenue or 0) / 10_000_000, 2),
-                        "profit": round((profit or 0) / 10_000_000, 2),
-                        "assets": round((assets or 0) / 10_000_000, 2),
-                        "cashFlow": round((operating_cf or 0) / 10_000_000, 2),
+                        "revenue": scaled_amount(revenue),
+                        "profit": scaled_amount(profit),
+                        "assets": scaled_amount(assets),
+                        "cashFlow": scaled_amount(operating_cf),
                     }
                 )
 
@@ -2912,9 +2937,9 @@ class MarketDataProviders:
                 financials["incomeStatement"].append(
                     {
                         "period": col.strftime("%b %y"),
-                        "revenue": round((statement_value(chosen_annual_income, revenue_keys, col) or 0) / 10_000_000, 2),
-                        "ebit": round((statement_value(chosen_annual_income, ebit_keys, col) or 0) / 10_000_000, 2),
-                        "netIncome": round((statement_value(chosen_annual_income, net_income_keys, col) or 0) / 10_000_000, 2),
+                        "revenue": scaled_amount(statement_value(chosen_annual_income, revenue_keys, col)),
+                        "ebit": scaled_amount(statement_value(chosen_annual_income, ebit_keys, col)),
+                        "netIncome": scaled_amount(statement_value(chosen_annual_income, net_income_keys, col)),
                     }
                 )
 
@@ -2923,11 +2948,11 @@ class MarketDataProviders:
                 financials["balanceSheet"].append(
                     {
                         "period": col.strftime("%b %y"),
-                        "totalAssets": round((statement_value(chosen_annual_balance, assets_keys, col) or 0) / 10_000_000, 2),
-                        "totalDebt": round((statement_value(chosen_annual_balance, debt_keys, col) or 0) / 10_000_000, 2),
-                        "equity": round((statement_value(chosen_annual_balance, equity_keys, col) or 0) / 10_000_000, 2),
-                        "currentAssets": round((statement_value(chosen_annual_balance, current_assets_keys, col) or 0) / 10_000_000, 2),
-                        "currentLiabilities": round((statement_value(chosen_annual_balance, current_liabilities_keys, col) or 0) / 10_000_000, 2),
+                        "totalAssets": scaled_amount(statement_value(chosen_annual_balance, assets_keys, col)),
+                        "totalDebt": scaled_amount(statement_value(chosen_annual_balance, debt_keys, col)),
+                        "equity": scaled_amount(statement_value(chosen_annual_balance, equity_keys, col)),
+                        "currentAssets": scaled_amount(statement_value(chosen_annual_balance, current_assets_keys, col)),
+                        "currentLiabilities": scaled_amount(statement_value(chosen_annual_balance, current_liabilities_keys, col)),
                     }
                 )
 
@@ -2936,10 +2961,10 @@ class MarketDataProviders:
                 financials["cashFlow"].append(
                     {
                         "period": col.strftime("%b %y"),
-                        "operatingCashFlow": round((statement_value(chosen_annual_cash, operating_cf_keys, col) or 0) / 10_000_000, 2),
-                        "investingCashFlow": round((statement_value(chosen_annual_cash, investing_cf_keys, col) or 0) / 10_000_000, 2),
-                        "financingCashFlow": round((statement_value(chosen_annual_cash, financing_cf_keys, col) or 0) / 10_000_000, 2),
-                        "freeCashFlow": round((statement_value(chosen_annual_cash, free_cf_keys, col) or 0) / 10_000_000, 2),
+                        "operatingCashFlow": scaled_amount(statement_value(chosen_annual_cash, operating_cf_keys, col)),
+                        "investingCashFlow": scaled_amount(statement_value(chosen_annual_cash, investing_cf_keys, col)),
+                        "financingCashFlow": scaled_amount(statement_value(chosen_annual_cash, financing_cf_keys, col)),
+                        "freeCashFlow": scaled_amount(statement_value(chosen_annual_cash, free_cf_keys, col)),
                     }
                 )
 

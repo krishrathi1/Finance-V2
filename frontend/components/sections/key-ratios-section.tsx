@@ -7,7 +7,10 @@ import type { KeyRatioTrendCard, KeyRatioTrends } from "@/lib/types";
 const PERCENTAGE_LABELS = new Set(["ROE", "ROCE", "ROA", "NPM", "NET NPA", "CASA Ratio", "Advance Growth", "Net Interest Margin", "Operating CF Margin"]);
 
 function formatValue(value: number | null, label: string): string {
-  const numeric = Number(value || 0);
+  if (value === null || value === undefined || Number.isNaN(Number(value))) {
+    return "N/A";
+  }
+  const numeric = Number(value);
   if (PERCENTAGE_LABELS.has(label)) {
     return `${numeric.toFixed(2)}%`;
   }
@@ -19,7 +22,9 @@ function averageLabel(label: string): string {
 }
 
 function RatioTrendCard({ card, color }: { card: KeyRatioTrendCard; color: "violet" | "blue" }) {
-  const values = card.series.map((item) => Math.abs(Number(item.value || 0)));
+  const values = card.series
+    .map((item) => (item.value === null || item.value === undefined ? null : Math.abs(Number(item.value))))
+    .filter((value): value is number => value !== null && Number.isFinite(value));
   const maxValue = Math.max(...values, 0);
 
   return (
@@ -30,14 +35,14 @@ function RatioTrendCard({ card, color }: { card: KeyRatioTrendCard; color: "viol
       </p>
       <div className="mt-4 space-y-4">
         {card.series.map((point) => {
-          const value = Number(point.value || 0);
-          const width = maxValue > 0 ? `${(Math.abs(value) / maxValue) * 100}%` : "0%";
+          const value = point.value === null || point.value === undefined ? null : Number(point.value);
+          const width = maxValue > 0 ? `${(Math.abs(value ?? 0) / maxValue) * 100}%` : "0%";
           const barClass =
             color === "blue"
-              ? value < 0
+              ? (value ?? 0) < 0
                 ? "bg-rose-300"
                 : "bg-gradient-to-r from-sky-400 to-blue-500"
-              : value < 0
+              : (value ?? 0) < 0
                 ? "bg-rose-300"
                 : "bg-gradient-to-r from-violet-300 to-violet-500";
 
@@ -48,7 +53,7 @@ function RatioTrendCard({ card, color }: { card: KeyRatioTrendCard; color: "viol
                 <span>{formatValue(value, card.label)}</span>
               </div>
               <div className="h-5 rounded-full bg-bg">
-                <div className={`h-5 rounded-full ${barClass}`} style={{ width }} />
+                {value !== null ? <div className={`h-5 rounded-full ${barClass}`} style={{ width }} /> : null}
               </div>
             </div>
           );
@@ -70,9 +75,15 @@ export function KeyRatiosSection({
   trends?: KeyRatioTrends;
 }) {
   const ratioData: KeyRatioTrends = {
-    profitability: (trends?.profitability || []).filter((card) => card.series.some((point) => Number.isFinite(Number(point.value)))),
-    valuation: (trends?.valuation || []).filter((card) => card.series.some((point) => Number.isFinite(Number(point.value)))),
-    liquidity: (trends?.liquidity || []).filter((card) => card.series.some((point) => Number.isFinite(Number(point.value)))),
+    profitability: (trends?.profitability || []).filter((card) =>
+      card.series.some((point) => point.value !== null && point.value !== undefined && Number.isFinite(Number(point.value)))
+    ),
+    valuation: (trends?.valuation || []).filter((card) =>
+      card.series.some((point) => point.value !== null && point.value !== undefined && Number.isFinite(Number(point.value)))
+    ),
+    liquidity: (trends?.liquidity || []).filter((card) =>
+      card.series.some((point) => point.value !== null && point.value !== undefined && Number.isFinite(Number(point.value)))
+    ),
   };
   const hasAnyData = ratioData.profitability.length || ratioData.valuation.length || ratioData.liquidity.length;
 
