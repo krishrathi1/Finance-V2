@@ -50,6 +50,7 @@ class MarketDataProviders:
         self._trendlyne_map_loaded_at: float = 0.0
         self._trendlyne_reports_cache: dict[str, tuple[float, dict[str, Any] | None]] = {}
         self._trendlyne_equity_meta_map: dict[str, tuple[str, str]] = {}
+        self._trendlyne_name_symbol_map: dict[str, str] = {}
         self._trendlyne_equity_map_loaded_at: float = 0.0
         self._trendlyne_bulk_block_cache: dict[str, tuple[float, dict[str, list[dict[str, Any]]] | None]] = {}
         self._trendlyne_financials_cache: dict[str, tuple[float, dict[str, Any] | None]] = {}
@@ -58,6 +59,9 @@ class MarketDataProviders:
 
     async def search_indian_stocks(self, query: str, limit: int = 25) -> list[dict[str, str]]:
         return await asyncio.to_thread(self._search_indian_stocks_sync, query, limit)
+
+    async def get_bse_index_symbols(self, index_name: str) -> list[str]:
+        return await asyncio.to_thread(self._get_bse_index_symbols_sync, index_name)
 
     @retry(stop=stop_after_attempt(1), wait=wait_exponential(multiplier=0.2, min=0.2, max=1.0))
     async def _get(self, url: str, params: dict[str, Any] | None = None, headers: dict[str, str] | None = None) -> Any:
@@ -531,6 +535,87 @@ class MarketDataProviders:
         matches = [item for item in rows if q in item["symbol"].lower() or q in item["name"].lower()]
         matches.sort(key=score)
         return matches[: max(1, int(limit or 25))]
+
+    def _normalize_company_name(self, value: str) -> str:
+        text = str(value or "").lower()
+        text = text.replace("&", " and ")
+        text = re.sub(r"\b(the|ltd|limited|inc|plc|company|co|corporation|corp|bank|industries|industry|financial|services|service|india|indian)\b", " ", text)
+        text = re.sub(r"[^a-z0-9]+", " ", text)
+        return re.sub(r"\s+", " ", text).strip()
+
+    def _resolve_symbol_from_company_name(self, company_name: str) -> str | None:
+        self._refresh_trendlyne_equity_map_if_needed()
+        normalized_query = self._normalize_company_name(company_name)
+        if not normalized_query:
+            return None
+
+        if not self._trendlyne_name_symbol_map:
+            for symbol, meta in self._trendlyne_equity_meta_map.items():
+                stock_symbol = str(symbol or "").strip().upper()
+                slug = str(meta[1] if isinstance(meta, tuple) and len(meta) > 1 else "").strip()
+                derived_name = self._trendlyne_name_from_slug(slug, stock_symbol)
+                normalized_name = self._normalize_company_name(derived_name)
+                if normalized_name and normalized_name not in self._trendlyne_name_symbol_map:
+                    self._trendlyne_name_symbol_map[normalized_name] = stock_symbol
+
+        exact = self._trendlyne_name_symbol_map.get(normalized_query)
+        if exact:
+            return exact
+
+        candidates: list[tuple[int, int, str]] = []
+        query_tokens = set(normalized_query.split())
+        for normalized_name, symbol in self._trendlyne_name_symbol_map.items():
+            name_tokens = set(normalized_name.split())
+            overlap = len(query_tokens & name_tokens)
+            if overlap <= 0:
+                continue
+            rank = 0 if normalized_name == normalized_query else 1 if normalized_name.startswith(normalized_query) or normalized_query.startswith(normalized_name) else 2
+            candidates.append((rank, -overlap, symbol))
+        if not candidates:
+            return None
+        candidates.sort()
+        return candidates[0][2]
+
+    def _get_bse_index_symbols_sync(self, index_name: str) -> list[str]:
+        key = (index_name or "").strip().upper()
+        url_map = {
+            "BSE SENSEX": "https://www.bseindia.com/sensex/IndicesWatch_Weight.aspx",
+            "S&P BSE BANKEX": "https://www.bseindia.com/sensex/IndicesWatch_Weight.aspx?iname=BANKEX&index_Code=53",
+        }
+        url = url_map.get(key)
+        if not url:
+            return []
+        try:
+            response = requests.get(url, headers=WEB_PAGE_HEADERS, timeout=8)
+            response.raise_for_status()
+            tables = pd.read_html(StringIO(response.text))
+        except Exception:
+            return []
+
+        companies: list[str] = []
+        for table in tables:
+            columns = [str(col).strip().lower() for col in table.columns]
+            if not any("company" in col for col in columns):
+                continue
+            company_col = next((col for col in table.columns if "company" in str(col).strip().lower()), None)
+            if company_col is None:
+                continue
+            for raw in table[company_col].tolist():
+                name = str(raw or "").strip()
+                if name and name.lower() != "company":
+                    companies.append(name)
+            if companies:
+                break
+
+        symbols: list[str] = []
+        seen: set[str] = set()
+        for company in companies:
+            symbol = self._resolve_symbol_from_company_name(company)
+            if not symbol or symbol in seen:
+                continue
+            seen.add(symbol)
+            symbols.append(symbol)
+        return symbols
 
     def _trendlyne_name_from_slug(self, slug: str, symbol: str) -> str:
         cleaned = str(slug or "").strip().strip("/")

@@ -122,9 +122,14 @@ class StockDashboardService:
         canonical = self._canonical_index_name(index_name)
         rows: list[dict[str, Any]] = []
 
-        provider_rows = await self.providers.get_nse_index_constituents(canonical)
-        if provider_rows:
-            rows = provider_rows
+        if canonical in {"BSE SENSEX", "S&P BSE BANKEX"}:
+            bse_symbols = await self.providers.get_bse_index_symbols(canonical)
+            if bse_symbols:
+                rows = await self.get_ticker_tape(bse_symbols)
+        else:
+            provider_rows = await self.providers.get_nse_index_constituents(canonical)
+            if provider_rows:
+                rows = provider_rows
 
         normalized_rows = self._normalize_ticker_rows(rows)
         normalized_rows.sort(key=lambda row: row["changePercent"], reverse=True)
