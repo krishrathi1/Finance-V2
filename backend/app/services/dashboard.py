@@ -354,14 +354,6 @@ class StockDashboardService:
                     data["profile"]["chairman"] = yp["chairman"]
                 if yp.get("previousName"):
                     data["profile"]["previousName"] = yp["previousName"]
-            if yfinance_bundle.get("news"):
-                data["news"] = [
-                    {
-                        **item,
-                        "sentimentScore": self._simple_sentiment_score(f"{item.get('title', '')} {item.get('summary', '')}"),
-                    }
-                    for item in yfinance_bundle["news"]
-                ]
             yf_share = yfinance_bundle.get("shareholding", {})
             if yf_share and (yf_share.get("promoters", 0) > 0 or yf_share.get("fii", 0) > 0):
                 data["shareholding"].update(yf_share)
@@ -378,23 +370,14 @@ class StockDashboardService:
             if fmp_quote.get("name"):
                 data["companyName"] = fmp_quote["name"]
 
-        if news_data:
-            transformed = []
-            for article in news_data[:10]:
-                transformed.append(
-                    {
-                        "title": article.get("title"),
-                        "source": article.get("source", {}).get("name", "News"),
-                        "publishedAt": (article.get("publishedAt") or "")[:10],
-                        "url": article.get("url"),
-                        "summary": article.get("description") or "",
-                        "sentimentScore": self._simple_sentiment_score(
-                            f"{article.get('title', '')} {article.get('description', '')}"
-                        ),
-                    }
-                )
-            if transformed:
-                data["news"] = transformed
+        data["news"] = self._build_company_news(
+            symbol=symbol,
+            company_name=data.get("companyName", ""),
+            sector=data.get("sector", ""),
+            industry=(data.get("profile") or {}).get("industry", ""),
+            yahoo_news=(yfinance_bundle or {}).get("news") if isinstance(yfinance_bundle, dict) else [],
+            api_news=news_data or [],
+        )
 
         if trendlyne_brokerage:
             data["brokerageResearch"] = trendlyne_brokerage
@@ -745,6 +728,178 @@ class StockDashboardService:
         neg = sum(1 for item in negative if item in t)
         score = 0.5 + (pos * 0.08) - (neg * 0.1)
         return round(max(0.0, min(1.0, score)), 2)
+
+    def _news_keywords(self, value: str) -> list[str]:
+        cleaned = re.sub(r"[^a-z0-9 ]+", " ", str(value or "").lower())
+        stop_words = {
+            "ltd",
+            "limited",
+            "india",
+            "bank",
+            "company",
+            "corp",
+            "corporation",
+            "industries",
+            "industry",
+            "services",
+            "financial",
+            "retail",
+            "global",
+            "private",
+            "public",
+            "the",
+            "and",
+        }
+        tokens = []
+        for token in cleaned.split():
+            if len(token) < 4 or token in stop_words:
+                continue
+            if token not in tokens:
+                tokens.append(token)
+        return tokens
+
+    def _score_company_news_relevance(
+        self,
+        symbol: str,
+        company_name: str,
+        sector: str,
+        industry: str,
+        row: dict[str, Any],
+    ) -> tuple[int, str | None]:
+        title = str(row.get("title") or "")
+        summary = str(row.get("summary") or "")
+        url = str(row.get("url") or "")
+        text = f"{title} {summary} {url}".lower()
+        symbol_lower = str(symbol or "").strip().lower()
+        company_lower = str(company_name or "").strip().lower()
+
+        score = 0
+        bucket: str | None = None
+
+        if symbol_lower and re.search(rf"(?<![a-z0-9]){re.escape(symbol_lower)}(?![a-z0-9])", text):
+            score += 7
+            bucket = "stock"
+
+        if company_lower and len(company_lower) >= 6 and company_lower in text:
+            score += 7
+            bucket = "stock"
+
+        company_tokens = self._news_keywords(company_name)
+        token_hits = sum(1 for token in company_tokens if token in text)
+        if token_hits >= 2:
+            score += 5
+            bucket = "stock"
+        elif token_hits == 1:
+            score += 2
+            bucket = bucket or "stock"
+
+        sector_tokens = self._news_keywords(sector)
+        industry_tokens = self._news_keywords(industry)
+        sector_hits = sum(1 for token in sector_tokens if token in text)
+        industry_hits = sum(1 for token in industry_tokens if token in text)
+        if bucket != "stock":
+            if industry_hits >= 1:
+                score += 3
+                bucket = "industry"
+            elif sector_hits >= 1:
+                score += 2
+                bucket = "sector"
+
+        return score, bucket
+
+    def _build_company_news(
+        self,
+        symbol: str,
+        company_name: str,
+        sector: str,
+        industry: str,
+        yahoo_news: list[dict[str, Any]] | None,
+        api_news: list[dict[str, Any]] | None,
+    ) -> list[dict[str, Any]]:
+        candidates: list[dict[str, Any]] = []
+
+        if isinstance(yahoo_news, list):
+            for item in yahoo_news:
+                if not isinstance(item, dict):
+                    continue
+                candidates.append(
+                    {
+                        "title": str(item.get("title") or "").strip(),
+                        "source": str(item.get("source") or "Yahoo Finance").strip() or "Yahoo Finance",
+                        "publishedAt": str(item.get("publishedAt") or "")[:10],
+                        "url": str(item.get("url") or "").strip(),
+                        "summary": str(item.get("summary") or "").strip(),
+                    }
+                )
+
+        if isinstance(api_news, list):
+            for article in api_news:
+                if not isinstance(article, dict):
+                    continue
+                candidates.append(
+                    {
+                        "title": str(article.get("title") or "").strip(),
+                        "source": str((article.get("source") or {}).get("name") or "News").strip() or "News",
+                        "publishedAt": str(article.get("publishedAt") or "")[:10],
+                        "url": str(article.get("url") or "").strip(),
+                        "summary": str(article.get("description") or "").strip(),
+                    }
+                )
+
+        ranked: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for row in candidates:
+            title = str(row.get("title") or "").strip()
+            url = str(row.get("url") or "").strip()
+            if not title:
+                continue
+            score, bucket = self._score_company_news_relevance(symbol, company_name, sector, industry, row)
+            if score <= 0:
+                continue
+            key = (url or title).lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            ranked.append(
+                {
+                    **row,
+                    "sentimentScore": self._simple_sentiment_score(f"{title} {row.get('summary', '')}"),
+                    "_relevance": score,
+                    "_bucket": bucket or "stock",
+                }
+            )
+
+        def published_sort_value(item: dict[str, Any]) -> datetime:
+            raw = str(item.get("publishedAt") or "").strip()
+            for fmt in ("%Y-%m-%d", "%Y-%m-%dT%H:%M:%S"):
+                try:
+                    probe = raw[:19] if "T" in fmt else raw[:10]
+                    return datetime.strptime(probe, fmt)
+                except Exception:
+                    continue
+            try:
+                return datetime.fromisoformat(raw.replace("Z", "+00:00"))
+            except Exception:
+                return datetime.min
+
+        stock_rows = [row for row in ranked if row.get("_bucket") == "stock"]
+        fallback_rows = [row for row in ranked if row.get("_bucket") != "stock"]
+        selected = stock_rows if stock_rows else fallback_rows
+        selected.sort(key=lambda item: (int(item.get("_relevance", 0)), published_sort_value(item)), reverse=True)
+
+        cleaned: list[dict[str, Any]] = []
+        for row in selected[:10]:
+            cleaned.append(
+                {
+                    "title": row.get("title"),
+                    "source": row.get("source"),
+                    "publishedAt": row.get("publishedAt"),
+                    "url": row.get("url"),
+                    "summary": row.get("summary"),
+                    "sentimentScore": row.get("sentimentScore"),
+                }
+            )
+        return cleaned
 
     def _canonical_index_name(self, index_name: str) -> str:
         raw = (index_name or "").strip().upper()
