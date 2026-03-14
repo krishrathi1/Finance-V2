@@ -18,7 +18,7 @@ export function ReturnsCalculator({
   mlConfidence?: number;
   upProbability?: number;
 }) {
-  const [amountInput, setAmountInput] = useState("100000");
+  const [amountInput, setAmountInput] = useState("");
   const amount = useMemo(() => {
     const numeric = Number(amountInput.replace(/[^\d]/g, ""));
     return Number.isFinite(numeric) && numeric > 0 ? numeric : 0;
@@ -64,15 +64,19 @@ export function ReturnsCalculator({
           <input
             type="text"
             inputMode="numeric"
-            className="mt-1 w-full min-w-0 bg-transparent text-2xl font-semibold outline-none"
+            className="mt-1 w-full min-w-0 bg-transparent text-2xl font-semibold outline-none focus:shadow-none"
             value={amountInput}
+            placeholder="Enter amount"
             onChange={(e) => {
               const digitsOnly = e.target.value.replace(/[^\d]/g, "");
-              setAmountInput(digitsOnly.replace(/^0+(?=\d)/, ""));
+              setAmountInput(digitsOnly ? digitsOnly.replace(/^0+(?=\d)/, "") : "");
             }}
+            onFocus={(e) => e.currentTarget.select()}
           />
           <span className="mt-1 text-xs text-muted">
-            Approx. {Math.floor(sharesBought).toLocaleString()} shares @ {formatCurrency(currentPrice)}
+            {amount > 0
+              ? `Approx. ${Math.floor(sharesBought).toLocaleString()} shares @ ${formatCurrency(currentPrice)}`
+              : `Enter an amount to simulate shares at ${formatCurrency(currentPrice)}`}
           </span>
         </label>
       </div>
