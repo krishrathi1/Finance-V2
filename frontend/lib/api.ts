@@ -112,6 +112,40 @@ export async function sendAiQuestion(symbol: string, question: string): Promise<
   }
 }
 
+export async function analyzeNewsItem(
+  symbol: string,
+  article: { title: string; summary: string; source: string; publishedAt: string; sentimentScore: number }
+): Promise<{ overview: string; marketImpact: string; watchpoint: string; source: "gemini" | "fallback" }> {
+  try {
+    const res = await fetch(`${PUBLIC_BASE}/api/v1/stocks/${symbol}/news-analysis`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: article.title,
+        summary: article.summary,
+        source: article.source,
+        published_at: article.publishedAt,
+        sentiment_score: article.sentimentScore
+      })
+    });
+    if (!res.ok) throw new Error("news analysis failed");
+    const payload = await res.json();
+    return {
+      overview: payload.overview || "No analysis available.",
+      marketImpact: payload.market_impact || payload.marketImpact || "No impact view available.",
+      watchpoint: payload.watchpoint || "No watchpoint available.",
+      source: payload.source === "gemini" ? "gemini" : "fallback"
+    };
+  } catch {
+    return {
+      overview: article.summary || article.title || "No analysis available.",
+      marketImpact: "AI analysis is unavailable right now, so treat this update as one input rather than a full conclusion.",
+      watchpoint: "Check the next result, filing, or management comment before making a decision.",
+      source: "fallback"
+    };
+  }
+}
+
 export async function fetchReturnsProjection(symbol: string, amount: number, cagr: number, years: number) {
   const url = `${PUBLIC_BASE}/api/v1/stocks/${symbol}/returns-projection?amount=${amount}&cagr=${cagr}&years=${years}`;
   const res = await fetch(url, { cache: "no-store" });

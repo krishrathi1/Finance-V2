@@ -74,7 +74,7 @@ async def main():
 
     # Gemini
     gemini_key = os.getenv("GEMINI_API_KEY")
-    gemini_model = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
+    gemini_model = os.getenv("GEMINI_MODEL", "gemini-3-flash-preview")
     if gemini_key:
         await test_api(
             "Gemini API", 

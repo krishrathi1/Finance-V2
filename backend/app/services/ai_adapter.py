@@ -1,4 +1,5 @@
 from typing import Any
+import json
 
 from app.core.config import get_settings
 
@@ -118,6 +119,17 @@ class AIAdapter:
                 pass
         return "{}"
 
+    async def analyze_news(self, symbol: str, article: dict[str, Any], context: dict[str, Any]) -> tuple[dict[str, str], str]:
+        if self._gemini and settings.gemini_api_key:
+            try:
+                raw = await self._gemini.analyze_news(symbol=symbol, article=article, context=context)
+                parsed = self._parse_news_analysis(raw)
+                if parsed:
+                    return parsed, "gemini"
+            except Exception:
+                pass
+        return self._offline_news_analysis(symbol=symbol, article=article), "fallback"
+
     def _offline_chat_response(self, symbol: str, context: dict[str, Any], live_failed: bool) -> str:
         smart = (context.get("smartScore") or {}) if isinstance(context, dict) else {}
         risk = (context.get("riskScore") or {}) if isinstance(context, dict) else {}
@@ -145,3 +157,62 @@ class AIAdapter:
             f"Right now {pe_text}, and {dividend_text}. "
             "Before taking a position, check debt trend, margin stability, and profit consistency."
         )
+
+    def _parse_news_analysis(self, raw: str) -> dict[str, str]:
+        text = str(raw or "").strip()
+        if not text:
+            return {}
+        match = None
+        try:
+            import re
+
+            match = re.search(r"\{.*\}", text, flags=re.DOTALL)
+        except Exception:
+            match = None
+        candidate = match.group(0) if match else text
+        try:
+            parsed = json.loads(candidate)
+        except Exception:
+            return {}
+        if not isinstance(parsed, dict):
+            return {}
+        overview = " ".join(str(parsed.get("overview") or "").split())
+        market_impact = " ".join(str(parsed.get("marketImpact") or parsed.get("market_impact") or "").split())
+        watchpoint = " ".join(str(parsed.get("watchpoint") or "").split())
+        if not (overview and market_impact and watchpoint):
+            return {}
+        return {
+            "overview": overview,
+            "market_impact": market_impact,
+            "watchpoint": watchpoint,
+        }
+
+    def _offline_news_analysis(self, symbol: str, article: dict[str, Any]) -> dict[str, str]:
+        title = " ".join(str(article.get("title") or "").split())
+        summary = " ".join(str(article.get("summary") or "").split())
+        source = str(article.get("source") or "the article").strip()
+        sentiment_value = float(article.get("sentimentScore", 0.5) or 0.5)
+
+        if sentiment_value >= 0.6:
+            tone = "The tone looks broadly positive for the stock, but it still needs confirmation in future updates."
+        elif sentiment_value <= 0.45:
+            tone = "The tone looks cautious, so the market may focus on risks until management or results add clarity."
+        else:
+            tone = "The tone looks mixed, so this news alone is not enough to change the full stock view."
+
+        if summary:
+            overview = summary if len(summary) <= 180 else f"{summary[:177].rstrip()}..."
+        elif title:
+            overview = f"{source} reports: {title}."
+        else:
+            overview = f"This update on {symbol.upper()} is available, but the article details are limited."
+
+        watchpoint = (
+            "Watch the next company filing, management comment, or quarterly result to see whether this headline changes earnings or risk."
+        )
+
+        return {
+            "overview": overview,
+            "market_impact": tone,
+            "watchpoint": watchpoint,
+        }

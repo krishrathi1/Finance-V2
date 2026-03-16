@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException, Query
 
 from app.core.cache import redis_cache
 from app.core.config import get_settings
-from app.schemas.stock import ChatRequest, ChatResponse, ReportResponse
+from app.schemas.stock import ChatRequest, ChatResponse, NewsAnalysisRequest, NewsAnalysisResponse, ReportResponse
 from app.services.ai_adapter import AIAdapter
 from app.services.dashboard import StockDashboardService
 
@@ -503,6 +503,28 @@ async def chat_with_ai(symbol: str, payload: ChatRequest) -> ChatResponse:
     dashboard = await dashboard_service.get_dashboard(symbol=symbol)
     answer, source = await ai_adapter.chat(symbol=symbol, question=payload.question, context=dashboard)
     return ChatResponse(answer=answer, source=source)
+
+
+@router.post("/{symbol}/news-analysis", response_model=NewsAnalysisResponse)
+async def analyze_news_item(symbol: str, payload: NewsAnalysisRequest) -> NewsAnalysisResponse:
+    context: dict = {"symbol": symbol.upper()}
+    try:
+        context = await asyncio.wait_for(dashboard_service.get_dashboard(symbol=symbol), timeout=20)
+    except Exception:
+        context = {"symbol": symbol.upper()}
+
+    analysis, source = await ai_adapter.analyze_news(
+        symbol=symbol,
+        article={
+            "title": payload.title,
+            "summary": payload.summary,
+            "source": payload.source,
+            "publishedAt": payload.published_at,
+            "sentimentScore": payload.sentiment_score,
+        },
+        context=context,
+    )
+    return NewsAnalysisResponse(source=source, **analysis)
 
 
 @router.get("/{symbol}/research-report", response_model=ReportResponse)

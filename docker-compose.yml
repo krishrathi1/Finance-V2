@@ -22,7 +22,7 @@ services:
       context: ./backend
     container_name: ffa-backend
     env_file:
-      - ./backend/.env.example
+      - ./backend/.env
     environment:
       DATABASE_URL: postgresql+asyncpg://ffa:ffa@postgres:5432/financial_forensics
       REDIS_URL: redis://redis:6379/0

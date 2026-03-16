@@ -180,7 +180,7 @@ export default async function StockDetailsPage({ params }: Props) {
             />
           </section>
 
-          <NewsSection news={data.news} />
+          <NewsSection symbol={symbol} news={data.news} />
         </section>
       </div>
 

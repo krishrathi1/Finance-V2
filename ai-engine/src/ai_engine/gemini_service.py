@@ -5,13 +5,14 @@ import httpx
 
 
 class GeminiService:
-    def __init__(self, api_key: str, model: str = "gemini-1.5-flash") -> None:
+    def __init__(self, api_key: str, model: str = "gemini-3-flash-preview") -> None:
         self.api_key = api_key
         self.model = model
         self.base_url = "https://generativelanguage.googleapis.com/v1beta/models"
         self.timeout = httpx.Timeout(25.0, connect=5.0)
         self.fallback_models = [
             model,
+            "gemini-3-flash-preview",
             "gemini-2.0-flash",
             "gemini-2.0-flash-lite",
             "gemini-1.5-flash-latest",
@@ -36,6 +37,10 @@ class GeminiService:
 
     async def extract_profile_details(self, symbol: str, context: dict[str, Any]) -> str:
         prompt = self._build_profile_prompt(symbol=symbol, context=context)
+        return await self._generate(prompt)
+
+    async def analyze_news(self, symbol: str, article: dict[str, Any], context: dict[str, Any]) -> str:
+        prompt = self._build_news_analysis_prompt(symbol=symbol, article=article, context=context)
         return await self._generate(prompt)
 
     async def _generate(self, prompt: str) -> str:
@@ -254,4 +259,36 @@ class GeminiService:
             "2) If a field is uncertain, use null.\n"
             "3) Do not invent facts.\n"
             "4) Return JSON only, no markdown."
+        )
+
+    def _build_news_analysis_prompt(self, symbol: str, article: dict[str, Any], context: dict[str, Any]) -> str:
+        compact_context = json.dumps(
+            {
+                "symbol": context.get("symbol", symbol),
+                "companyName": context.get("companyName"),
+                "sector": context.get("sector"),
+                "smartScore": (context.get("smartScore") or {}).get("label") if isinstance(context.get("smartScore"), dict) else None,
+                "riskScore": (context.get("riskScore") or {}).get("label") if isinstance(context.get("riskScore"), dict) else None,
+                "article": {
+                    "title": article.get("title"),
+                    "summary": article.get("summary"),
+                    "source": article.get("source"),
+                    "publishedAt": article.get("publishedAt"),
+                    "sentimentScore": article.get("sentimentScore"),
+                },
+            }
+        )
+        return (
+            "You are Financial Forensics AI, summarizing one stock news item for a retail investor.\n"
+            f"Stock symbol: {symbol}\n"
+            f"Context JSON: {compact_context}\n\n"
+            "Task: Return strict JSON only with these keys:\n"
+            '{"overview": string, "marketImpact": string, "watchpoint": string}\n'
+            "Rules:\n"
+            "1) Use only the facts visible in the context JSON.\n"
+            "2) Keep each field to 1 short sentence.\n"
+            "3) Use simple, clear language.\n"
+            "4) Do not give guarantees or price targets.\n"
+            "5) If the article is vague, say what is still unclear.\n"
+            "6) Return JSON only, no markdown."
         )
