@@ -1,0 +1,1 @@
+"use strict";exports.id=829,exports.ids=[829],exports.modules={5829:(e,t,s)=>{s.r(t),s.d(t,{QuarterlyResultsSection:()=>r});let r=(0,s(8570).createProxy)(String.raw`C:\Users\KRISH\Desktop\Finance\frontend\components\sections\quarterly-results-section.tsx#QuarterlyResultsSection`)}};

@@ -1,0 +1,1 @@
+"use strict";exports.id=29,exports.ids=[29],exports.modules={2029:(e,o,s)=>{s.r(o),s.d(o,{ShareholdingSection:()=>t});let t=(0,s(8570).createProxy)(String.raw`C:\Users\KRISH\Desktop\Finance\frontend\components\sections\shareholding-section.tsx#ShareholdingSection`)}};
