@@ -10,6 +10,7 @@ from app.core.config import get_settings
 from app.schemas.stock import ChatRequest, ChatResponse, NewsAnalysisRequest, NewsAnalysisResponse, ReportResponse
 from app.services.ai_adapter import AIAdapter
 from app.services.dashboard import StockDashboardService
+from app.services.sample_data import get_sample_dashboard
 
 
 router = APIRouter(prefix="/stocks", tags=["stocks"])
@@ -495,7 +496,17 @@ async def get_stock_dashboard(
         if stale:
             asyncio.create_task(_refresh_dashboard_cache(symbol=symbol, timeframe=timeframe, cache_key=cache_key, stale_key=stale_key))
             return {"cached": True, "stale": True, "data": stale}
-        raise HTTPException(status_code=504, detail="Dashboard data source timed out or returned an error") from exc
+        fallback = get_sample_dashboard(symbol=symbol)
+        fallback["timeframe"] = timeframe
+        fallback = await _enrich_score_explanations(symbol=symbol, data=fallback, allow_gemini=False)
+        await redis_cache.set_json(stale_key, fallback, ttl_seconds=60 * 30)
+        return {
+            "cached": True,
+            "stale": True,
+            "fallback": True,
+            "warning": "Live dashboard data timed out. Showing fallback data.",
+            "data": fallback,
+        }
 
 
 @router.post("/{symbol}/chat", response_model=ChatResponse)

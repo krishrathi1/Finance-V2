@@ -513,7 +513,23 @@ class StockDashboardService:
         company_name = str(data.get("companyName") or "").strip() if isinstance(data, dict) else ""
         symbol = str(data.get("symbol") or "").strip().upper() if isinstance(data, dict) else ""
         has_real_company_name = bool(company_name and company_name.upper() != symbol)
-        return bool(cmp_value and cmp_value > 0 and isinstance(history, list) and len(history) >= 30 and has_real_company_name)
+        has_history = isinstance(history, list) and len(history) >= 30
+        has_partial_history = isinstance(history, list) and len(history) >= 2
+        news = data.get("news") if isinstance(data, dict) else []
+        documents = data.get("documents") if isinstance(data, dict) else {}
+        corporate_actions = data.get("corporateActions") if isinstance(data, dict) else {}
+        has_documents = any(bool(documents.get(key)) for key in ["annualReports", "investorPresentations", "creditRatings", "exchangeFilings"]) if isinstance(documents, dict) else False
+        has_corporate_actions = any(bool(corporate_actions.get(key)) for key in ["boardMeetings", "dividends", "bonusIssues", "stockSplits", "insiderTrades"]) if isinstance(corporate_actions, dict) else False
+        has_news = isinstance(news, list) and len(news) > 0
+
+        # On hosted environments some providers are slower or intermittently blocked.
+        # Return a partial dashboard when we still have meaningful live data instead of hard-failing the whole page.
+        return bool(
+            (cmp_value and cmp_value > 0 and (has_history or has_partial_history or has_real_company_name))
+            or has_news
+            or has_documents
+            or has_corporate_actions
+        )
 
     async def _fetch_provider_data(self, symbol: str, timeframe: str = "5Y") -> tuple:
         history_days = max(self._timeframe_days(timeframe), 1825)
