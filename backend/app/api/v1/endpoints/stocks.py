@@ -484,7 +484,7 @@ async def get_stock_dashboard(
         return {"cached": True, "data": cached}
 
     try:
-        data = await asyncio.wait_for(dashboard_service.get_dashboard(symbol=symbol, timeframe=timeframe), timeout=45)
+        data = await asyncio.wait_for(dashboard_service.get_dashboard(symbol=symbol, timeframe=timeframe), timeout=12)
         data = await _enrich_score_explanations(symbol=symbol, data=data, allow_gemini=False)
         await redis_cache.set_json(cache_key, data, ttl_seconds=settings.cache_ttl_seconds)
         await redis_cache.set_json(stale_key, data, ttl_seconds=60 * 60 * 24 * 7)
@@ -496,6 +496,7 @@ async def get_stock_dashboard(
         if stale:
             asyncio.create_task(_refresh_dashboard_cache(symbol=symbol, timeframe=timeframe, cache_key=cache_key, stale_key=stale_key))
             return {"cached": True, "stale": True, "data": stale}
+        asyncio.create_task(_refresh_dashboard_cache(symbol=symbol, timeframe=timeframe, cache_key=cache_key, stale_key=stale_key))
         fallback = get_sample_dashboard(symbol=symbol)
         fallback["timeframe"] = timeframe
         fallback = await _enrich_score_explanations(symbol=symbol, data=fallback, allow_gemini=False)

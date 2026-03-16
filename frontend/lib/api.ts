@@ -4,6 +4,14 @@ const INTERNAL_BASE = process.env.INTERNAL_API_BASE || "http://127.0.0.1:8000";
 const PUBLIC_BASE = process.env.NEXT_PUBLIC_API_BASE || "";
 const memoryCache = new Map<string, { at: number; data: unknown }>();
 
+export type DashboardEnvelope = {
+  data: DashboardData;
+  cached?: boolean;
+  stale?: boolean;
+  fallback?: boolean;
+  warning?: string;
+};
+
 async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -36,15 +44,15 @@ function isAbortError(error: unknown) {
   return String(error).toLowerCase().includes("aborted");
 }
 
-export async function fetchDashboard(symbol: string): Promise<DashboardData> {
+export async function fetchDashboardEnvelope(symbol: string): Promise<DashboardEnvelope> {
   const key = `dashboard:${symbol.toUpperCase()}:5Y`;
-  const fresh = getFreshCache<DashboardData>(key, 60_000);
+  const fresh = getFreshCache<DashboardEnvelope>(key, 60_000);
   if (fresh) return fresh;
 
-  const stale = getStaleCache<DashboardData>(key);
+  const stale = getStaleCache<DashboardEnvelope>(key);
   const attempts = [
-    { timeoutMs: 30_000, refresh: false },
-    { timeoutMs: 60_000, refresh: true }
+    { timeoutMs: 15_000, refresh: false },
+    { timeoutMs: 20_000, refresh: true }
   ];
   let lastError: unknown = null;
 
@@ -61,9 +69,15 @@ export async function fetchDashboard(symbol: string): Promise<DashboardData> {
         throw new Error(`Dashboard request failed: ${res.status}`);
       }
       const payload = await res.json();
-      const data = payload.data as DashboardData;
-      setCache(key, data);
-      return data;
+      const envelope = {
+        data: payload.data as DashboardData,
+        cached: Boolean(payload.cached),
+        stale: Boolean(payload.stale),
+        fallback: Boolean(payload.fallback),
+        warning: typeof payload.warning === "string" ? payload.warning : undefined
+      } satisfies DashboardEnvelope;
+      setCache(key, envelope);
+      return envelope;
     } catch (error) {
       lastError = error;
     }
@@ -74,6 +88,11 @@ export async function fetchDashboard(symbol: string): Promise<DashboardData> {
     throw new Error("Dashboard request timed out. Please retry in a few seconds.");
   }
   throw (lastError instanceof Error ? lastError : new Error("Dashboard request failed"));
+}
+
+export async function fetchDashboard(symbol: string): Promise<DashboardData> {
+  const envelope = await fetchDashboardEnvelope(symbol);
+  return envelope.data;
 }
 
 export async function searchStocks(query: string): Promise<Array<{ symbol: string; name: string; exchange: string }>> {

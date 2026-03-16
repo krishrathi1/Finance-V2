@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import { StockSearch } from "@/components/stock-search";
 import { CompanyOverview } from "@/components/sections/company-overview";
 import { CorporateActionsSection } from "@/components/sections/corporate-actions-section";
+import { DashboardAutoRefresh } from "@/components/sections/dashboard-auto-refresh";
 import { DocumentsSection } from "@/components/sections/documents-section";
 import { KeyRatiosSection } from "@/components/sections/key-ratios-section";
 import { MetricsGrid } from "@/components/sections/metrics-grid";
@@ -15,7 +16,7 @@ import { RiskScore } from "@/components/sections/risk-score";
 import { SmartScore } from "@/components/sections/smart-score";
 import { StockSectionTabs } from "@/components/sections/stock-section-tabs";
 import { TechnicalsSection } from "@/components/sections/technicals-section";
-import { fetchDashboard } from "@/lib/api";
+import { fetchDashboardEnvelope } from "@/lib/api";
 
 const PriceSidebar = dynamic(() => import("@/components/sections/price-sidebar").then((m) => m.PriceSidebar), { ssr: false });
 const FinancialsSection = dynamic(() => import("@/components/sections/financials-section").then((m) => m.FinancialsSection), { ssr: false });
@@ -36,8 +37,13 @@ export default async function StockDetailsPage({ params }: Props) {
   if (!symbol) notFound();
 
   let data;
+  let refreshWarning = "";
+  let shouldAutoRefresh = false;
   try {
-    data = await fetchDashboard(symbol);
+    const envelope = await fetchDashboardEnvelope(symbol);
+    data = envelope.data;
+    refreshWarning = envelope.warning || "";
+    shouldAutoRefresh = Boolean(envelope.fallback || envelope.stale);
   } catch (error) {
     return (
       <div className="stagger-fade space-y-4">
@@ -76,6 +82,8 @@ export default async function StockDetailsPage({ params }: Props) {
           <StockSearch />
         </div>
       </div>
+
+      <DashboardAutoRefresh symbol={symbol} active={shouldAutoRefresh} warning={refreshWarning} />
 
       <div className="grid gap-4 2xl:grid-cols-[minmax(300px,360px)_minmax(0,1fr)]">
         <aside className="min-w-0">
