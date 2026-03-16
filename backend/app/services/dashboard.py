@@ -531,10 +531,10 @@ class StockDashboardService:
             (self.providers.get_trendlyne_brokerage(symbol), 6),
             (self.providers.get_trendlyne_financials(symbol), 8),
             (self.providers.get_trendlyne_shareholding(symbol), 6),
-            (self.providers.get_trendlyne_documents(symbol), 6),
+            (self.providers.get_trendlyne_documents(symbol), 9),
         ]
         tasks = [asyncio.create_task(self._safe_provider_call(coro, timeout=timeout)) for coro, timeout in calls]
-        done, pending = await asyncio.wait(tasks, timeout=11)
+        done, pending = await asyncio.wait(tasks, timeout=12)
         for task in pending:
             task.cancel()
         results: list[Any | None] = []

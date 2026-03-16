@@ -1,6 +1,7 @@
 import { fileURLToPath } from "node:url";
 
 const stripSourcemapLoader = fileURLToPath(new URL("./loaders/strip-sourcemap-url-loader.cjs", import.meta.url));
+const apiBase = (process.env.INTERNAL_API_BASE || process.env.NEXT_PUBLIC_API_BASE || "http://127.0.0.1:8000").replace(/\/$/, "");
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
@@ -30,7 +31,8 @@ const nextConfig = {
     return [
       {
         source: '/api/:path*',
-        destination: 'http://127.0.0.1:8000/api/:path*' // Proxy to Backend
+        // Keep local dev working while allowing Cloudflare/Vercel builds to point at the hosted API.
+        destination: `${apiBase}/api/:path*`
       }
     ]
   }

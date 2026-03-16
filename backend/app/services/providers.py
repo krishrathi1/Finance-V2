@@ -8,7 +8,7 @@ import re
 import time
 from datetime import datetime, timedelta
 from typing import Any
-from urllib.parse import quote_plus, urlparse
+from urllib.parse import quote_plus, urljoin, urlparse
 from xml.etree import ElementTree as ET
 
 import httpx
@@ -38,6 +38,7 @@ WEB_PAGE_HEADERS = {
     "accept-language": "en-US,en;q=0.9",
     "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
 }
+TRENDLYNE_BASE_URL = "https://trendlyne.com"
 
 
 class MarketDataProviders:
@@ -982,17 +983,24 @@ class MarketDataProviders:
                 documents_url,
                 headers={**WEB_PAGE_HEADERS, "referer": f"https://trendlyne.com/fundamentals/documents/{stock_id}/{key}/{slug}/"},
                 timeout=15,
+                allow_redirects=True,
             )
             docs_html.raise_for_status()
 
-            filings_html = requests.get(
-                filings_url,
-                headers={**WEB_PAGE_HEADERS, "referer": "https://trendlyne.com/"},
-                timeout=15,
-            )
-            filings_html.raise_for_status()
+            filings_html_text = ""
+            try:
+                filings_html = requests.get(
+                    filings_url,
+                    headers={**WEB_PAGE_HEADERS, "referer": "https://trendlyne.com/"},
+                    timeout=12,
+                    allow_redirects=True,
+                )
+                filings_html.raise_for_status()
+                filings_html_text = filings_html.text
+            except Exception:
+                filings_html_text = ""
 
-            parsed = self._parse_trendlyne_documents(docs_html.text, filings_html.text)
+            parsed = self._parse_trendlyne_documents(docs_html.text, filings_html_text)
             self._trendlyne_documents_cache[key] = (now, parsed)
             return parsed
         except Exception:
@@ -1001,11 +1009,15 @@ class MarketDataProviders:
     def _parse_trendlyne_documents(self, docs_html: str, filings_html: str) -> dict[str, Any]:
         soup = BeautifulSoup(docs_html, "html.parser")
 
+        def absolute_url(url: str) -> str:
+            value = str(url or "").strip()
+            return urljoin(TRENDLYNE_BASE_URL, value) if value else ""
+
         def unique_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
             output: list[dict[str, Any]] = []
             seen: set[str] = set()
             for row in rows:
-                url = str(row.get("url") or "").strip()
+                url = absolute_url(str(row.get("url") or "").strip())
                 title = " ".join(str(row.get("title") or "").split())
                 if not title or not url:
                     continue
@@ -1017,25 +1029,45 @@ class MarketDataProviders:
             return output
 
         def parse_annual_reports() -> list[dict[str, Any]]:
-            pane = soup.select_one('.tab-pane[data-targetid="annualreport"]')
+            pane = (
+                soup.select_one('.tab-pane[data-targetid="annualreport"]')
+                or soup.select_one("#annualreport")
+                or soup.select_one('[data-targetid*="annualreport"]')
+            )
             if not pane:
                 return []
             rows: list[dict[str, Any]] = []
-            for card in pane.select(".annual-reports-card"):
+            for card in pane.select(".annual-reports-card, .card, .document-card, li"):
                 title_el = card.select_one(".title")
                 link_el = card.select_one('a[href*="get-document"]')
+                if not link_el:
+                    link_el = card.select_one('a[href*="/posts/"], a[href$=".pdf"], a[href*="/document/"]')
                 title = " ".join(title_el.get_text(" ", strip=True).split()) if title_el else ""
+                if not title and link_el:
+                    title = " ".join(link_el.get_text(" ", strip=True).split())
                 href = link_el.get("href", "").strip() if link_el else ""
+                if title and href:
+                    rows.append({"title": title, "url": href})
+            if rows:
+                return unique_rows(rows)
+
+            for link_el in pane.select('a[href*="get-document"], a[href*="/posts/"], a[href$=".pdf"], a[href*="/document/"]'):
+                title = " ".join(link_el.get_text(" ", strip=True).split())
+                href = link_el.get("href", "").strip()
                 if title and href:
                     rows.append({"title": title, "url": href})
             return unique_rows(rows)
 
         def parse_card_pane(target_id: str) -> list[dict[str, Any]]:
-            pane = soup.select_one(f'.tab-pane[data-targetid="{target_id}"]')
+            pane = (
+                soup.select_one(f'.tab-pane[data-targetid="{target_id}"]')
+                or soup.select_one(f"#{target_id}")
+                or soup.select_one(f'[data-targetid*="{target_id}"]')
+            )
             if not pane:
                 return []
             rows: list[dict[str, Any]] = []
-            for card in pane.select(".earnings-template-card, .credit-ratings-card"):
+            for card in pane.select(".earnings-template-card, .credit-ratings-card, .card, .document-card, li"):
                 title = ""
                 link = ""
                 header_link = card.select_one(".main-header a[href]")
@@ -1043,12 +1075,30 @@ class MarketDataProviders:
                     title = " ".join(header_link.get_text(" ", strip=True).split())
                 pdf_link = card.select_one('a[href*="get-document"]')
                 post_link = card.select_one('a[href*="/posts/"]')
-                link = (pdf_link.get("href", "").strip() if pdf_link else "") or (post_link.get("href", "").strip() if post_link else "")
+                raw_link = (
+                    (pdf_link.get("href", "").strip() if pdf_link else "")
+                    or (post_link.get("href", "").strip() if post_link else "")
+                )
+                if not raw_link:
+                    fallback_link = card.select_one('a[href$=".pdf"], a[href*="/document/"]')
+                    raw_link = fallback_link.get("href", "").strip() if fallback_link else ""
+                link = raw_link
+                if not title:
+                    fallback_title_el = card.select_one(".title, .main-header, a[href]")
+                    title = " ".join(fallback_title_el.get_text(" ", strip=True).split()) if fallback_title_el else ""
                 if title and link:
                     rows.append({"title": title, "url": link})
+            if rows:
+                return unique_rows(rows)
+
+            for link_el in pane.select('a[href*="get-document"], a[href*="/posts/"], a[href$=".pdf"], a[href*="/document/"]'):
+                title = " ".join(link_el.get_text(" ", strip=True).split())
+                href = link_el.get("href", "").strip()
+                if title and href:
+                    rows.append({"title": title, "url": href})
             return unique_rows(rows)
 
-        filings_soup = BeautifulSoup(filings_html, "html.parser")
+        filings_soup = BeautifulSoup(filings_html or "", "html.parser")
         exchange_rows: list[dict[str, Any]] = []
         for block in filings_soup.select("div.card-block.p-x-0"):
             title = " ".join(block.get_text(" ", strip=True).split())

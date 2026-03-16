@@ -1,6 +1,7 @@
 # Node
 frontend/node_modules
 frontend/.next
+frontend/.open-next
 frontend/.turbo
 frontend/dev-server.log
 frontend/*.tsbuildinfo
