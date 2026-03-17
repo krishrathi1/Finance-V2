@@ -1,51 +1,81 @@
+# Render Blueprint Configuration
+# This file automates deployment for your Postgres DB, Redis Cache, FastAPI Backend, and Next.js Frontend.
+# Documentation: https://render.com/docs/blueprints
+
+databases:
+  - name: financial_forensics_db
+    databaseName: financial_forensics
+    user: ffa
+    plan: free
+
 services:
+  # 1. KeyValue Storage (Valkey/Redis-compatible)
+  - type: keyvalue
+    name: redis-cache
+    plan: free
+    ipAllowList: [] # Private network only
+
+  # 2. Backend Web Service (FastAPI)
   - type: web
-    name: financial-forensics-backend
-    runtime: python
-    plan: starter
-    healthCheckPath: /health
-    buildCommand: pip install -r backend/requirements.txt && pip install -r ai-engine/requirements.txt
+    name: backend
+    env: python
+    buildCommand: cd backend && pip install -r requirements.txt
     startCommand: cd backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    plan: free
     envVars:
-      - key: APP_ENV
-        value: production
-      - key: APP_DEBUG
-        value: "false"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: financial_forensics_db
+          property: connectionString
       - key: REDIS_URL
         fromService:
           type: keyvalue
-          name: financial-forensics-cache
+          name: redis-cache
           property: connectionString
-      - key: CORS_ORIGINS
-        value: http://localhost:3000,https://myfinance.live,https://www.myfinance.live
-      - key: CORS_ORIGIN_REGEX
-        value: ^https://.*\.(vercel\.app|onrender\.com)$
+      # Application Configuration
+      - key: APP_NAME
+        value: "Financial Forensics AI API"
+      - key: APP_ENV
+        value: "production"
+      - key: APP_DEBUG
+        value: "false"
+      - key: PYTHONPATH
+        value: "/opt/render/project/src:/opt/render/project/src/ai-engine/src"
+      # Load secret group
+      - fromGroup: finance-ai-secrets
+
+  # 3. Frontend Web Service (Next.js)
+  - type: web
+    name: frontend
+    env: node
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    startCommand: npm start -- -p $PORT
+    plan: free
+    envVars:
+      - key: NEXT_PUBLIC_API_BASE
+        fromService:
+          type: web
+          name: backend
+          property: url
+
+envGroups:
+  - name: finance-ai-secrets
+    envVars:
+      # API Keys (You will be prompted to enter values in Render dashboard)
       - key: FMP_API_KEY
         sync: false
       - key: NEWS_API_KEY
         sync: false
       - key: GEMINI_API_KEY
         sync: false
-      - key: GEMINI_MODEL
-        value: gemini-3-flash-preview
-
-  - type: web
-    name: financial-forensics-frontend
-    runtime: node
-    plan: starter
-    rootDir: frontend
-    healthCheckPath: /
-    buildCommand: npm ci && npm run build
-    startCommand: npm start -- --hostname 0.0.0.0 --port $PORT
-    envVars:
-      - key: NODE_ENV
-        value: production
-      - key: NEXT_PUBLIC_API_BASE
+      - key: GROWW_API_KEY
         sync: false
-      - key: INTERNAL_API_BASE
+      - key: S3_ACCESS_KEY
         sync: false
-
-  - type: keyvalue
-    name: financial-forensics-cache
-    plan: starter
-    ipAllowList: []
+      - key: S3_SECRET_KEY
+        sync: false
+      - key: S3_ENDPOINT
+        sync: false
+      - key: S3_BUCKET
+        sync: false
