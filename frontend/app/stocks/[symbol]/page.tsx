@@ -69,6 +69,26 @@ export default async function StockDetailsPage({ params }: Props) {
     );
   }
 
+  const smartScore = data.smartScore ?? {
+    score: 0,
+    dimensions: {},
+    aiExplanation: "Smart Score is unavailable right now.",
+    explanation: "Smart Score is unavailable right now.",
+    methodology: undefined,
+    label: "Unavailable",
+    mlConfidence: undefined,
+    validation: undefined
+  };
+
+  const riskScore = data.riskScore ?? {
+    score: 0,
+    components: {},
+    aiExplanation: "Risk Score is unavailable right now.",
+    explanation: "Risk Score is unavailable right now.",
+    methodology: undefined,
+    label: "Unavailable"
+  };
+
   return (
     <div className="stagger-fade space-y-4">
       <div className="relative z-30 overflow-visible flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
@@ -107,18 +127,18 @@ export default async function StockDetailsPage({ params }: Props) {
 
           <div className="grid gap-4 xl:grid-cols-2">
             <SmartScore
-              score={data.smartScore.score}
-              dimensions={data.smartScore.dimensions}
-              aiExplanation={data.smartScore.aiExplanation || data.smartScore.explanation}
-              methodology={data.smartScore.methodology}
-              label={data.smartScore.label}
+              score={smartScore.score}
+              dimensions={smartScore.dimensions}
+              aiExplanation={smartScore.aiExplanation || smartScore.explanation}
+              methodology={smartScore.methodology}
+              label={smartScore.label}
             />
             <RiskScore
-              score={data.riskScore.score}
-              components={data.riskScore.components}
-              aiExplanation={data.riskScore.aiExplanation || data.riskScore.explanation}
-              methodology={data.riskScore.methodology}
-              label={data.riskScore.label}
+              score={riskScore.score}
+              components={riskScore.components}
+              aiExplanation={riskScore.aiExplanation || riskScore.explanation}
+              methodology={riskScore.methodology}
+              label={riskScore.label}
             />
           </div>
 
@@ -131,8 +151,8 @@ export default async function StockDetailsPage({ params }: Props) {
               symbol={symbol}
               currentPrice={data.price.cmp}
               aiTarget={data.price.aiTarget}
-              mlConfidence={data.smartScore.mlConfidence}
-              upProbability={data.smartScore.validation?.upProbability}
+              mlConfidence={smartScore.mlConfidence}
+              upProbability={smartScore.validation?.upProbability}
             />
             <BrokerageSummary brokerage={data.brokerageResearch} />
           </div>
