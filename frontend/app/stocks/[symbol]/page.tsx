@@ -1,6 +1,5 @@
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 
 import { StockSearch } from "@/components/stock-search";
@@ -194,14 +193,12 @@ function normalizeDashboardData(raw: DashboardData | Record<string, unknown>, sy
 export default async function StockDetailsPage({ params }: Props) {
   const symbol = params.symbol.toUpperCase();
   if (!symbol) notFound();
-  const requestHeaders = headers();
-  const requestOrigin = `${requestHeaders.get("x-forwarded-proto") || "https"}://${requestHeaders.get("x-forwarded-host") || requestHeaders.get("host") || "localhost:3000"}`;
 
   let data;
   let refreshWarning = "";
   let shouldAutoRefresh = false;
   try {
-    const envelope = await fetchDashboardEnvelope(symbol, { requestOrigin });
+    const envelope = await fetchDashboardEnvelope(symbol);
     data = normalizeDashboardData(envelope.data, symbol);
     refreshWarning = envelope.warning || "";
     shouldAutoRefresh = Boolean(envelope.fallback || envelope.stale);

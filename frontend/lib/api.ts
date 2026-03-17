@@ -22,16 +22,23 @@ function getDefaultBackendBase() {
   return process.env.NODE_ENV === "production" ? DEFAULT_BACKEND_BASE : DEFAULT_DEV_BACKEND_BASE;
 }
 
-function getServerApiBase(requestOrigin?: string) {
-  return normalizeBaseUrl(requestOrigin) || INTERNAL_BASE || PUBLIC_BASE || getDefaultBackendBase();
+function getServerApiBase() {
+  return INTERNAL_BASE || PUBLIC_BASE || getDefaultBackendBase();
+}
+
+function getBrowserApiBase() {
+  if (PUBLIC_BASE) return PUBLIC_BASE;
+  if (process.env.NODE_ENV === "production") return DEFAULT_BACKEND_BASE;
+  return "";
 }
 
 function getApiUrl(path: string, options: { requestOrigin?: string } = {}) {
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
   if (typeof window !== "undefined") {
-    return `/api/v1/stocks${normalizedPath}`;
+    const browserBase = getBrowserApiBase();
+    return browserBase ? `${browserBase}/api/v1/stocks${normalizedPath}` : `/api/v1/stocks${normalizedPath}`;
   }
-  return `${getServerApiBase(options.requestOrigin)}/api/v1/stocks${normalizedPath}`;
+  return `${getServerApiBase()}/api/v1/stocks${normalizedPath}`;
 }
 
 async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number) {

@@ -1,6 +1,6 @@
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1.router import api_router
@@ -32,6 +32,11 @@ app.add_middleware(
 @app.api_route("/", methods=["GET", "HEAD"])
 async def root() -> dict:
     return {"status": "ok", "service": settings.app_name}
+
+
+@app.head("/")
+async def root_head() -> Response:
+    return Response(status_code=200)
 
 
 @app.get("/health")
