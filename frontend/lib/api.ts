@@ -1,7 +1,8 @@
 import type { DashboardData } from "@/lib/types";
 
-const INTERNAL_BASE = process.env.INTERNAL_API_BASE || "http://127.0.0.1:8000";
-const PUBLIC_BASE = process.env.NEXT_PUBLIC_API_BASE || "";
+const INTERNAL_BASE = normalizeBaseUrl(process.env.INTERNAL_API_BASE);
+const PUBLIC_BASE = normalizeBaseUrl(process.env.NEXT_PUBLIC_API_BASE);
+const DEFAULT_BACKEND_BASE = "https://financial-forensics-ai-india.onrender.com";
 const memoryCache = new Map<string, { at: number; data: unknown }>();
 
 export type DashboardEnvelope = {
@@ -11,6 +12,22 @@ export type DashboardEnvelope = {
   fallback?: boolean;
   warning?: string;
 };
+
+function normalizeBaseUrl(value?: string) {
+  return String(value || "").trim().replace(/\/$/, "");
+}
+
+function getServerApiBase(requestOrigin?: string) {
+  return normalizeBaseUrl(requestOrigin) || INTERNAL_BASE || PUBLIC_BASE || DEFAULT_BACKEND_BASE;
+}
+
+function getApiUrl(path: string, options: { requestOrigin?: string } = {}) {
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  if (typeof window !== "undefined") {
+    return `/api/v1/stocks${normalizedPath}`;
+  }
+  return `${getServerApiBase(options.requestOrigin)}/api/v1/stocks${normalizedPath}`;
+}
 
 async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number) {
   const controller = new AbortController();
@@ -44,7 +61,7 @@ function isAbortError(error: unknown) {
   return String(error).toLowerCase().includes("aborted");
 }
 
-export async function fetchDashboardEnvelope(symbol: string): Promise<DashboardEnvelope> {
+export async function fetchDashboardEnvelope(symbol: string, options: { requestOrigin?: string } = {}): Promise<DashboardEnvelope> {
   const key = `dashboard:${symbol.toUpperCase()}:5Y`;
   const fresh = getFreshCache<DashboardEnvelope>(key, 60_000);
   if (fresh) return fresh;
@@ -59,7 +76,7 @@ export async function fetchDashboardEnvelope(symbol: string): Promise<DashboardE
   for (const attempt of attempts) {
     try {
       const res = await fetchWithTimeout(
-        `${INTERNAL_BASE}/api/v1/stocks/${symbol}/dashboard?timeframe=5Y${attempt.refresh ? "&refresh=true" : ""}`,
+        getApiUrl(`/${symbol}/dashboard?timeframe=5Y${attempt.refresh ? "&refresh=true" : ""}`, options),
         {
           cache: "no-store"
         },
@@ -99,7 +116,7 @@ export async function searchStocks(query: string): Promise<Array<{ symbol: strin
   if (!query.trim()) return [];
   try {
     const res = await fetch(
-      `${PUBLIC_BASE}/api/v1/stocks/search?q=${encodeURIComponent(query)}`,
+      getApiUrl(`/search?q=${encodeURIComponent(query)}`),
       { cache: "no-store" }
     );
     if (!res.ok) throw new Error("search failed");
@@ -112,7 +129,7 @@ export async function searchStocks(query: string): Promise<Array<{ symbol: strin
 
 export async function sendAiQuestion(symbol: string, question: string): Promise<{ answer: string; source: "gemini" | "fallback" }> {
   try {
-    const res = await fetch(`${PUBLIC_BASE}/api/v1/stocks/${symbol}/chat`, {
+    const res = await fetch(getApiUrl(`/${symbol}/chat`), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ question })
@@ -136,7 +153,7 @@ export async function analyzeNewsItem(
   article: { title: string; summary: string; source: string; publishedAt: string; sentimentScore: number }
 ): Promise<{ overview: string; marketImpact: string; watchpoint: string; source: "gemini" | "fallback" }> {
   try {
-    const res = await fetch(`${PUBLIC_BASE}/api/v1/stocks/${symbol}/news-analysis`, {
+    const res = await fetch(getApiUrl(`/${symbol}/news-analysis`), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -166,7 +183,7 @@ export async function analyzeNewsItem(
 }
 
 export async function fetchReturnsProjection(symbol: string, amount: number, cagr: number, years: number) {
-  const url = `${PUBLIC_BASE}/api/v1/stocks/${symbol}/returns-projection?amount=${amount}&cagr=${cagr}&years=${years}`;
+  const url = getApiUrl(`/${symbol}/returns-projection?amount=${amount}&cagr=${cagr}&years=${years}`);
   const res = await fetch(url, { cache: "no-store" });
   if (!res.ok) {
     throw new Error(`Returns projection request failed: ${res.status}`);
@@ -192,7 +209,7 @@ export async function fetchTickerTape(symbols: string[] = [], options: { force?:
 
   const stale = getStaleCache<Array<{ symbol: string; cmp: number; change: number; changePercent: number }>>(key);
   try {
-    const res = await fetchWithTimeout(`${PUBLIC_BASE}/api/v1/stocks/ticker${query}`, { cache: "no-store" }, force ? 7000 : 4500);
+    const res = await fetchWithTimeout(getApiUrl(`/ticker${query}`), { cache: "no-store" }, force ? 7000 : 4500);
     if (!res.ok) {
       throw new Error(`Ticker request failed: ${res.status}`);
     }
@@ -226,7 +243,7 @@ export async function fetchIndexHeatmap(indexName: string, options: { force?: bo
   }>(key);
 
   try {
-    const res = await fetchWithTimeout(`${PUBLIC_BASE}/api/v1/stocks/index-heatmap${query}`, { cache: "no-store" }, force ? 9000 : 6000);
+    const res = await fetchWithTimeout(getApiUrl(`/index-heatmap${query}`), { cache: "no-store" }, force ? 9000 : 6000);
     if (!res.ok) {
       throw new Error(`Index heatmap request failed: ${res.status}`);
     }
@@ -274,7 +291,7 @@ export async function fetchMarketNews(options: { force?: boolean } = {}) {
 
   try {
     const query = force ? "?refresh=true" : "";
-    const res = await fetchWithTimeout(`${PUBLIC_BASE}/api/v1/stocks/market-news${query}`, { cache: "no-store" }, force ? 10000 : 7000);
+    const res = await fetchWithTimeout(getApiUrl(`/market-news${query}`), { cache: "no-store" }, force ? 10000 : 7000);
     if (!res.ok) {
       throw new Error(`Market news request failed: ${res.status}`);
     }
