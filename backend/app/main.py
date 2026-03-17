@@ -29,7 +29,7 @@ app.add_middleware(
 )
 
 
-@app.get("/")
+@app.api_route("/", methods=["GET", "HEAD"])
 async def root() -> dict:
     return {"status": "ok", "service": settings.app_name}
 
