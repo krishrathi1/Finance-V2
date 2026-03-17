@@ -17,6 +17,7 @@ async function proxy(request: NextRequest, { params }: { params: { path: string[
   headers.delete("host");
   headers.delete("connection");
   headers.delete("content-length");
+  headers.set("accept-encoding", "identity");
 
   try {
     const upstream = await fetch(target, {
@@ -27,9 +28,22 @@ async function proxy(request: NextRequest, { params }: { params: { path: string[
       redirect: "follow"
     });
 
-    return new Response(upstream.body, {
+    const responseHeaders = new Headers(upstream.headers);
+    responseHeaders.delete("content-encoding");
+    responseHeaders.delete("content-length");
+    responseHeaders.delete("transfer-encoding");
+    responseHeaders.delete("connection");
+    responseHeaders.delete("keep-alive");
+    responseHeaders.set("cache-control", "no-store");
+
+    const body =
+      request.method === "HEAD" || upstream.status === 204 || upstream.status === 304
+        ? null
+        : await upstream.arrayBuffer();
+
+    return new Response(body, {
       status: upstream.status,
-      headers: upstream.headers
+      headers: responseHeaders
     });
   } catch (error) {
     return Response.json(
