@@ -1,4 +1,5 @@
 import json
+import time
 from typing import Any
 
 from redis.asyncio import Redis
@@ -10,6 +11,7 @@ from app.core.config import get_settings
 class RedisCache:
     def __init__(self) -> None:
         self._client: Redis | None = None
+        self._memory_store: dict[str, tuple[float, Any]] = {}
 
     async def connect(self) -> None:
         if self._client is None:
@@ -35,20 +37,38 @@ class RedisCache:
 
     async def get_json(self, key: str) -> Any | None:
         if self._client is None:
-            return None
+            return self._get_memory_json(key)
         try:
             raw = await self._client.get(key)
-            return json.loads(raw) if raw else None
+            if raw:
+                parsed = json.loads(raw)
+                self._set_memory_json(key, parsed, ttl_seconds=60)
+                return parsed
+            return self._get_memory_json(key)
         except (RedisError, OSError, ValueError):
-            return None
+            return self._get_memory_json(key)
 
     async def set_json(self, key: str, value: Any, ttl_seconds: int) -> None:
+        self._set_memory_json(key, value, ttl_seconds=ttl_seconds)
         if self._client is None:
             return
         try:
             await self._client.set(key, json.dumps(value), ex=ttl_seconds)
         except (RedisError, OSError, TypeError, ValueError):
             return
+
+    def _get_memory_json(self, key: str) -> Any | None:
+        hit = self._memory_store.get(key)
+        if not hit:
+            return None
+        expires_at, value = hit
+        if expires_at < time.time():
+            self._memory_store.pop(key, None)
+            return None
+        return value
+
+    def _set_memory_json(self, key: str, value: Any, ttl_seconds: int) -> None:
+        self._memory_store[key] = (time.time() + max(1, ttl_seconds), value)
 
 
 redis_cache = RedisCache()
