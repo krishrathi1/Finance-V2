@@ -58,8 +58,8 @@ export function MarketTicker() {
   }, [rows]);
 
   const durationSeconds = useMemo(() => {
-    // Extra-slow tape for better readability across large symbol sets.
-    return Math.max(80, Math.min(1800, Math.round(tape.length * 0.3)));
+    // Keep the ticker noticeably slower so prices are easier to read in the navbar.
+    return Math.max(120, Math.min(2400, Math.round(tape.length * 0.45)));
   }, [tape.length]);
 
   if (!tape.length) {
