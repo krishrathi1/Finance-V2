@@ -14,6 +14,8 @@ class Settings(BaseSettings):
     app_name: str = "Financial Forensics AI API"
     app_env: str = "development"
     app_debug: bool = True
+    cors_origins: str = "http://localhost:3000,https://myfinance.live,https://www.myfinance.live"
+    cors_origin_regex: str = r"^https://.*\.vercel\.app$"
 
     database_url: str = "sqlite+aiosqlite:///financial_forensics.db"
     redis_url: str = "redis://localhost:6379/0"
