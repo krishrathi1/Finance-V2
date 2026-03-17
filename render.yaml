@@ -19,8 +19,9 @@ services:
   - type: web
     name: backend
     env: python
-    buildCommand: cd backend && pip install -r requirements.txt
-    startCommand: cd backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt && pip install -r ../ai-engine/requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     plan: free
     envVars:
       - key: DATABASE_URL
@@ -40,7 +41,7 @@ services:
       - key: APP_DEBUG
         value: "false"
       - key: PYTHONPATH
-        value: "/opt/render/project/src:/opt/render/project/src/ai-engine/src"
+        value: "/opt/render/project/src/backend:/opt/render/project/src/ai-engine/src"
       # Load secret group
       - fromGroup: finance-ai-secrets
 
@@ -50,7 +51,7 @@ services:
     env: node
     rootDir: frontend
     buildCommand: npm install && npm run build
-    startCommand: npm start -- -p $PORT
+    startCommand: npm start -- --hostname 0.0.0.0 --port $PORT
     plan: free
     envVars:
       - key: NEXT_PUBLIC_API_BASE
@@ -58,6 +59,13 @@ services:
           type: web
           name: backend
           property: url
+      - key: INTERNAL_API_BASE
+        fromService:
+          type: web
+          name: backend
+          property: url
+      - key: NODE_ENV
+        value: "production"
 
 envGroups:
   - name: finance-ai-secrets
