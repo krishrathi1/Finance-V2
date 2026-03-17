@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     app_env: str = "development"
     app_debug: bool = True
     cors_origins: str = "http://localhost:3000,https://myfinance.live,https://www.myfinance.live"
-    cors_origin_regex: str = r"^https://.*\.vercel\.app$"
+    cors_origin_regex: str = r"^https://.*\.(vercel\.app|onrender\.com)$"
 
     database_url: str = "sqlite+aiosqlite:///financial_forensics.db"
     redis_url: str = "redis://localhost:6379/0"
