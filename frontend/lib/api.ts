@@ -1,5 +1,6 @@
 import type { DashboardData } from "@/lib/types";
 
+const DEFAULT_DEV_BACKEND_BASE = "http://127.0.0.1:8000";
 const INTERNAL_BASE = normalizeBaseUrl(process.env.INTERNAL_API_BASE);
 const PUBLIC_BASE = normalizeBaseUrl(process.env.NEXT_PUBLIC_API_BASE);
 const DEFAULT_BACKEND_BASE = "https://financial-forensics-ai-india.onrender.com";
@@ -17,8 +18,12 @@ function normalizeBaseUrl(value?: string) {
   return String(value || "").trim().replace(/\/$/, "");
 }
 
+function getDefaultBackendBase() {
+  return process.env.NODE_ENV === "production" ? DEFAULT_BACKEND_BASE : DEFAULT_DEV_BACKEND_BASE;
+}
+
 function getServerApiBase(requestOrigin?: string) {
-  return normalizeBaseUrl(requestOrigin) || INTERNAL_BASE || PUBLIC_BASE || DEFAULT_BACKEND_BASE;
+  return normalizeBaseUrl(requestOrigin) || INTERNAL_BASE || PUBLIC_BASE || getDefaultBackendBase();
 }
 
 function getApiUrl(path: string, options: { requestOrigin?: string } = {}) {

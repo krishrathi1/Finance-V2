@@ -1,11 +1,14 @@
 import type { NextRequest } from "next/server";
 
+const DEFAULT_DEV_BACKEND_BASE = "http://127.0.0.1:8000";
 const DEFAULT_BACKEND_BASE = "https://financial-forensics-ai-india.onrender.com";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 function getBackendBase() {
-  return String(process.env.INTERNAL_API_BASE || process.env.NEXT_PUBLIC_API_BASE || DEFAULT_BACKEND_BASE)
+  const fallback = process.env.NODE_ENV === "production" ? DEFAULT_BACKEND_BASE : DEFAULT_DEV_BACKEND_BASE;
+  return String(process.env.INTERNAL_API_BASE || process.env.NEXT_PUBLIC_API_BASE || fallback)
     .trim()
     .replace(/\/$/, "");
 }
@@ -62,5 +65,9 @@ export async function GET(request: NextRequest, context: { params: { path: strin
 }
 
 export async function POST(request: NextRequest, context: { params: { path: string[] } }) {
+  return proxy(request, context);
+}
+
+export async function HEAD(request: NextRequest, context: { params: { path: string[] } }) {
   return proxy(request, context);
 }
