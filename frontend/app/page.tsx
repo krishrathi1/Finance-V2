@@ -1,5 +1,15 @@
 import Link from "next/link";
-import { ArrowRight, Filter, GitCompareArrows, Heart, Wallet } from "lucide-react";
+import {
+  ArrowRight,
+  BarChart3,
+  Filter,
+  GitCompareArrows,
+  Heart,
+  Newspaper,
+  ShieldCheck,
+  Sparkles,
+  Wallet,
+} from "lucide-react";
 
 import { MarketHeatmap } from "@/components/market-heatmap";
 import { MarketMoodIndex } from "@/components/market-mood-index";
@@ -15,47 +25,47 @@ const FEATURE_CARDS = [
   {
     href: "/screener",
     icon: Filter,
-    gradient: "from-violet-500 to-indigo-500",
-    shadow: "shadow-violet-500/25",
-    bg: "from-violet-500/8 to-indigo-500/5",
+    gradient: "from-violet-500 via-fuchsia-500 to-indigo-500",
+    surface: "from-violet-500/14 via-violet-500/8 to-transparent",
     label: "Stock Screener",
-    desc: "Filter NSE & BSE stocks by PE, market cap, sector, and 30+ metrics instantly.",
+    desc: "Filter NSE and BSE stocks across valuation, growth, momentum, and quality in seconds.",
     badge: "50+ filters",
+    points: ["Multi-factor scans", "Fast shortlist building"],
   },
   {
     href: "/watchlist",
     icon: Heart,
-    gradient: "from-rose-500 to-pink-500",
-    shadow: "shadow-rose-500/25",
-    bg: "from-rose-500/8 to-pink-500/5",
+    gradient: "from-rose-500 via-pink-500 to-orange-400",
+    surface: "from-rose-500/14 via-pink-500/7 to-transparent",
     label: "Watchlist",
-    desc: "Track your favourite stocks with live prices and instant alerts.",
-    badge: "Live prices",
+    desc: "Monitor your highest-conviction names with live prices, alerts, and one-click review.",
+    badge: "Live tracking",
+    points: ["Instant alerts", "Priority monitoring"],
   },
   {
     href: "/compare",
     icon: GitCompareArrows,
-    gradient: "from-cyan-500 to-sky-500",
-    shadow: "shadow-cyan-500/25",
-    bg: "from-cyan-500/8 to-sky-500/5",
-    label: "Compare",
-    desc: "Side-by-side valuation, profitability and Smart Score comparison.",
-    badge: "AI analysis",
+    gradient: "from-cyan-500 via-sky-500 to-blue-500",
+    surface: "from-cyan-500/14 via-sky-500/8 to-transparent",
+    label: "Compare Stocks",
+    desc: "Put profitability, valuations, and Smart Scores side by side before making a call.",
+    badge: "AI context",
+    points: ["Side-by-side metrics", "Faster decision making"],
   },
   {
     href: "/portfolio",
     icon: Wallet,
-    gradient: "from-amber-500 to-orange-500",
-    shadow: "shadow-amber-500/25",
-    bg: "from-amber-500/8 to-orange-500/5",
-    label: "Portfolio",
-    desc: "Track holdings, monitor P&L, and get AI risk assessment of your portfolio.",
-    badge: "AI risk score",
+    gradient: "from-amber-500 via-orange-500 to-red-400",
+    surface: "from-amber-500/14 via-orange-500/8 to-transparent",
+    label: "Portfolio Doctor",
+    desc: "Track holdings, portfolio risk, and AI commentary without leaving the dashboard.",
+    badge: "Risk signals",
+    points: ["P&L visibility", "Portfolio health check"],
   },
 ] as const;
 
 const FEATURE_TAGS = [
-  "Smart Score™",
+  "Smart Score",
   "Risk Analysis",
   "AI Chat",
   "Brokerage Reports",
@@ -64,141 +74,236 @@ const FEATURE_TAGS = [
   "Portfolio Doctor",
 ];
 
+const HERO_PILLARS = [
+  {
+    icon: BarChart3,
+    label: "Research Stack",
+    value: "Fundamentals, technicals, news, and AI context in one workflow.",
+  },
+  {
+    icon: ShieldCheck,
+    label: "Decision Support",
+    value: "Risk scoring, score validation, and scenario tools for faster conviction.",
+  },
+  {
+    icon: Newspaper,
+    label: "Live Surface",
+    value: "Track market breadth, movers, and breaking news without context switching.",
+  },
+] as const;
+
+const HERO_METRICS = [
+  { label: "Coverage", value: "NSE + BSE", tone: "text-accent" },
+  { label: "Research Modes", value: "8+", tone: "text-success" },
+  { label: "Workflow", value: "Live + AI", tone: "text-sky-500" },
+] as const;
+
 export default function HomePage() {
   return (
     <div className="stagger-fade space-y-8 py-4 sm:space-y-10 sm:py-8">
-
-      {/* ── Hero ── */}
       <ViewportMotionSection
-        className="gradient-border relative z-30 rounded-2xl p-6 sm:rounded-[28px] sm:p-10 md:p-14"
-        style={{ overflow: "visible" }}
+        className="gradient-border relative z-30 overflow-visible rounded-[28px] px-5 py-6 sm:px-8 sm:py-8 lg:px-10 lg:py-10"
       >
-        {/* Decorative orbs clipped inside hero */}
         <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-[inherit]">
           <div className="hero-orb hero-orb-1" />
           <div className="hero-orb hero-orb-2" />
           <div className="hero-orb hero-orb-3" />
+          <div className="absolute inset-x-[18%] top-0 h-px bg-gradient-to-r from-transparent via-white/45 to-transparent" />
         </div>
 
-        <div className="relative z-10 max-w-3xl">
-          {/* Live badge */}
-          <div className="mb-4 flex items-center gap-2">
-            <span className="pulse-dot h-2 w-2 rounded-full bg-success" />
-            <p className="text-[10px] font-semibold uppercase tracking-[0.3em] text-accent sm:text-xs">
-              Live Indian Equity Intelligence
-            </p>
+        <div className="relative z-10 grid gap-8 lg:grid-cols-[minmax(0,1.35fr)_minmax(320px,440px)] lg:items-end">
+          <div className="min-w-0">
+            <div className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-bg/60 px-3 py-1.5 backdrop-blur">
+              <span className="pulse-dot h-2 w-2 rounded-full bg-success" />
+              <span className="text-[10px] font-semibold uppercase tracking-[0.28em] text-accent sm:text-[11px]">
+                Live Indian Equity Intelligence
+              </span>
+            </div>
+
+            <div className="mt-5 max-w-4xl">
+              <h1 className="font-[var(--font-space)] text-[clamp(2.4rem,6vw,5.5rem)] font-bold leading-[0.98] tracking-[-0.04em] text-balance">
+                Institutional-grade
+                <span className="block bg-gradient-to-r from-accent via-amber-400 to-orange-400 bg-clip-text text-transparent">
+                  stock research
+                </span>
+                <span className="block text-text/92">for Indian markets.</span>
+              </h1>
+              <p className="mt-5 max-w-2xl text-sm leading-7 text-muted sm:text-base">
+                Screen, compare, validate, and monitor NSE and BSE ideas with a faster workflow:
+                live market context, AI-assisted research, and compact financial intelligence built for
+                daily use.
+              </p>
+            </div>
+
+            <div className="mt-6 max-w-3xl">
+              <StockSearch className="max-w-3xl" />
+              <p className="mt-2 text-[11px] text-muted/75 sm:text-xs">
+                Search by symbol or company name, then jump straight into score, risk, and financial views.
+              </p>
+            </div>
+
+            <div className="mt-6 flex flex-wrap gap-2">
+              {FEATURE_TAGS.map((tag) => (
+                <Badge
+                  key={tag}
+                  variant="secondary"
+                  className="border-border/55 bg-bg/65 px-3 py-1 text-[10px] font-semibold tracking-[0.08em] text-muted backdrop-blur sm:text-[11px]"
+                >
+                  {tag}
+                </Badge>
+              ))}
+            </div>
+
+            <div className="mt-7 grid gap-3 sm:grid-cols-3">
+              {HERO_METRICS.map((metric) => (
+                <div
+                  key={metric.label}
+                  className="rounded-2xl border border-border/50 bg-panel/55 px-4 py-3 backdrop-blur-sm"
+                >
+                  <p className="text-[11px] uppercase tracking-[0.18em] text-muted">{metric.label}</p>
+                  <p className={`mt-2 font-[var(--font-space)] text-xl font-bold ${metric.tone}`}>{metric.value}</p>
+                </div>
+              ))}
+            </div>
           </div>
 
-          {/* Headline */}
-          <h1 className="font-[var(--font-space)] text-3xl font-bold leading-[1.15] tracking-tight sm:text-5xl md:text-6xl">
-            AI-Powered Stock Research
-            <br />
-            <span className="bg-gradient-to-r from-accent via-amber-400 to-orange-400 bg-clip-text text-transparent">
-              For NSE &amp; BSE
-            </span>
-          </h1>
+          <div className="hero-spotlight rounded-[26px] border border-border/55 bg-panel/58 p-4 backdrop-blur-xl sm:p-5">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-[11px] uppercase tracking-[0.2em] text-muted">Command Center</p>
+                <h2 className="mt-2 font-[var(--font-space)] text-xl font-bold">Move from signal to conviction.</h2>
+              </div>
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-accent/20 to-amber-400/10 text-accent">
+                <Sparkles className="h-5 w-5" />
+              </div>
+            </div>
 
-          <p className="mt-4 max-w-xl text-sm leading-7 text-muted sm:text-base">
-            Analyse fundamentals, risk scores, AI sentiment, financial statements, brokerage reports,
-            and returns projections — all in one unified workspace.
-          </p>
+            <div className="mt-5 space-y-3">
+              {HERO_PILLARS.map(({ icon: Icon, label, value }) => (
+                <div
+                  key={label}
+                  className="group rounded-2xl border border-border/45 bg-bg/48 px-4 py-3.5 transition hover:border-accent/30 hover:bg-bg/62"
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-white/8 to-transparent text-accent shadow-inner shadow-white/5">
+                      <Icon className="h-4.5 w-4.5" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-text">{label}</p>
+                      <p className="mt-1 text-xs leading-5 text-muted">{value}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
 
-          {/* Search */}
-          <div className="mt-6 sm:mt-8">
-            <StockSearch className="max-w-2xl" />
-            <p className="mt-2 text-[11px] text-muted/70">
-              Search any NSE / BSE stock — e.g. RELIANCE, HDFCBANK, INFY
-            </p>
-          </div>
-
-          {/* Feature tags */}
-          <div className="mt-5 flex flex-wrap gap-2">
-            {FEATURE_TAGS.map((tag) => (
-              <Badge
-                key={tag}
-                variant="secondary"
-                className="border-border/50 bg-bg/60 text-[10px] font-semibold backdrop-blur sm:text-xs"
+            <div className="mt-5 flex flex-wrap gap-3">
+              <Link
+                href="/screener"
+                className="shine-btn inline-flex items-center gap-2 rounded-full bg-accent px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-accent/25 transition hover:opacity-95 active:scale-[0.98]"
               >
-                {tag}
-              </Badge>
-            ))}
+                Open Screener
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+              <Link
+                href="/portfolio"
+                className="inline-flex items-center gap-2 rounded-full border border-border/55 bg-bg/62 px-4 py-2 text-sm font-semibold text-text transition hover:border-accent/35 hover:text-accent active:scale-[0.98]"
+              >
+                Portfolio View
+              </Link>
+            </div>
           </div>
         </div>
       </ViewportMotionSection>
 
-      {/* ── Popular Stocks ── */}
       <PopularStocks />
 
-      {/* ── Sticky Market Stats Bar ── */}
       <section className="sticky top-[5.4rem] z-20 rounded-2xl border border-border/40 bg-bg/75 p-2 backdrop-blur-xl sm:top-[6.2rem]">
         <MarketStatsBar />
       </section>
 
-      {/* ── Feature Quick-Access Cards ── */}
       <section>
-        <div className="mb-5 flex items-center gap-3">
-          <div className="h-5 w-0.5 rounded-full bg-gradient-to-b from-accent to-amber-400" />
-          <h2 className="font-[var(--font-space)] text-base font-bold sm:text-lg">Quick Access</h2>
+        <div className="mb-5 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="h-5 w-0.5 rounded-full bg-gradient-to-b from-accent to-amber-400" />
+            <div>
+              <h2 className="font-[var(--font-space)] text-base font-bold sm:text-lg">Research Shortcuts</h2>
+              <p className="text-xs text-muted">Start from the exact workflow you need instead of navigating menus.</p>
+            </div>
+          </div>
         </div>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          {FEATURE_CARDS.map(({ href, icon: Icon, gradient, shadow, bg, label, desc, badge }) => (
+
+        <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(240px,1fr))]">
+          {FEATURE_CARDS.map(({ href, icon: Icon, gradient, surface, label, desc, badge, points }) => (
             <Link
               key={href}
               href={href}
-              className={`feature-card group flex flex-col gap-4 rounded-2xl border border-border/60 bg-gradient-to-br ${bg} bg-panel/60 p-5 backdrop-blur-sm`}
+              className={`feature-card group relative isolate overflow-hidden rounded-[24px] border border-border/60 bg-panel/68 p-5 backdrop-blur-sm`}
             >
-              {/* Icon + badge row */}
-              <div className="flex items-start justify-between">
-                <div className={`flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br ${gradient} shadow-lg ${shadow}`}>
-                  <Icon className="h-5 w-5 text-white" />
+              <div className={`absolute inset-0 -z-10 bg-gradient-to-br ${surface}`} />
+              <div className="absolute inset-x-5 top-0 h-px bg-gradient-to-r from-transparent via-white/35 to-transparent opacity-70" />
+
+              <div className="flex items-start justify-between gap-4">
+                <div
+                  className={`feature-card-icon flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br ${gradient} text-white shadow-xl`}
+                >
+                  <Icon className="h-5 w-5" />
                 </div>
-                <span className="rounded-full border border-border/50 bg-bg/60 px-2 py-0.5 text-[10px] font-semibold text-muted backdrop-blur">
+                <span className="rounded-full border border-border/50 bg-bg/62 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted backdrop-blur">
                   {badge}
                 </span>
               </div>
 
-              {/* Label + desc */}
-              <div className="flex-1">
-                <p className="font-[var(--font-space)] text-sm font-bold group-hover:text-accent sm:text-base">
+              <div className="mt-7">
+                <p className="font-[var(--font-space)] text-lg font-bold tracking-tight text-text transition group-hover:text-accent">
                   {label}
                 </p>
-                <p className="mt-1 text-xs leading-5 text-muted">{desc}</p>
+                <p className="mt-2 text-sm leading-6 text-muted">{desc}</p>
               </div>
 
-              {/* CTA arrow */}
-              <div className="flex items-center gap-1 text-xs font-semibold text-accent opacity-0 transition-all group-hover:translate-x-1 group-hover:opacity-100">
-                Explore <ArrowRight className="h-3.5 w-3.5" />
+              <div className="mt-5 space-y-2">
+                {points.map((point) => (
+                  <div key={point} className="flex items-center gap-2 text-xs text-muted">
+                    <span className="h-1.5 w-1.5 rounded-full bg-accent/85" />
+                    <span>{point}</span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-6 flex items-center justify-between border-t border-border/40 pt-4">
+                <span className="text-xs font-semibold uppercase tracking-[0.16em] text-muted">Open Module</span>
+                <span className="inline-flex items-center gap-1 text-sm font-semibold text-accent transition duration-200 group-hover:translate-x-1">
+                  Explore
+                  <ArrowRight className="h-4 w-4" />
+                </span>
               </div>
             </Link>
           ))}
         </div>
       </section>
 
-      {/* ── Market Mood + Top Movers ── */}
       <section className="grid gap-4 lg:grid-cols-[300px_1fr] xl:grid-cols-[320px_1fr]">
         <MarketMoodIndex />
         <TopMovers />
       </section>
 
-      {/* ── Index Heatmap ── */}
       <section>
         <div className="mb-4 flex items-center gap-3">
           <div className="h-5 w-0.5 rounded-full bg-gradient-to-b from-accent to-amber-400" />
           <div>
             <h2 className="font-[var(--font-space)] text-base font-bold sm:text-lg">Index Heatmap</h2>
-            <p className="text-xs text-muted">All constituents by intraday move — click any cell to open the stock dashboard.</p>
+            <p className="text-xs text-muted">
+              All constituents by intraday move with one-click access to the stock dashboard.
+            </p>
           </div>
         </div>
         <MarketHeatmap />
       </section>
 
-      {/* ── Market News ── */}
       <section>
         <div className="mb-4 flex items-center gap-3">
           <div className="h-5 w-0.5 rounded-full bg-gradient-to-b from-blue-500 to-cyan-400" />
-          <h2 className="font-[var(--font-space)] text-base font-bold sm:text-lg">
-            Today&apos;s Market News
-          </h2>
+          <h2 className="font-[var(--font-space)] text-base font-bold sm:text-lg">Today&apos;s Market News</h2>
         </div>
         <MarketNews />
       </section>
