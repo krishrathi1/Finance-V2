@@ -7,6 +7,7 @@ import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { analyzeNewsItem } from "@/lib/api";
 import type { NewsItem } from "@/lib/types";
 
@@ -60,15 +61,16 @@ export function NewsSection({ symbol, news }: { symbol: string; news: NewsItem[]
               <div className="rounded-xl border border-border/70 p-3 transition hover:border-accent/70">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <p className="font-medium text-text">{item.title}</p>
-                  <span
-                    className={`rounded-full border px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] ${
+                  <Badge
+                    variant="outline"
+                    className={`px-2 py-1 text-[11px] uppercase tracking-[0.18em] ${
                       item.sentimentScore >= 0.55
                         ? "border-success/30 bg-success/10 text-success"
                         : "border-danger/30 bg-danger/10 text-danger"
                     }`}
                   >
                     Sentiment {(item.sentimentScore * 100).toFixed(0)}%
-                  </span>
+                  </Badge>
                 </div>
                 <p className="mt-1 text-xs text-muted">
                   {item.source} | {item.publishedAt}

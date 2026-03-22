@@ -15,6 +15,7 @@ import {
 import { useCallback, useRef, useState } from "react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { fetchPortfolioRoast } from "@/lib/api";
 
 // ─── CSV parsing ──────────────────────────────────────────────────────────────
@@ -152,9 +153,9 @@ export function PortfolioDoctor() {
         <CardTitle className="flex items-center gap-2 text-base">
           <Flame className="h-4 w-4 text-orange-400" />
           Portfolio Doctor
-          <span className="rounded-full bg-orange-400/10 px-2 py-0.5 text-[10px] font-medium text-orange-400">
+          <Badge variant="secondary" className="bg-orange-400/10 border-transparent px-2 py-0.5 text-[10px] font-medium text-orange-400 hover:bg-orange-400/20">
             AI Roast
-          </span>
+          </Badge>
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">

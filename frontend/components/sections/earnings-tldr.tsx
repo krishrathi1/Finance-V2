@@ -37,6 +37,8 @@ const TREND_COLOR: Record<string, string> = {
   Declining: "text-danger bg-danger/10 border-danger/30",
 };
 
+import { Badge } from "@/components/ui/badge";
+
 export function EarningsTldr({ symbol }: { symbol: string }) {
   const [data, setData] = useState<TldrData | null>(null);
   const [loading, setLoading] = useState(false);
@@ -68,7 +70,7 @@ export function EarningsTldr({ symbol }: { symbol: string }) {
         <CardTitle className="flex items-center gap-2 text-base">
           <BookOpen className="h-4 w-4 text-accent" />
           Earnings TL;DR
-          <span className="rounded-full bg-accent/10 px-2 py-0.5 text-[10px] font-medium text-accent">AI Summary</span>
+          <Badge variant="secondary" className="bg-accent/10 text-accent hover:bg-accent/20 border-transparent text-[10px]">AI Summary</Badge>
         </CardTitle>
       </CardHeader>
       <CardContent>

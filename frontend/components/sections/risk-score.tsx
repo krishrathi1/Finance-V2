@@ -1,6 +1,7 @@
 import { AlertTriangle, Info, ShieldAlert } from "lucide-react";
 
 import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 
 const DEFAULT_METHOD = "Risk score combines market mood, company financial stress, negative news signals, and price instability.";
 
@@ -64,11 +65,11 @@ export function RiskScore({
         </div>
         <div className="flex items-center gap-2">
           {label ? (
-            <span className="rounded-full border px-2.5 py-0.5 text-[11px] font-semibold"
+            <Badge variant="outline" className="px-2.5 py-0.5 text-[11px] font-semibold"
               style={{ borderColor: `${color}30`, backgroundColor: `${color}10`, color }}
             >
               {label}
-            </span>
+            </Badge>
           ) : null}
           <details className="relative">
             <summary className="flex h-7 w-7 cursor-pointer list-none items-center justify-center rounded-full border border-border/70 text-muted transition hover:text-text">
@@ -117,11 +118,11 @@ export function RiskScore({
         </div>
         <p className="text-3xl font-bold leading-none sm:text-[2rem]" style={{ color }}>{score.toFixed(2)}</p>
         <p className="text-xs text-muted">out of 5.0</p>
-        <span className="mt-2 rounded-full px-3 py-0.5 text-xs font-semibold"
+        <Badge variant="secondary" className="mt-2 border-transparent px-3 py-0.5 text-xs font-semibold"
           style={{ color, backgroundColor: `${color}15` }}
         >
           {riskLabel} Risk
-        </span>
+        </Badge>
       </div>
 
       {/* Risk components */}

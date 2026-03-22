@@ -7,6 +7,7 @@ import { createPortal } from "react-dom";
 
 import { fetchWatchlistAnalysis } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
 
 type Props = {
   symbol: string;
@@ -96,9 +97,9 @@ export function WatchlistAnalysisButton({ symbol, className, compactLabel = fals
 
             <div className="mb-4 flex items-center justify-between rounded-xl border border-border/50 bg-bg/50 px-3 py-2">
               <span className="text-sm font-bold text-accent">{symbol}</span>
-              <span className="rounded-full border border-border/60 bg-panel/70 px-2 py-0.5 text-[11px] text-muted">
+              <Badge variant="outline" className="border-border/60 bg-panel/70 px-2 py-0.5 text-[11px] text-muted">
                 Source: {analysis?.source === "gemini" ? "Gemini" : "Fallback"}
-              </span>
+              </Badge>
             </div>
 
             <div className="rounded-2xl border border-border/60 bg-bg/40 p-4">

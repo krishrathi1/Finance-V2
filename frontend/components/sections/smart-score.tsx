@@ -2,6 +2,7 @@ import { Info, Sparkles } from "lucide-react";
 
 import { SnowflakeChart } from "@/components/charts/snowflake-chart";
 import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 
 const DEFAULT_METHOD = "Factor score uses normalized profitability, growth, valuation, momentum, and balance-sheet health. A bounded walk-forward ML signal validates trend persistence before applying a small score adjustment.";
 
@@ -43,11 +44,11 @@ function ScoreArc({ score, color }: { score: number; color: string }) {
           / 5.0
         </text>
       </svg>
-      <span className="mt-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold"
+      <Badge variant="secondary" className="mt-1 border-transparent px-2.5 py-0.5 text-[11px] font-semibold"
         style={{ color, backgroundColor: `${color}18` }}
       >
         {scoreLabel}
-      </span>
+      </Badge>
     </div>
   );
 }
@@ -89,9 +90,9 @@ export function SmartScore({
         </div>
         <div className="flex items-center gap-2">
           {label ? (
-            <span className="rounded-full border border-violet-500/20 bg-violet-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-violet-500">
+            <Badge variant="outline" className="border-violet-500/20 bg-violet-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-violet-500">
               {label}
-            </span>
+            </Badge>
           ) : null}
           <details className="relative">
             <summary className="flex h-7 w-7 cursor-pointer list-none items-center justify-center rounded-full border border-border/70 text-muted transition hover:text-text">
