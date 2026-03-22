@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { StockSearch } from "@/components/stock-search";
+import { PageHero } from "@/components/page-hero";
 import { CompanyOverview } from "@/components/sections/company-overview";
 import { CorporateActionsSection } from "@/components/sections/corporate-actions-section";
 import { DashboardAutoRefresh } from "@/components/sections/dashboard-auto-refresh";
@@ -261,7 +262,57 @@ export default async function StockDetailsPage({ params }: Props) {
 
   return (
     <div className="stagger-fade space-y-4">
-      <div className="relative z-30 overflow-visible flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+      <PageHero
+        breadcrumbs={[{ label: "Home", href: "/" }, { label: symbol }]}
+        eyebrow={`${data.exchange} equity`}
+        title={
+          <>
+            {data.companyName}
+            <span className="block text-[clamp(1.1rem,2vw,1.5rem)] font-semibold tracking-[0.08em] text-muted">
+              {symbol}
+            </span>
+          </>
+        }
+        description="Live score, risk, financials, and corporate updates in one high-trust stock workspace."
+        actions={
+          <div className="flex w-full max-w-2xl flex-wrap items-center gap-3">
+            <div className="w-full max-w-lg">
+              <StockSearch />
+            </div>
+            <Link
+              href={`/compare?a=${symbol}`}
+              className="inline-flex items-center gap-2 rounded-full border border-border/55 bg-bg/60 px-4 py-2 text-sm font-semibold text-text transition hover:border-accent/35 hover:text-accent active:scale-[0.98]"
+            >
+              Compare
+            </Link>
+            <Link
+              href="/screener"
+              className="inline-flex items-center gap-2 rounded-full border border-border/55 bg-bg/60 px-4 py-2 text-sm font-semibold text-text transition hover:border-accent/35 hover:text-accent active:scale-[0.98]"
+            >
+              Screener
+            </Link>
+          </div>
+        }
+        stats={[
+          { label: "Smart Score", value: smartScore.label || "Unavailable", toneClassName: "text-accent" },
+          { label: "Risk View", value: riskScore.label || "Unavailable", toneClassName: "text-danger" },
+          { label: "Auto Refresh", value: shouldAutoRefresh ? "Active" : "Stable", toneClassName: shouldAutoRefresh ? "text-success" : "text-text" },
+        ]}
+        aside={
+          <div className="space-y-3">
+            <div className="rounded-2xl border border-border/45 bg-bg/42 px-3 py-2.5">
+              <p className="text-xs uppercase tracking-[0.14em] text-muted">Research stack</p>
+              <p className="mt-1 text-sm font-semibold text-text">Price, score, risk, filings, and peer context.</p>
+            </div>
+            <div className="rounded-2xl border border-border/45 bg-bg/42 px-3 py-2.5">
+              <p className="text-xs uppercase tracking-[0.14em] text-muted">Data status</p>
+              <p className="mt-1 text-sm font-semibold text-text">{refreshWarning ? "Using fallback-safe refresh flow" : "Primary feed healthy"}</p>
+            </div>
+          </div>
+        }
+      />
+
+      <div className="hidden relative z-30 overflow-visible flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
         <div className="flex flex-wrap items-center gap-3">
           <p className="text-sm text-muted">
             <Link href="/" className="hover:text-text">

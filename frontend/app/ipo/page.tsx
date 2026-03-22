@@ -12,6 +12,7 @@ import {
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
+import { PageHero } from "@/components/page-hero";
 import { Card } from "@/components/ui/card";
 import { fetchIpoData } from "@/lib/api";
 import type { IpoItem } from "@/lib/api";
@@ -190,31 +191,42 @@ export default function IpoPage() {
 
   return (
     <div className="stagger-fade space-y-6 py-4 sm:space-y-8 sm:py-8">
-      {/* Page Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <p className="text-sm text-muted">
-            <Link href="/" className="hover:text-text">Home</Link> / IPO
-          </p>
-          <h1 className="mt-1 font-[var(--font-space)] text-2xl font-bold sm:text-3xl">
-            <span className="bg-gradient-to-r from-accent to-purple-400 bg-clip-text text-transparent">
-              IPO Calendar
+      <PageHero
+        breadcrumbs={[{ label: "Home", href: "/" }, { label: "IPO" }]}
+        eyebrow="Primary market"
+        title={
+          <>
+            IPO tracking with a
+            <span className="block bg-gradient-to-r from-accent to-purple-400 bg-clip-text text-transparent">
+              cleaner deal calendar.
             </span>
-          </h1>
-          <p className="mt-1 text-xs text-muted sm:text-sm">
-            Upcoming and recently listed IPOs on NSE &amp; BSE
-          </p>
-        </div>
-
-        {/* Stats */}
-        {!loading && data.length > 0 && (
-          <div className="flex items-center gap-2 text-xs text-muted">
-            <span className="rounded-xl border border-border/50 bg-panel/60 px-3 py-1.5 font-medium">
-              {data.length} IPO{data.length !== 1 ? "s" : ""}
-            </span>
+          </>
+        }
+        description="Surface upcoming and recently listed IPOs in a more serious capital-markets layout, with issue size, pricing, and timing at a glance."
+        stats={[
+          { label: "Visible Deals", value: loading ? "--" : `${data.length}` },
+          { label: "Universe", value: "NSE + BSE", toneClassName: "text-sky-500" },
+          { label: "Mode", value: tab === "upcoming" ? "Forward view" : "Listed view", toneClassName: "text-success" },
+        ]}
+        aside={
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 text-sm font-semibold">
+              <Building2 className="h-4 w-4 text-accent" />
+              Calendar lens
+            </div>
+            <div className="grid gap-2">
+              <div className="rounded-2xl border border-border/45 bg-bg/42 px-3 py-2.5">
+                <p className="text-xs uppercase tracking-[0.14em] text-muted">Current tab</p>
+                <p className="mt-1 text-sm font-semibold text-text">{tab === "upcoming" ? "Upcoming deals" : "Recent listings"}</p>
+              </div>
+              <div className="rounded-2xl border border-border/45 bg-bg/42 px-3 py-2.5">
+                <p className="text-xs uppercase tracking-[0.14em] text-muted">Market use</p>
+                <p className="mt-1 text-sm font-semibold text-text">Pipeline scanning and follow-up research</p>
+              </div>
+            </div>
           </div>
-        )}
-      </div>
+        }
+      />
 
       {/* Tabs */}
       <div className="flex gap-2 rounded-2xl border border-border/50 bg-panel/40 p-1 backdrop-blur-sm w-fit">

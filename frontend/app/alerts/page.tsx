@@ -4,6 +4,7 @@ import { Bell, BellOff, TrendingDown, TrendingUp, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
+import { PageHero } from "@/components/page-hero";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { fetchTickerTape } from "@/lib/api";
 import { checkAlerts, getAlerts, removeAlert } from "@/lib/alerts";
@@ -67,8 +68,53 @@ export default function AlertsPage() {
 
   return (
     <div className="stagger-fade space-y-6 py-4 sm:space-y-8 sm:py-8">
+      <PageHero
+        breadcrumbs={[{ label: "Home", href: "/" }, { label: "Alerts" }]}
+        eyebrow="Local monitoring"
+        title={
+          <>
+            Price alerts that stay
+            <span className="block bg-gradient-to-r from-accent to-amber-400 bg-clip-text text-transparent">
+              fast and trustworthy.
+            </span>
+          </>
+        }
+        description="Track target prices with a clearer active-versus-triggered state, without turning the experience into a noisy trading screen."
+        stats={[
+          { label: "Active Rules", value: `${rows.length}` },
+          { label: "Storage", value: "Browser-local", toneClassName: "text-sky-500" },
+          { label: "Refresh Mode", value: "Live checks", toneClassName: "text-success" },
+        ]}
+        aside={
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 text-sm font-semibold">
+              <Bell className="h-4 w-4 text-accent" />
+              Alert state
+            </div>
+            <div className="grid gap-2">
+              <div className="flex items-center justify-between rounded-2xl border border-success/25 bg-success/8 px-3 py-2 text-sm">
+                <span className="text-muted">Triggered</span>
+                <span className="inline-flex items-center gap-2 font-semibold text-success">
+                  <span className="h-2 w-2 rounded-full bg-success" />
+                  Ready
+                </span>
+              </div>
+              <div className="flex items-center justify-between rounded-2xl border border-border/50 bg-bg/42 px-3 py-2 text-sm">
+                <span className="text-muted">Watching</span>
+                <span className="inline-flex items-center gap-2 font-semibold text-text">
+                  <span className="h-2 w-2 rounded-full bg-muted" />
+                  Monitoring
+                </span>
+              </div>
+            </div>
+            <p className="text-xs leading-5 text-muted">
+              Alerts stay in your browser for a faster, privacy-safe workflow.
+            </p>
+          </div>
+        }
+      />
       {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="hidden flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-sm text-muted">
             <Link href="/" className="hover:text-text">Home</Link> / Alerts

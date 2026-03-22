@@ -14,6 +14,7 @@ import {
   TrendingUp,
 } from "lucide-react";
 
+import { PageHero } from "@/components/page-hero";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { fetchCompareAnalysis, fetchDashboard, searchStocks } from "@/lib/api";
 import type { DashboardData } from "@/lib/types";
@@ -342,8 +343,53 @@ function ComparePageContent() {
 
   return (
     <div className="stagger-fade space-y-6 py-4 sm:space-y-8 sm:py-8">
+      <PageHero
+        breadcrumbs={[{ label: "Home", href: "/" }, { label: "Compare" }]}
+        eyebrow="Decision workspace"
+        title={
+          <>
+            Compare two stocks with
+            <span className="block bg-gradient-to-r from-accent to-amber-400 bg-clip-text text-transparent">
+              real decision context.
+            </span>
+          </>
+        }
+        description="Line up valuation, profitability, score, and risk signals side by side so the product feels like a research terminal, not a marketing page."
+        actions={
+          <Link
+            href="/watchlist"
+            className="inline-flex items-center gap-2 rounded-full border border-border/55 bg-bg/60 px-4 py-2 text-sm font-semibold text-text transition hover:border-accent/35 hover:text-accent active:scale-[0.98]"
+          >
+            <TrendingUp className="h-4 w-4" />
+            My Watchlist
+          </Link>
+        }
+        stats={[
+          { label: "Comparison Mode", value: "Side-by-side" },
+          { label: "AI Summary", value: "Integrated", toneClassName: "text-accent" },
+          { label: "Decision Lens", value: "Score + Risk", toneClassName: "text-success" },
+        ]}
+        aside={
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 text-sm font-semibold">
+              <GitCompareArrows className="h-4 w-4 text-accent" />
+              Comparison stack
+            </div>
+            <div className="grid gap-2">
+              <div className="rounded-2xl border border-border/45 bg-bg/42 px-3 py-2.5 text-sm">
+                <p className="font-semibold text-text">Metrics</p>
+                <p className="mt-1 text-xs text-muted">Valuation, profitability, size, and trend signals aligned row by row.</p>
+              </div>
+              <div className="rounded-2xl border border-border/45 bg-bg/42 px-3 py-2.5 text-sm">
+                <p className="font-semibold text-text">AI Context</p>
+                <p className="mt-1 text-xs text-muted">Narrative summary appears on top of the hard numbers instead of replacing them.</p>
+              </div>
+            </div>
+          </div>
+        }
+      />
       {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="hidden flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-sm text-muted">
             <Link href="/" className="hover:text-text">

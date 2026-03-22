@@ -18,6 +18,7 @@ import {
   Sparkles,
   Send,
 } from "lucide-react";
+import { PageHero } from "@/components/page-hero";
 import { Card, CardContent } from "@/components/ui/card";
 import { ViewportMotionSection } from "@/components/viewport-motion-section";
 import { fetchScreenerResults, fetchAIScreenerResults } from "@/lib/api";
@@ -227,8 +228,44 @@ export default function ScreenerPage() {
 
   return (
     <div className="stagger-fade space-y-5 py-4 sm:space-y-6 sm:py-6">
+      <PageHero
+        breadcrumbs={[{ label: "Home", href: "/" }, { label: "Screener" }]}
+        eyebrow="Research funnel"
+        title={
+          <>
+            Screen the market with
+            <span className="block bg-gradient-to-r from-accent via-amber-500 to-orange-400 bg-clip-text text-transparent">
+              more signal, less noise.
+            </span>
+          </>
+        }
+        description="Blend structured filters with AI prompts in a cleaner discovery workflow built for serious equity research."
+        stats={[
+          { label: "Exchange", value: "NSE first" },
+          { label: "Active Filters", value: `${activeFilterCount}`, toneClassName: activeFilterCount > 0 ? "text-accent" : "text-text" },
+          { label: "Search Mode", value: aiMode ? "AI prompt" : "Manual filters", toneClassName: aiMode ? "text-success" : "text-sky-500" },
+        ]}
+        aside={
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 text-sm font-semibold">
+              <Filter className="h-4 w-4 text-accent" />
+              Discovery modes
+            </div>
+            <div className="grid gap-2">
+              <div className="rounded-2xl border border-border/45 bg-bg/42 px-3 py-2.5">
+                <p className="text-xs uppercase tracking-[0.14em] text-muted">Manual</p>
+                <p className="mt-1 text-sm font-semibold text-text">Sector, valuation, income, and size filters.</p>
+              </div>
+              <div className="rounded-2xl border border-border/45 bg-bg/42 px-3 py-2.5">
+                <p className="text-xs uppercase tracking-[0.14em] text-muted">AI</p>
+                <p className="mt-1 text-sm font-semibold text-text">Natural-language prompts translated into filters.</p>
+              </div>
+            </div>
+          </div>
+        }
+      />
       {/* Header */}
-      <ViewportMotionSection className="gradient-border relative overflow-hidden rounded-2xl p-5 sm:rounded-[28px] sm:p-8">
+      <ViewportMotionSection className="hidden gradient-border relative overflow-hidden rounded-2xl p-5 sm:rounded-[28px] sm:p-8">
         <div className="hero-orb hero-orb-1" />
         <div className="hero-orb hero-orb-2" />
         <div className="relative z-10">
