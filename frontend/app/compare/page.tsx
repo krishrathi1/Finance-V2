@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import {
   ArrowRight,
   BarChart3,
@@ -162,8 +163,8 @@ function CompRow({
   valB: string;
   higherIsBetter?: boolean;
 }) {
-  const numA = parseFloat(valA.replace(/[₹,%L Cr KN/A]/g, "").replace(/,/g, ""));
-  const numB = parseFloat(valB.replace(/[₹,%L Cr KN/A]/g, "").replace(/,/g, ""));
+  const numA = parseFloat(valA.replace(/[₹%LCrKN/A\s]/g, "").replace(/,/g, ""));
+  const numB = parseFloat(valB.replace(/[₹%LCrKN/A\s]/g, "").replace(/,/g, ""));
   const win = better(
     isNaN(numA) ? null : numA,
     isNaN(numB) ? null : numB,
@@ -282,8 +283,9 @@ function Section({
 /* ─── Main Page ─── */
 
 export default function ComparePage() {
-  const [symbolA, setSymbolA] = useState("");
-  const [symbolB, setSymbolB] = useState("");
+  const searchParams = useSearchParams();
+  const [symbolA, setSymbolA] = useState(() => searchParams.get("a") || "");
+  const [symbolB, setSymbolB] = useState(() => searchParams.get("b") || "");
   const [dataA, setDataA] = useState<DashboardData | null>(null);
   const [dataB, setDataB] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(false);

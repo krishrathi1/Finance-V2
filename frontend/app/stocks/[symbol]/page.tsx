@@ -17,6 +17,7 @@ import { SmartScore } from "@/components/sections/smart-score";
 import { StockSectionTabs } from "@/components/sections/stock-section-tabs";
 import { SwotAnalysis } from "@/components/sections/swot-analysis";
 import { TechnicalsSection } from "@/components/sections/technicals-section";
+import { AnalystEstimatesSection } from "@/components/sections/analyst-estimates-section";
 import { fetchDashboardEnvelope } from "@/lib/api";
 import type { DashboardData } from "@/lib/types";
 
@@ -70,7 +71,11 @@ function normalizeDashboardData(raw: DashboardData | Record<string, unknown>, sy
       description: String(profile.description || ""),
       chairman: String(profile.chairman || "N/A"),
       previousName: String(profile.previousName || "N/A"),
-      industry: profile.industry ? String(profile.industry) : undefined
+      industry: profile.industry ? String(profile.industry) : undefined,
+      ceo: profile.ceo ? String(profile.ceo) : undefined,
+      employees: profile.employees ?? undefined,
+      ipoDate: profile.ipoDate ? String(profile.ipoDate) : undefined,
+      country: profile.country ? String(profile.country) : undefined,
     },
     price: {
       cmp: Number(price.cmp || 0),
@@ -187,7 +192,10 @@ function normalizeDashboardData(raw: DashboardData | Record<string, unknown>, sy
       sectorCompanies: ensureArray((ensureObject(root.competitors as Record<string, unknown> | undefined).sectorCompanies as DashboardData["competitors"]["sectorCompanies"])),
       industryCompanies: ensureArray((ensureObject(root.competitors as Record<string, unknown> | undefined).industryCompanies as DashboardData["competitors"]["industryCompanies"]))
     },
-    news: ensureArray(root.news as DashboardData["news"])
+    news: ensureArray(root.news as DashboardData["news"]),
+    fmpKeyMetrics: ensureArray(root.fmpKeyMetrics as DashboardData["fmpKeyMetrics"]),
+    fmpFinancialGrowth: ensureArray(root.fmpFinancialGrowth as DashboardData["fmpFinancialGrowth"]),
+    analystEstimates: ensureArray(root.analystEstimates as DashboardData["analystEstimates"]),
   };
 }
 
@@ -251,12 +259,28 @@ export default async function StockDetailsPage({ params }: Props) {
   return (
     <div className="stagger-fade space-y-4">
       <div className="relative z-30 overflow-visible flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-        <p className="text-sm text-muted">
-          <Link href="/" className="hover:text-text">
-            Dashboard
-          </Link>{" "}
-          / {symbol}
-        </p>
+        <div className="flex flex-wrap items-center gap-3">
+          <p className="text-sm text-muted">
+            <Link href="/" className="hover:text-text">
+              Home
+            </Link>{" "}
+            / {symbol}
+          </p>
+          <div className="flex items-center gap-2">
+            <Link
+              href={`/compare?a=${symbol}`}
+              className="flex items-center gap-1 rounded-lg border border-border/60 bg-panel/60 px-2.5 py-1 text-xs font-medium text-muted backdrop-blur-sm transition hover:border-accent/40 hover:text-accent"
+            >
+              Compare
+            </Link>
+            <Link
+              href="/screener"
+              className="flex items-center gap-1 rounded-lg border border-border/60 bg-panel/60 px-2.5 py-1 text-xs font-medium text-muted backdrop-blur-sm transition hover:border-accent/40 hover:text-accent"
+            >
+              Screener
+            </Link>
+          </div>
+        </div>
         <div className="w-full max-w-lg">
           <StockSearch />
         </div>
@@ -280,6 +304,10 @@ export default async function StockDetailsPage({ params }: Props) {
               website={data.profile.website}
               chairman={data.profile.chairman}
               previousName={data.profile.previousName}
+              ceo={data.profile.ceo}
+              employees={data.profile.employees}
+              ipoDate={data.profile.ipoDate}
+              country={data.profile.country}
             />
             <MetricsGrid metrics={data.metrics} keyRatioTrends={data.financials.keyRatioTrends} />
           </section>
@@ -319,6 +347,10 @@ export default async function StockDetailsPage({ params }: Props) {
             />
             <BrokerageSummary brokerage={data.brokerageResearch} />
           </div>
+
+          {data.analystEstimates && data.analystEstimates.length > 0 && (
+            <AnalystEstimatesSection estimates={data.analystEstimates} />
+          )}
 
           <section id="corporate-actions">
             <CorporateActionsSection actions={data.corporateActions} />

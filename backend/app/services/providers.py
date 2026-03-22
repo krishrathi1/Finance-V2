@@ -197,6 +197,142 @@ class MarketDataProviders:
         except Exception:
             return None
 
+    async def get_fmp_profile(self, symbol: str) -> dict[str, Any] | None:
+        """FMP /stable/profile — CEO, employees, IPO date, country, description."""
+        fmp_symbol = symbol.upper()
+        if not fmp_symbol.endswith(".NS") and not fmp_symbol.endswith(".BO"):
+            fmp_symbol = f"{fmp_symbol}.NS"
+        try:
+            payload = await self._get(
+                "https://financialmodelingprep.com/stable/profile",
+                params={"symbol": fmp_symbol, "apikey": settings.fmp_api_key},
+            )
+            if not payload or not isinstance(payload, list) or not payload[0]:
+                return None
+            p = payload[0]
+            return {
+                "ceo": p.get("ceo") or p.get("CEO") or "",
+                "employees": p.get("fullTimeEmployees") or p.get("employees"),
+                "ipoDate": p.get("ipoDate") or "",
+                "country": p.get("country") or "",
+                "city": p.get("city") or "",
+                "exchange": p.get("exchange") or "",
+                "currency": p.get("currency") or "INR",
+                "description": p.get("description") or "",
+                "website": p.get("website") or "",
+                "industry": p.get("industry") or "",
+                "sector": p.get("sector") or "",
+            }
+        except Exception:
+            return None
+
+    async def get_fmp_key_metrics(self, symbol: str, limit: int = 5) -> list[dict[str, Any]]:
+        """FMP /stable/key-metrics — EV/EBITDA, FCF/share, revenue/share, etc."""
+        fmp_symbol = symbol.upper()
+        if not fmp_symbol.endswith(".NS") and not fmp_symbol.endswith(".BO"):
+            fmp_symbol = f"{fmp_symbol}.NS"
+        try:
+            payload = await self._get(
+                "https://financialmodelingprep.com/stable/key-metrics",
+                params={"symbol": fmp_symbol, "period": "annual", "limit": limit, "apikey": settings.fmp_api_key},
+            )
+            if not payload or not isinstance(payload, list):
+                return []
+            results = []
+            for item in payload:
+                results.append({
+                    "period": item.get("date") or item.get("period") or "",
+                    "revenuePerShare": item.get("revenuePerShare"),
+                    "netIncomePerShare": item.get("netIncomePerShare"),
+                    "operatingCashFlowPerShare": item.get("operatingCashFlowPerShare"),
+                    "freeCashFlowPerShare": item.get("freeCashFlowPerShare"),
+                    "cashPerShare": item.get("cashPerShare"),
+                    "bookValuePerShare": item.get("bookValuePerShare"),
+                    "enterpriseValue": item.get("enterpriseValue"),
+                    "evToEbitda": item.get("evToEbitda") or item.get("enterpriseValueOverEBITDA"),
+                    "evToOperatingCashFlow": item.get("evToOperatingCashFlow"),
+                    "evToFreeCashFlow": item.get("evToFreeCashFlow"),
+                    "peRatio": item.get("peRatio"),
+                    "priceToSalesRatio": item.get("priceToSalesRatio"),
+                    "pbRatio": item.get("pbRatio") or item.get("priceToBookRatio"),
+                    "dividendYield": item.get("dividendYield"),
+                    "debtToEquity": item.get("debtToEquity"),
+                    "roe": item.get("roe") or item.get("returnOnEquity"),
+                    "roa": item.get("roa") or item.get("returnOnAssets"),
+                    "roic": item.get("roic") or item.get("returnOnInvestedCapital"),
+                    "currentRatio": item.get("currentRatio"),
+                    "earningsYield": item.get("earningsYield"),
+                    "freeCashFlowYield": item.get("freeCashFlowYield"),
+                    "netDebtToEBITDA": item.get("netDebtToEBITDA"),
+                })
+            return results
+        except Exception:
+            return []
+
+    async def get_fmp_financial_growth(self, symbol: str, limit: int = 5) -> list[dict[str, Any]]:
+        """FMP /stable/financial-growth — YoY growth rates for revenue, EPS, FCF, etc."""
+        fmp_symbol = symbol.upper()
+        if not fmp_symbol.endswith(".NS") and not fmp_symbol.endswith(".BO"):
+            fmp_symbol = f"{fmp_symbol}.NS"
+        try:
+            payload = await self._get(
+                "https://financialmodelingprep.com/stable/financial-growth",
+                params={"symbol": fmp_symbol, "period": "annual", "limit": limit, "apikey": settings.fmp_api_key},
+            )
+            if not payload or not isinstance(payload, list):
+                return []
+            results = []
+            for item in payload:
+                results.append({
+                    "period": item.get("date") or item.get("period") or "",
+                    "revenueGrowth": item.get("revenueGrowth"),
+                    "netIncomeGrowth": item.get("netIncomeGrowth"),
+                    "epsGrowth": item.get("epsGrowth") or item.get("epsgrowth"),
+                    "operatingIncomeGrowth": item.get("operatingIncomeGrowth"),
+                    "grossProfitGrowth": item.get("grossProfitGrowth"),
+                    "ebitgrowth": item.get("ebitgrowth"),
+                    "freeCashFlowGrowth": item.get("freeCashFlowGrowth"),
+                    "assetGrowth": item.get("assetGrowth"),
+                    "bookValueperShareGrowth": item.get("bookValueperShareGrowth"),
+                    "debtGrowth": item.get("debtGrowth"),
+                    "dividendsperShareGrowth": item.get("dividendsperShareGrowth"),
+                })
+            return results
+        except Exception:
+            return []
+
+    async def get_fmp_analyst_estimates(self, symbol: str, limit: int = 4) -> list[dict[str, Any]]:
+        """FMP /stable/analyst-estimates — consensus EPS and revenue forecasts."""
+        fmp_symbol = symbol.upper()
+        if not fmp_symbol.endswith(".NS") and not fmp_symbol.endswith(".BO"):
+            fmp_symbol = f"{fmp_symbol}.NS"
+        try:
+            payload = await self._get(
+                "https://financialmodelingprep.com/stable/analyst-estimates",
+                params={"symbol": fmp_symbol, "period": "annual", "limit": limit, "apikey": settings.fmp_api_key},
+            )
+            if not payload or not isinstance(payload, list):
+                return []
+            results = []
+            for item in payload:
+                results.append({
+                    "period": item.get("date") or "",
+                    "estimatedRevenueLow": item.get("estimatedRevenueLow"),
+                    "estimatedRevenueHigh": item.get("estimatedRevenueHigh"),
+                    "estimatedRevenueAvg": item.get("estimatedRevenueAvg"),
+                    "estimatedEpsLow": item.get("estimatedEpsLow"),
+                    "estimatedEpsHigh": item.get("estimatedEpsHigh"),
+                    "estimatedEpsAvg": item.get("estimatedEpsAvg"),
+                    "estimatedNetIncomeLow": item.get("estimatedNetIncomeLow"),
+                    "estimatedNetIncomeHigh": item.get("estimatedNetIncomeHigh"),
+                    "estimatedNetIncomeAvg": item.get("estimatedNetIncomeAvg"),
+                    "numberAnalystEstimatedRevenue": item.get("numberAnalystEstimatedRevenue"),
+                    "numberAnalystsEstimatedEps": item.get("numberAnalystsEstimatedEps"),
+                })
+            return results
+        except Exception:
+            return []
+
     async def get_news(self, query: str) -> list[dict] | None:
         if not settings.news_api_key:
             return None
@@ -3173,7 +3309,14 @@ class MarketDataProviders:
         limit: int = 100,
     ) -> list[dict[str, Any]]:
         url = "https://financialmodelingprep.com/stable/stock-screener"
-        params: dict[str, Any] = {"apikey": settings.fmp_api_key, "exchange": exchange, "country": country, "limit": limit}
+        # FMP uses 'exchangeShortName' for NSE/BSE filtering; also pass country for India
+        params: dict[str, Any] = {
+            "apikey": settings.fmp_api_key,
+            "exchange": exchange,
+            "exchangeShortName": exchange,
+            "country": country,
+            "limit": limit,
+        }
         if sector:
             params["sector"] = sector
         if industry:
@@ -3191,15 +3334,14 @@ class MarketDataProviders:
         if dividend_more_than > 0:
             params["dividendMoreThan"] = dividend_more_than
 
-        try:
-            payload = await self._get(url, params=params)
-            if not payload or not isinstance(payload, list):
-                return []
-
+        def _parse_screener_payload(payload: list) -> list[dict[str, Any]]:
             results: list[dict[str, Any]] = []
             for item in payload:
+                sym = str(item.get("symbol") or "").replace(".NS", "").replace(".BO", "")
+                if not sym:
+                    continue
                 results.append({
-                    "symbol": str(item.get("symbol") or "").replace(".NS", "").replace(".BO", ""),
+                    "symbol": sym,
                     "companyName": str(item.get("companyName") or item.get("name") or ""),
                     "marketCap": float(item.get("marketCap") or 0),
                     "price": float(item.get("price") or 0),
@@ -3208,11 +3350,50 @@ class MarketDataProviders:
                     "volume": float(item.get("volume") or 0),
                     "sector": str(item.get("sector") or ""),
                     "industry": str(item.get("industry") or ""),
-                    "pe": float(item.get("pe") or 0) if item.get("pe") else None,
-                    "pb": float(item.get("pb") or 0) if item.get("pb") else None,
-                    "roe": float(item.get("roe") or 0) if item.get("roe") else None,
+                    "pe": float(item["pe"]) if item.get("pe") else None,
+                    "pb": float(item["pb"]) if item.get("pb") else None,
+                    "roe": float(item["roe"]) if item.get("roe") else None,
                     "dividendYield": float(item.get("lastAnnualDividend") or 0),
-                    "beta": float(item.get("beta") or 0) if item.get("beta") else None,
+                    "beta": float(item["beta"]) if item.get("beta") else None,
+                })
+            return results
+
+        try:
+            payload = await self._get(url, params=params)
+            if payload and isinstance(payload, list) and len(payload) > 0:
+                return _parse_screener_payload(payload)
+
+            # Retry without country filter — FMP may not index all countries consistently
+            params_retry = {k: v for k, v in params.items() if k != "country"}
+            payload2 = await self._get(url, params=params_retry)
+            if payload2 and isinstance(payload2, list):
+                return _parse_screener_payload(payload2)
+            return []
+        except Exception:
+            return []
+
+    async def get_ipo_calendar(self, from_date: str, to_date: str) -> list[dict[str, Any]]:
+        url = "https://financialmodelingprep.com/stable/ipo-calendar"
+        params: dict[str, Any] = {
+            "apikey": settings.fmp_api_key,
+            "from": from_date,
+            "to": to_date,
+        }
+        try:
+            payload = await self._get(url, params=params)
+            if not payload or not isinstance(payload, list):
+                return []
+            results: list[dict[str, Any]] = []
+            for item in payload:
+                results.append({
+                    "symbol": str(item.get("symbol") or "").replace(".NS", "").replace(".BO", ""),
+                    "company": str(item.get("company") or item.get("name") or ""),
+                    "date": str(item.get("date") or ""),
+                    "exchange": str(item.get("exchange") or ""),
+                    "actions": str(item.get("actions") or ""),
+                    "shares": item.get("shares"),
+                    "priceRange": str(item.get("priceRange") or ""),
+                    "marketCap": item.get("marketCap"),
                 })
             return results
         except Exception:

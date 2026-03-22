@@ -1,9 +1,48 @@
+import Link from "next/link";
+import { Filter, GitCompareArrows, Heart, Wallet } from "lucide-react";
+
 import { MarketHeatmap } from "@/components/market-heatmap";
 import { MarketMoodIndex } from "@/components/market-mood-index";
 import { MarketNews } from "@/components/market-news";
 import { MarketStatsBar } from "@/components/market-stats-bar";
+import { PopularStocks } from "@/components/popular-stocks";
 import { StockSearch } from "@/components/stock-search";
 import { TopMovers } from "@/components/top-movers";
+
+const FEATURE_CARDS = [
+  {
+    href: "/screener",
+    icon: Filter,
+    gradient: "from-violet-500 to-indigo-500",
+    glow: "bg-violet-500/10",
+    label: "Stock Screener",
+    desc: "Find stocks by filters",
+  },
+  {
+    href: "/watchlist",
+    icon: Heart,
+    gradient: "from-rose-500 to-pink-500",
+    glow: "bg-rose-500/10",
+    label: "Watchlist",
+    desc: "Track your favorites",
+  },
+  {
+    href: "/compare",
+    icon: GitCompareArrows,
+    gradient: "from-cyan-500 to-sky-500",
+    glow: "bg-cyan-500/10",
+    label: "Compare",
+    desc: "Side-by-side analysis",
+  },
+  {
+    href: "/portfolio",
+    icon: Wallet,
+    gradient: "from-amber-500 to-orange-500",
+    glow: "bg-amber-500/10",
+    label: "Portfolio",
+    desc: "Track your holdings & P&L",
+  },
+] as const;
 
 export default function HomePage() {
   return (
@@ -49,8 +88,34 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* Popular Stocks — client component, renders without blocking the page */}
+      <PopularStocks />
+
       {/* Market Stats Bar */}
       <MarketStatsBar />
+
+      {/* Feature Quick-Access Cards */}
+      <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {FEATURE_CARDS.map(({ href, icon: Icon, gradient, glow, label, desc }) => (
+          <Link
+            key={href}
+            href={href}
+            className="glow-card group flex items-center gap-4 rounded-2xl border border-border/70 bg-panel/70 p-4 transition hover:border-accent/40 sm:p-5"
+          >
+            <div
+              className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br ${gradient} ${glow} shadow-lg`}
+            >
+              <Icon className="h-5 w-5 text-white" />
+            </div>
+            <div className="min-w-0">
+              <p className="font-[var(--font-space)] text-sm font-bold group-hover:text-accent">
+                {label}
+              </p>
+              <p className="mt-0.5 text-[11px] text-muted">{desc}</p>
+            </div>
+          </Link>
+        ))}
+      </section>
 
       {/* Market Mood + Top Movers */}
       <section className="grid gap-4 lg:grid-cols-[300px_1fr] xl:grid-cols-[320px_1fr]">

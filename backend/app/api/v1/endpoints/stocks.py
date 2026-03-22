@@ -546,6 +546,32 @@ async def get_screener_sectors() -> dict:
     return {"sectors": INDIAN_SECTORS, "cached": False}
 
 
+@router.get("/ipo")
+async def get_ipo_data(type: str = Query("upcoming")) -> dict:
+    from app.services.providers import MarketDataProviders
+    providers = MarketDataProviders()
+    today = datetime.now(IST).date()
+
+    if type == "recent":
+        from_date = (today - timedelta(days=90)).isoformat()
+        to_date = today.isoformat()
+    else:
+        from_date = today.isoformat()
+        to_date = (today + timedelta(days=90)).isoformat()
+
+    cache_key = f"ipo:{type}:{from_date}"
+    cached = await redis_cache.get_json(cache_key)
+    if cached:
+        return {"type": type, "data": cached, "cached": True}
+
+    try:
+        data = await providers.get_ipo_calendar(from_date=from_date, to_date=to_date)
+        await redis_cache.set_json(cache_key, data, ttl_seconds=3600)
+        return {"type": type, "data": data, "cached": False}
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"IPO data unavailable: {str(exc)}")
+
+
 @router.get("/{symbol}/swot")
 async def get_swot_analysis(symbol: str) -> dict:
     cache_key = f"swot:{symbol.upper()}"

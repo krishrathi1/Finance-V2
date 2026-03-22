@@ -364,6 +364,37 @@ export async function fetchMarketNews(options: { force?: boolean } = {}) {
   }
 }
 
+export type IpoItem = {
+  symbol: string;
+  company: string;
+  date: string;
+  exchange: string;
+  actions: string;
+  shares: number | null;
+  priceRange: string;
+  marketCap: number | null;
+};
+
+export async function fetchIpoData(type: "upcoming" | "recent" = "upcoming"): Promise<IpoItem[]> {
+  const key = `ipo:${type}`;
+  const fresh = getFreshCache<IpoItem[]>(key, 60_000 * 10);
+  if (fresh) return fresh;
+  try {
+    const res = await fetchWithTimeout(
+      getApiUrl(`/ipo?type=${type}`),
+      { cache: "no-store" },
+      10_000
+    );
+    if (!res.ok) throw new Error(`IPO request failed: ${res.status}`);
+    const payload = await res.json();
+    const rows = (payload.data || []) as IpoItem[];
+    setCache(key, rows);
+    return rows;
+  } catch {
+    return [];
+  }
+}
+
 export async function fetchScreenerResults(filters: ScreenerFilters): Promise<ScreenerResult[]> {
   const params = new URLSearchParams();
   if (filters.exchange) params.set("exchange", filters.exchange);

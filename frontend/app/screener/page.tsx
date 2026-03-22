@@ -34,11 +34,13 @@ const SECTORS = [
   "Real Estate",
 ];
 
+// FMP returns marketCap in USD. Approx conversions at ₹84/USD:
+// 500 Cr ≈ $60M | 5000 Cr ≈ $600M | 20000 Cr ≈ $2.4B
 const MARKET_CAP_PRESETS = [
-  { label: "Micro", subtitle: "<500Cr", min: 0, max: 50000 },
-  { label: "Small", subtitle: "500-5K Cr", min: 50000, max: 500000 },
-  { label: "Mid", subtitle: "5K-20K Cr", min: 500000, max: 2000000 },
-  { label: "Large", subtitle: ">20K Cr", min: 2000000, max: 0 },
+  { label: "Micro", subtitle: "<500Cr", min: 0, max: 60_000_000 },
+  { label: "Small", subtitle: "500-5K Cr", min: 60_000_000, max: 600_000_000 },
+  { label: "Mid", subtitle: "5K-20K Cr", min: 600_000_000, max: 2_400_000_000 },
+  { label: "Large", subtitle: ">20K Cr", min: 2_400_000_000, max: 0 },
 ] as const;
 
 type SortKey = keyof Pick<
@@ -61,12 +63,13 @@ const DEFAULT_FILTERS: ScreenerFilters = {
   limit: 100,
 };
 
-function formatMarketCap(value: number): string {
-  if (!value) return "-";
-  if (value >= 10000000) return `${(value / 10000000).toFixed(1)}L Cr`;
-  if (value >= 100000) return `${(value / 100000).toFixed(1)}K Cr`;
-  if (value >= 100) return `${(value / 100).toFixed(1)} Cr`;
-  return `${value.toFixed(1)} L`;
+// FMP returns marketCap in USD; convert to INR Cr for display (₹84/USD approx)
+function formatMarketCap(usd: number): string {
+  if (!usd) return "-";
+  const crore = Math.round((usd * 84) / 1e7);
+  if (crore >= 100_000) return `₹${(crore / 100_000).toFixed(2)}L Cr`;
+  if (crore >= 1_000) return `₹${(crore / 1_000).toFixed(1)}K Cr`;
+  return `₹${crore} Cr`;
 }
 
 function formatVolume(value: number): string {

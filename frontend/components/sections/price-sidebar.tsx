@@ -7,6 +7,9 @@ import { createPortal } from "react-dom";
 
 import { PriceChart } from "@/components/charts/price-chart";
 import { MarketStatusBadge } from "@/components/market-status-badge";
+import { WatchlistButton } from "@/components/watchlist-button";
+import { PriceAlertButton } from "@/components/price-alert-button";
+import { AddToPortfolioButton } from "@/components/add-to-portfolio-button";
 import { Card } from "@/components/ui/card";
 import { formatCurrency, formatPercent } from "@/lib/format";
 import type { DashboardData } from "@/lib/types";
@@ -106,12 +109,17 @@ export function PriceSidebar({ data }: { data: DashboardData }) {
               <MarketStatusBadge compact />
             </div>
           </div>
-          <button
-            onClick={() => setIsExpanded(true)}
-            className="rounded-md p-2 text-muted transition-colors hover:bg-accent/20 hover:text-foreground"
-          >
-            <Maximize2 className="h-5 w-5" />
-          </button>
+          <div className="flex items-center gap-1.5">
+            <WatchlistButton symbol={data.symbol} />
+            <PriceAlertButton symbol={data.symbol} currentPrice={data.price.cmp} />
+            <AddToPortfolioButton symbol={data.symbol} companyName={data.companyName} currentPrice={data.price.cmp} />
+            <button
+              onClick={() => setIsExpanded(true)}
+              className="rounded-md p-2 text-muted transition-colors hover:bg-accent/20 hover:text-foreground"
+            >
+              <Maximize2 className="h-5 w-5" />
+            </button>
+          </div>
         </div>
 
         <div className="mt-4 grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 gap-y-1">

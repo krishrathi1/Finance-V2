@@ -9,7 +9,10 @@ const LINKS = [
   { href: "/", label: "Home" },
   { href: "/screener", label: "Screener" },
   { href: "/watchlist", label: "Watchlist" },
+  { href: "/portfolio", label: "Portfolio" },
   { href: "/compare", label: "Compare" },
+  { href: "/ipo", label: "IPO" },
+  { href: "/alerts", label: "Alerts" },
 ] as const;
 
 export function NavLinks() {

@@ -20,7 +20,14 @@ export type DashboardData = {
     chairman: string;
     previousName: string;
     industry?: string;
+    ceo?: string;
+    employees?: number | string;
+    ipoDate?: string;
+    country?: string;
   };
+  fmpKeyMetrics?: Array<Record<string, number | string | null>>;
+  fmpFinancialGrowth?: Array<Record<string, number | string | null>>;
+  analystEstimates?: Array<Record<string, number | string | null>>;
   price: {
     cmp: number;
     change: number;
@@ -279,9 +286,9 @@ export type ScreenerResult = {
   volume: number;
   sector: string;
   industry: string;
-  pe: number;
-  pb: number;
-  roe: number;
-  dividendYield: number;
-  beta: number;
+  pe: number | null;
+  pb: number | null;
+  roe: number | null;
+  dividendYield: number | null;
+  beta: number | null;
 };

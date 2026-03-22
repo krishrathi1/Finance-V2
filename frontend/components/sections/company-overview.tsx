@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Building2, Calendar, ExternalLink, Globe, User, History } from "lucide-react";
+import { Building2, Calendar, ExternalLink, Globe, User, History, Users, Briefcase } from "lucide-react";
 
 import { Card } from "@/components/ui/card";
 
@@ -9,7 +9,11 @@ export function CompanyOverview({
   headquarters,
   website,
   chairman,
-  previousName
+  previousName,
+  ceo,
+  employees,
+  ipoDate,
+  country,
 }: {
   description: string;
   incorporationYear: number;
@@ -17,10 +21,17 @@ export function CompanyOverview({
   website: string;
   chairman: string;
   previousName: string;
+  ceo?: string;
+  employees?: number | string;
+  ipoDate?: string;
+  country?: string;
 }) {
   const profileItems = [
+    ...(ceo ? [{ icon: <Briefcase className="h-3.5 w-3.5" />, label: "CEO", value: ceo }] : []),
     { icon: <Calendar className="h-3.5 w-3.5" />, label: "Incorporation", value: incorporationYear ? String(incorporationYear) : "N/A" },
-    { icon: <Building2 className="h-3.5 w-3.5" />, label: "Headquarters", value: headquarters || "N/A" },
+    ...(ipoDate ? [{ icon: <Calendar className="h-3.5 w-3.5" />, label: "IPO Date", value: ipoDate }] : []),
+    { icon: <Building2 className="h-3.5 w-3.5" />, label: "Headquarters", value: (headquarters || country) ? `${headquarters || ""}${headquarters && country ? ", " : ""}${country || ""}` : "N/A" },
+    ...(employees ? [{ icon: <Users className="h-3.5 w-3.5" />, label: "Employees", value: Number(employees).toLocaleString("en-IN") }] : []),
     { icon: <User className="h-3.5 w-3.5" />, label: "Chairman", value: chairman || "N/A" },
     { icon: <History className="h-3.5 w-3.5" />, label: "Previous Name", value: previousName || "N/A" },
   ];

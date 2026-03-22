@@ -230,6 +230,10 @@ class StockDashboardService:
             fmp_quote,
             fmp_candles,
             fmp_quarterly_results,
+            fmp_profile,
+            fmp_key_metrics,
+            fmp_financial_growth,
+            fmp_analyst_estimates,
             trendlyne_brokerage,
             trendlyne_financials,
             trendlyne_shareholding,
@@ -369,6 +373,77 @@ class StockDashboardService:
                     data["price"]["changePercent"] = round(float(fmp_quote["changePercent"]), 2)
             if fmp_quote.get("name"):
                 data["companyName"] = fmp_quote["name"]
+
+        # ── FMP Profile enrichment ────────────────────────────────────────────
+        if fmp_profile:
+            if fmp_profile.get("description") and not data["profile"].get("description"):
+                data["profile"]["description"] = fmp_profile["description"]
+            if fmp_profile.get("website") and not data["profile"].get("website"):
+                data["profile"]["website"] = fmp_profile["website"]
+            if fmp_profile.get("industry") and not data["profile"].get("industry"):
+                data["profile"]["industry"] = fmp_profile["industry"]
+            if fmp_profile.get("sector") and not data.get("sector"):
+                data["sector"] = fmp_profile["sector"]
+            # New fields from FMP profile
+            if fmp_profile.get("ceo"):
+                data["profile"]["ceo"] = fmp_profile["ceo"]
+            if fmp_profile.get("employees"):
+                data["profile"]["employees"] = fmp_profile["employees"]
+            if fmp_profile.get("ipoDate"):
+                data["profile"]["ipoDate"] = fmp_profile["ipoDate"]
+            if fmp_profile.get("country"):
+                data["profile"]["country"] = fmp_profile["country"]
+
+        # ── FMP Key Metrics ──────────────────────────────────────────────────
+        if fmp_key_metrics:
+            data["fmpKeyMetrics"] = fmp_key_metrics
+            # Back-fill common metric fields from the most recent key-metrics row
+            latest_km = fmp_key_metrics[0] if fmp_key_metrics else {}
+            if latest_km:
+                if latest_km.get("evToEbitda") is not None and not data["metrics"].get("evToEbitda"):
+                    data["metrics"]["evToEbitda"] = latest_km["evToEbitda"]
+                if latest_km.get("peRatio") is not None and not data["metrics"].get("pe"):
+                    data["metrics"]["pe"] = latest_km["peRatio"]
+                if latest_km.get("pbRatio") is not None and not data["metrics"].get("pb"):
+                    data["metrics"]["pb"] = latest_km["pbRatio"]
+                if latest_km.get("roe") is not None and not data["metrics"].get("roe"):
+                    data["metrics"]["roe"] = latest_km["roe"]
+                if latest_km.get("roa") is not None and not data["metrics"].get("roa"):
+                    data["metrics"]["roa"] = latest_km["roa"]
+                if latest_km.get("roic") is not None and not data["metrics"].get("roic"):
+                    data["metrics"]["roic"] = latest_km["roic"]
+                if latest_km.get("debtToEquity") is not None and not data["metrics"].get("debtToEquity"):
+                    data["metrics"]["debtToEquity"] = latest_km["debtToEquity"]
+                if latest_km.get("currentRatio") is not None and not data["metrics"].get("currentRatio"):
+                    data["metrics"]["currentRatio"] = latest_km["currentRatio"]
+                if latest_km.get("freeCashFlowPerShare") is not None:
+                    data["metrics"]["freeCashFlowPerShare"] = latest_km["freeCashFlowPerShare"]
+                if latest_km.get("freeCashFlowYield") is not None:
+                    data["metrics"]["freeCashFlowYield"] = latest_km["freeCashFlowYield"]
+                if latest_km.get("earningsYield") is not None:
+                    data["metrics"]["earningsYield"] = latest_km["earningsYield"]
+                if latest_km.get("netDebtToEBITDA") is not None:
+                    data["metrics"]["netDebtToEBITDA"] = latest_km["netDebtToEBITDA"]
+                if latest_km.get("priceToSalesRatio") is not None:
+                    data["metrics"]["priceToSales"] = latest_km["priceToSalesRatio"]
+
+        # ── FMP Financial Growth ─────────────────────────────────────────────
+        if fmp_financial_growth:
+            data["fmpFinancialGrowth"] = fmp_financial_growth
+            # Add most recent growth snapshot
+            latest_g = fmp_financial_growth[0] if fmp_financial_growth else {}
+            if latest_g:
+                data["financials"]["growthSnapshot"] = {
+                    "revenueGrowth": latest_g.get("revenueGrowth"),
+                    "netIncomeGrowth": latest_g.get("netIncomeGrowth"),
+                    "epsGrowth": latest_g.get("epsGrowth"),
+                    "freeCashFlowGrowth": latest_g.get("freeCashFlowGrowth"),
+                    "operatingIncomeGrowth": latest_g.get("operatingIncomeGrowth"),
+                }
+
+        # ── FMP Analyst Estimates ────────────────────────────────────────────
+        if fmp_analyst_estimates:
+            data["analystEstimates"] = fmp_analyst_estimates
 
         data["news"] = self._build_company_news(
             symbol=symbol,
@@ -544,6 +619,10 @@ class StockDashboardService:
             (self.providers.get_fmp_quote(symbol), 5),
             (self.providers.get_fmp_candles(symbol, "5Y"), 7),
             (self.providers.get_fmp_quarterly_results(symbol), 7),
+            (self.providers.get_fmp_profile(symbol), 5),
+            (self.providers.get_fmp_key_metrics(symbol), 6),
+            (self.providers.get_fmp_financial_growth(symbol), 6),
+            (self.providers.get_fmp_analyst_estimates(symbol), 5),
             (self.providers.get_trendlyne_brokerage(symbol), 6),
             (self.providers.get_trendlyne_financials(symbol), 8),
             (self.providers.get_trendlyne_shareholding(symbol), 6),
