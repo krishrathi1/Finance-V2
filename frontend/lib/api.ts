@@ -395,6 +395,61 @@ export async function fetchIpoData(type: "upcoming" | "recent" = "upcoming"): Pr
   }
 }
 
+export async function fetchAIScreenerResults(query: string): Promise<{ results: ScreenerResult[]; parsedFilters: Record<string, unknown> }> {
+  const url = getApiUrl("/screener/ai");
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ query }),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`AI screener failed: ${res.status}`);
+  const payload = await res.json();
+  return { results: (payload.results || []) as ScreenerResult[], parsedFilters: payload.parsedFilters || {} };
+}
+
+export async function fetchPortfolioRiskAssessment(holdings: Array<{
+  symbol: string; quantity: number; buyPrice: number; currentPrice?: number; sector?: string; beta?: number;
+}>): Promise<Record<string, unknown>> {
+  const url = getApiUrl("/portfolio-risk");
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ holdings }),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`Portfolio risk failed: ${res.status}`);
+  return await res.json();
+}
+
+export async function fetchPortfolioRoast(holdings: Array<{
+  symbol: string; quantity: number; avgPrice: number; currentValue?: number; pnl?: number;
+}>, totalValue?: number): Promise<Record<string, unknown>> {
+  const url = getApiUrl("/portfolio-roast");
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ holdings, totalValue }),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`Portfolio roast failed: ${res.status}`);
+  return await res.json();
+}
+
+export async function fetchCompetitorVerdict(symbol: string): Promise<Record<string, unknown>> {
+  const url = getApiUrl(`/${symbol}/competitor-verdict`);
+  const res = await fetch(url, { cache: "no-store" });
+  if (!res.ok) throw new Error(`Competitor verdict failed: ${res.status}`);
+  return await res.json();
+}
+
+export async function fetchEarningsTldr(symbol: string): Promise<Record<string, unknown>> {
+  const url = getApiUrl(`/${symbol}/earnings-tldr`);
+  const res = await fetch(url, { cache: "no-store" });
+  if (!res.ok) throw new Error(`Earnings TL;DR failed: ${res.status}`);
+  return await res.json();
+}
+
 export async function fetchScreenerResults(filters: ScreenerFilters): Promise<ScreenerResult[]> {
   const params = new URLSearchParams();
   if (filters.exchange) params.set("exchange", filters.exchange);

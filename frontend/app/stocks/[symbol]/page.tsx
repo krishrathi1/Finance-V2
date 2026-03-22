@@ -18,6 +18,9 @@ import { StockSectionTabs } from "@/components/sections/stock-section-tabs";
 import { SwotAnalysis } from "@/components/sections/swot-analysis";
 import { TechnicalsSection } from "@/components/sections/technicals-section";
 import { AnalystEstimatesSection } from "@/components/sections/analyst-estimates-section";
+import { CompetitorsSection } from "@/components/sections/competitors-section";
+import { CompetitorVerdict } from "@/components/sections/competitor-verdict";
+import { EarningsTldr } from "@/components/sections/earnings-tldr";
 import { fetchDashboardEnvelope } from "@/lib/api";
 import type { DashboardData } from "@/lib/types";
 
@@ -366,6 +369,8 @@ export default async function StockDetailsPage({ params }: Props) {
             />
           </section>
 
+          <EarningsTldr symbol={symbol} />
+
           <section id="financials">
             <FinancialsSection
               growthSnapshot={data.financials.growthSnapshot}
@@ -401,6 +406,11 @@ export default async function StockDetailsPage({ params }: Props) {
               creditRatings={data.documents.creditRatings}
               exchangeFilings={data.documents.exchangeFilings}
             />
+          </section>
+
+          <section id="competitors">
+            <CompetitorsSection competitors={data.competitors} />
+            <CompetitorVerdict symbol={symbol} />
           </section>
 
           <NewsSection symbol={symbol} news={data.news} />

@@ -1,12 +1,16 @@
 "use client";
 
 import {
+  AlertTriangle,
   ArrowDownRight,
   ArrowUpRight,
   BarChart3,
+  CheckCircle,
   Edit2,
   Minus,
   Plus,
+  ShieldAlert,
+  Sparkles,
   Trash2,
   TrendingDown,
   TrendingUp,
@@ -19,7 +23,8 @@ import { createPortal } from "react-dom";
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { fetchTickerTape } from "@/lib/api";
+import { PortfolioDoctor } from "@/components/sections/portfolio-doctor";
+import { fetchTickerTape, fetchPortfolioRiskAssessment } from "@/lib/api";
 import {
   addHolding,
   enrichHoldings,
@@ -448,12 +453,25 @@ function AllocationChart({ enriched }: { enriched: HoldingWithValue[] }) {
 // Main Page
 // ────────────────────────────────────────────────────────────────────────────
 
+type RiskAnalysis = {
+  overallRisk: string;
+  riskScore: number;
+  diversificationScore: number;
+  sectorConcentration: string;
+  topRisks: string[];
+  recommendations: string[];
+  summary: string;
+};
+
 export default function PortfolioPage() {
   const [holdings, setHoldings] = useState<HoldingWithValue[]>([]);
   const [loading, setLoading] = useState(true);
   const [mounted, setMounted] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [editTarget, setEditTarget] = useState<Holding | null>(null);
+  const [riskAnalysis, setRiskAnalysis] = useState<RiskAnalysis | null>(null);
+  const [riskLoading, setRiskLoading] = useState(false);
+  const [riskError, setRiskError] = useState<string | null>(null);
 
   useEffect(() => { setMounted(true); }, []);
 
@@ -484,6 +502,30 @@ export default function PortfolioPage() {
     removeHolding(id);
     setHoldings((prev) => prev.filter((h) => h.id !== id));
   }, []);
+
+  const handleAIRisk = useCallback(async () => {
+    if (holdings.length === 0) return;
+    setRiskLoading(true);
+    setRiskError(null);
+    try {
+      const payload = await fetchPortfolioRiskAssessment(
+        holdings.map((h) => ({
+          symbol: h.symbol,
+          quantity: h.quantity,
+          buyPrice: h.buyPrice,
+          currentPrice: h.currentPrice ?? undefined,
+          sector: undefined,
+          beta: undefined,
+        }))
+      );
+      const analysis = payload.analysis as RiskAnalysis;
+      setRiskAnalysis(analysis);
+    } catch {
+      setRiskError("AI analysis unavailable. Please try again.");
+    } finally {
+      setRiskLoading(false);
+    }
+  }, [holdings]);
 
   const handleEdit = useCallback((h: Holding) => {
     setEditTarget(h);
@@ -585,6 +627,84 @@ export default function PortfolioPage() {
               icon={isGain ? ArrowUpRight : ArrowDownRight}
             />
           </div>
+
+          {/* AI Portfolio Risk */}
+          <div className="rounded-2xl border border-accent/25 bg-gradient-to-r from-accent/5 via-purple-500/5 to-transparent p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-accent" />
+                  <p className="text-sm font-semibold">AI Portfolio Risk Analysis</p>
+                  <span className="rounded-full bg-accent/10 px-2 py-0.5 text-[10px] font-medium text-accent">Powered by Gemini</span>
+                </div>
+                <p className="mt-1 text-xs text-muted">Get AI insights on concentration, correlation, and diversification of your portfolio.</p>
+              </div>
+              <button
+                onClick={handleAIRisk}
+                disabled={riskLoading || holdings.length === 0}
+                className="flex shrink-0 items-center gap-2 rounded-xl bg-gradient-to-r from-accent to-purple-500 px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:-translate-y-0.5 disabled:opacity-50 disabled:translate-y-0"
+              >
+                {riskLoading ? (
+                  <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                ) : (
+                  <ShieldAlert className="h-3.5 w-3.5" />
+                )}
+                {riskLoading ? "Analysing…" : "Analyse Portfolio"}
+              </button>
+            </div>
+
+            {riskError && <p className="mt-2 text-xs text-danger">{riskError}</p>}
+
+            {riskAnalysis && !riskLoading && (
+              <div className="mt-4 space-y-3">
+                {/* Risk badges */}
+                <div className="flex flex-wrap gap-3">
+                  <div className="rounded-xl border border-border/50 bg-bg/50 px-3 py-2 text-center">
+                    <p className="text-[10px] text-muted">Overall Risk</p>
+                    <p className={`text-sm font-bold ${riskAnalysis.overallRisk === "Low" ? "text-success" : riskAnalysis.overallRisk === "High" ? "text-danger" : "text-amber-400"}`}>
+                      {riskAnalysis.overallRisk}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-border/50 bg-bg/50 px-3 py-2 text-center">
+                    <p className="text-[10px] text-muted">Risk Score</p>
+                    <p className="text-sm font-bold">{riskAnalysis.riskScore}/10</p>
+                  </div>
+                  <div className="rounded-xl border border-border/50 bg-bg/50 px-3 py-2 text-center">
+                    <p className="text-[10px] text-muted">Diversification</p>
+                    <p className="text-sm font-bold text-accent">{riskAnalysis.diversificationScore}/10</p>
+                  </div>
+                  <div className="rounded-xl border border-border/50 bg-bg/50 px-3 py-2 text-center">
+                    <p className="text-[10px] text-muted">Concentration</p>
+                    <p className="text-sm font-bold">{riskAnalysis.sectorConcentration}</p>
+                  </div>
+                </div>
+
+                {/* Summary */}
+                <p className="rounded-xl border border-border/40 bg-bg/40 px-3 py-2 text-xs text-muted leading-5">
+                  {riskAnalysis.summary}
+                </p>
+
+                {/* Risks + Recommendations */}
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1">
+                    <p className="text-[11px] font-semibold text-danger flex items-center gap-1"><AlertTriangle className="h-3 w-3" /> Top Risks</p>
+                    {riskAnalysis.topRisks.map((r, i) => (
+                      <p key={i} className="text-xs text-muted pl-4">• {r}</p>
+                    ))}
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-[11px] font-semibold text-success flex items-center gap-1"><CheckCircle className="h-3 w-3" /> Recommendations</p>
+                    {riskAnalysis.recommendations.map((r, i) => (
+                      <p key={i} className="text-xs text-muted pl-4">• {r}</p>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Portfolio Doctor */}
+          <PortfolioDoctor />
 
           {/* Chart + Holdings */}
           <div className="grid gap-4 lg:grid-cols-[280px_1fr]">

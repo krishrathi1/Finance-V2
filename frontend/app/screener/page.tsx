@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Search,
@@ -15,9 +15,11 @@ import {
   Filter,
   BarChart3,
   X,
+  Sparkles,
+  Send,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
-import { fetchScreenerResults } from "@/lib/api";
+import { fetchScreenerResults, fetchAIScreenerResults } from "@/lib/api";
 import type { ScreenerFilters, ScreenerResult } from "@/lib/types";
 
 const SECTORS = [
@@ -85,6 +87,13 @@ function formatNumber(value: number | null | undefined, decimals = 2): string {
   return value.toFixed(decimals);
 }
 
+const AI_SUGGESTIONS = [
+  "Debt-free large cap IT stocks with PE under 30",
+  "High dividend yield Finance stocks above 3%",
+  "Small cap pharma companies with strong growth",
+  "Undervalued mid cap stocks with low PE",
+];
+
 export default function ScreenerPage() {
   const router = useRouter();
   const [filters, setFilters] = useState<ScreenerFilters>({ ...DEFAULT_FILTERS });
@@ -96,6 +105,14 @@ export default function ScreenerPage() {
   const [sortKey, setSortKey] = useState<SortKey>("marketCap");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [activeCapPreset, setActiveCapPreset] = useState<number | null>(null);
+
+  // AI Screener state
+  const [aiQuery, setAiQuery] = useState("");
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [aiParsedFilters, setAiParsedFilters] = useState<Record<string, unknown> | null>(null);
+  const [aiMode, setAiMode] = useState(false);
+  const aiInputRef = useRef<HTMLInputElement>(null);
 
   const applyFilters = useCallback(async () => {
     setLoading(true);
@@ -112,11 +129,33 @@ export default function ScreenerPage() {
     }
   }, [filters]);
 
+  const handleAISearch = useCallback(async (query?: string) => {
+    const q = (query ?? aiQuery).trim();
+    if (!q) return;
+    setAiLoading(true);
+    setAiError(null);
+    setAiMode(true);
+    setHasSearched(true);
+    try {
+      const { results: aiResults, parsedFilters } = await fetchAIScreenerResults(q);
+      setResults(aiResults);
+      setAiParsedFilters(parsedFilters);
+    } catch {
+      setAiError("AI screener unavailable. Try using manual filters below.");
+      setAiMode(false);
+    } finally {
+      setAiLoading(false);
+    }
+  }, [aiQuery]);
+
   const resetFilters = () => {
     setFilters({ ...DEFAULT_FILTERS });
     setActiveCapPreset(null);
     setResults([]);
     setHasSearched(false);
+    setAiMode(false);
+    setAiQuery("");
+    setAiParsedFilters(null);
     setError(null);
   };
 
@@ -209,6 +248,70 @@ export default function ScreenerPage() {
             dividend yield, sector, and more.
           </p>
         </div>
+      </section>
+
+      {/* AI Natural Language Screener */}
+      <section className="rounded-2xl border border-accent/30 bg-gradient-to-r from-accent/5 via-purple-500/5 to-transparent p-4 sm:p-6">
+        <div className="mb-3 flex items-center gap-2">
+          <Sparkles className="h-4 w-4 text-accent" />
+          <p className="text-sm font-semibold text-accent">AI-Powered Screener</p>
+          <span className="rounded-full bg-accent/10 px-2 py-0.5 text-[10px] font-medium text-accent">NEW</span>
+        </div>
+        <p className="mb-3 text-xs text-muted">
+          Describe stocks in plain English — our AI converts it to filters automatically.
+        </p>
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+            <input
+              ref={aiInputRef}
+              type="text"
+              value={aiQuery}
+              onChange={(e) => setAiQuery(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") handleAISearch(); }}
+              placeholder="e.g. Large cap IT stocks with PE under 30 and positive dividends"
+              className="w-full rounded-xl border border-border/60 bg-bg/60 py-2.5 pl-9 pr-4 text-sm outline-none focus:border-accent/50 focus:ring-1 focus:ring-accent/30"
+            />
+          </div>
+          <button
+            onClick={() => handleAISearch()}
+            disabled={!aiQuery.trim() || aiLoading}
+            className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-accent to-purple-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 disabled:opacity-50 disabled:translate-y-0"
+          >
+            {aiLoading ? (
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+            ) : (
+              <Send className="h-4 w-4" />
+            )}
+            <span className="hidden sm:inline">Search</span>
+          </button>
+        </div>
+
+        {/* Quick suggestions */}
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {AI_SUGGESTIONS.map((s) => (
+            <button
+              key={s}
+              onClick={() => { setAiQuery(s); handleAISearch(s); }}
+              className="rounded-lg border border-border/50 bg-bg/50 px-2.5 py-1 text-[11px] text-muted transition hover:border-accent/40 hover:text-accent"
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+
+        {/* Parsed filters badge */}
+        {aiMode && aiParsedFilters && Object.keys(aiParsedFilters).length > 0 && (
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px]">
+            <span className="text-muted">Applied filters:</span>
+            {Object.entries(aiParsedFilters).map(([k, v]) => (
+              <span key={k} className="rounded-md bg-accent/10 px-2 py-0.5 font-medium text-accent">
+                {k}: {String(v)}
+              </span>
+            ))}
+          </div>
+        )}
+        {aiError && <p className="mt-2 text-xs text-danger">{aiError}</p>}
       </section>
 
       {/* Filters + Results */}

@@ -5,6 +5,7 @@ import json
 import re
 
 from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel
 
 from app.core.cache import redis_cache
 from app.core.config import get_settings
@@ -570,6 +571,180 @@ async def get_ipo_data(type: str = Query("upcoming")) -> dict:
         return {"type": type, "data": data, "cached": False}
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"IPO data unavailable: {str(exc)}")
+
+
+class AIScreenerRequest(BaseModel):
+    query: str
+
+@router.post("/screener/ai")
+async def ai_stock_screener(payload: AIScreenerRequest) -> dict:
+    """Natural language screener — converts query to filter params via Gemini, then runs screener."""
+    query = (payload.query or "").strip()
+    if not query:
+        raise HTTPException(status_code=422, detail="Query is required")
+
+    # Parse NL → screener params
+    params = await ai_adapter.parse_screener_query(query)
+
+    exchange = str(params.get("exchange", "NSE"))
+    sector = str(params.get("sector", ""))
+    market_cap_min = float(params.get("market_cap_min", 0) or 0)
+    market_cap_max = float(params.get("market_cap_max", 0) or 0)
+    pe_min = float(params.get("pe_min", 0) or 0)
+    pe_max = float(params.get("pe_max", 0) or 0)
+    price_min = float(params.get("price_min", 0) or 0)
+    price_max = float(params.get("price_max", 0) or 0)
+    dividend_min = float(params.get("dividend_min", 0) or 0)
+    volume_min = float(params.get("volume_min", 0) or 0)
+    limit = int(params.get("limit", 50) or 50)
+
+    try:
+        results = await dashboard_service.screen_stocks(
+            exchange=exchange, sector=sector, industry="",
+            market_cap_min=market_cap_min, market_cap_max=market_cap_max,
+            price_min=price_min, price_max=price_max,
+            volume_min=volume_min, dividend_min=dividend_min, limit=limit,
+        )
+        if pe_min > 0 or pe_max > 0:
+            results = [
+                r for r in results
+                if r.get("pe") is not None
+                and (pe_min <= 0 or r["pe"] >= pe_min)
+                and (pe_max <= 0 or r["pe"] <= pe_max)
+            ]
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Screener error: {exc}")
+
+    return {
+        "query": query,
+        "parsedFilters": params,
+        "results": results,
+        "count": len(results),
+    }
+
+
+class PortfolioHolding(BaseModel):
+    symbol: str
+    quantity: float
+    buyPrice: float
+    currentPrice: float | None = None
+    sector: str | None = None
+    beta: float | None = None
+
+class PortfolioRiskRequest(BaseModel):
+    holdings: list[PortfolioHolding]
+
+@router.post("/portfolio-risk")
+async def portfolio_risk_assessment(payload: PortfolioRiskRequest) -> dict:
+    """AI-powered portfolio risk and correlation analysis."""
+    if not payload.holdings:
+        raise HTTPException(status_code=422, detail="At least one holding is required")
+
+    # Build enriched holdings list
+    total_invested = sum(h.quantity * h.buyPrice for h in payload.holdings)
+    total_current = sum(
+        h.quantity * (h.currentPrice or h.buyPrice) for h in payload.holdings
+    )
+    denom = total_current if total_current > 0 else total_invested
+
+    enriched = [
+        {
+            "symbol": h.symbol.upper(),
+            "investedValue": round(h.quantity * h.buyPrice, 2),
+            "currentValue": round(h.quantity * (h.currentPrice or h.buyPrice), 2),
+            "weight": round((h.quantity * (h.currentPrice or h.buyPrice)) / denom * 100, 1) if denom > 0 else 0,
+            "sector": h.sector or "Unknown",
+            "beta": h.beta,
+        }
+        for h in payload.holdings
+    ]
+
+    analysis = await ai_adapter.analyze_portfolio_risk(enriched, [])
+    return {
+        "totalInvested": round(total_invested, 2),
+        "totalCurrentValue": round(total_current, 2),
+        "totalPnl": round(total_current - total_invested, 2),
+        "holdingCount": len(payload.holdings),
+        "analysis": analysis,
+    }
+
+
+class PortfolioRoastHolding(BaseModel):
+    symbol: str
+    quantity: float
+    avgPrice: float
+    currentValue: float | None = None
+    pnl: float | None = None
+
+class PortfolioRoastRequest(BaseModel):
+    holdings: list[PortfolioRoastHolding]
+    totalValue: float | None = None
+
+@router.post("/portfolio-roast")
+async def portfolio_roast(payload: PortfolioRoastRequest) -> dict:
+    """AI 'Portfolio Doctor' — roast + grade + actionable fixes for uploaded holdings."""
+    if not payload.holdings:
+        raise HTTPException(status_code=422, detail="No holdings provided")
+    total = payload.totalValue or sum(h.currentValue or (h.quantity * h.avgPrice) for h in payload.holdings)
+    holdings_dicts = [
+        {
+            "symbol": h.symbol.upper(),
+            "quantity": h.quantity,
+            "avgPrice": h.avgPrice,
+            "currentValue": round(h.currentValue or h.quantity * h.avgPrice, 2),
+            "pnl": round(h.pnl or (h.currentValue or 0) - (h.quantity * h.avgPrice), 2),
+        }
+        for h in payload.holdings
+    ]
+    result = await ai_adapter.roast_portfolio(holdings_dicts, total)
+    return {"holdings": len(payload.holdings), "totalValue": round(total, 2), "roast": result}
+
+
+@router.get("/{symbol}/competitor-verdict")
+async def competitor_verdict(symbol: str) -> dict:
+    """AI verdict on which stock wins among sector peers right now."""
+    cache_key = f"comp_verdict:{symbol.upper()}"
+    cached = await redis_cache.get_json(cache_key)
+    if cached:
+        return {"symbol": symbol.upper(), "cached": True, **cached}
+    try:
+        dashboard = await dashboard_service.get_dashboard(symbol=symbol)
+        metrics = dashboard.get("metrics", {}) if isinstance(dashboard, dict) else {}
+        competitors = (dashboard.get("competitors", {}) or {}) if isinstance(dashboard, dict) else {}
+        peers = competitors.get("table", []) or []
+        verdict = await ai_adapter.generate_competitor_verdict(
+            symbol=symbol, stock_metrics=metrics, peers=peers
+        )
+        await redis_cache.set_json(cache_key, verdict, ttl_seconds=3600)
+        return {"symbol": symbol.upper(), "cached": False, **verdict}
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Competitor verdict unavailable: {exc}")
+
+
+@router.get("/{symbol}/earnings-tldr")
+async def earnings_tldr(symbol: str) -> dict:
+    """AI TL;DR of recent quarterly earnings — 4 bullets + CEO signal."""
+    cache_key = f"earnings_tldr:{symbol.upper()}"
+    cached = await redis_cache.get_json(cache_key)
+    if cached:
+        return {"symbol": symbol.upper(), "cached": True, **cached}
+    try:
+        dashboard = await dashboard_service.get_dashboard(symbol=symbol)
+        financials = (dashboard.get("financials", {}) or {}) if isinstance(dashboard, dict) else {}
+        quarterly = (
+            financials.get("quarterlyConsolidated")
+            or financials.get("quarterlyStandalone")
+            or financials.get("quarterly")
+            or []
+        )
+        company_name = str(dashboard.get("companyName", symbol)) if isinstance(dashboard, dict) else symbol
+        tldr = await ai_adapter.generate_earnings_tldr(
+            symbol=symbol, quarterly_data=quarterly, company_name=company_name
+        )
+        await redis_cache.set_json(cache_key, tldr, ttl_seconds=7200)
+        return {"symbol": symbol.upper(), "cached": False, **tldr}
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Earnings TL;DR unavailable: {exc}")
 
 
 @router.get("/{symbol}/swot")
