@@ -18,16 +18,22 @@ export function ModeToggle() {
     <button
       onClick={() => setTheme(isDark ? "light" : "dark")}
       aria-label="Toggle theme"
-      className="inline-flex h-10 items-center gap-2 rounded-xl border border-border/60 bg-panel px-3 text-sm text-text transition hover:border-accent/70"
+      className="group relative inline-flex h-9 w-16 items-center rounded-full border border-border/50 bg-bg/80 p-0.5 transition-colors hover:border-accent/40"
     >
-      {!mounted ? (
-        <Moon className="h-4 w-4" />
-      ) : isDark ? (
-        <Sun className="h-4 w-4" />
-      ) : (
-        <Moon className="h-4 w-4" />
-      )}
-      {!mounted ? "Theme" : isDark ? "Light" : "Dark"}
+      <span
+        className={`absolute flex h-7 w-7 items-center justify-center rounded-full bg-panel shadow-sm transition-all duration-300 ${
+          mounted && !isDark ? "translate-x-0" : "translate-x-[1.85rem]"
+        }`}
+      >
+        {!mounted ? (
+          <Moon className="h-3.5 w-3.5 text-muted" />
+        ) : isDark ? (
+          <Sun className="h-3.5 w-3.5 text-amber-400" />
+        ) : (
+          <Moon className="h-3.5 w-3.5 text-blue-500" />
+        )}
+      </span>
+      <span className="sr-only">{isDark ? "Switch to light" : "Switch to dark"}</span>
     </button>
   );
 }

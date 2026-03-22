@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Building2, Calendar, ExternalLink, Globe, User, History } from "lucide-react";
 
 import { Card } from "@/components/ui/card";
 
@@ -17,39 +18,51 @@ export function CompanyOverview({
   chairman: string;
   previousName: string;
 }) {
+  const profileItems = [
+    { icon: <Calendar className="h-3.5 w-3.5" />, label: "Incorporation", value: incorporationYear ? String(incorporationYear) : "N/A" },
+    { icon: <Building2 className="h-3.5 w-3.5" />, label: "Headquarters", value: headquarters || "N/A" },
+    { icon: <User className="h-3.5 w-3.5" />, label: "Chairman", value: chairman || "N/A" },
+    { icon: <History className="h-3.5 w-3.5" />, label: "Previous Name", value: previousName || "N/A" },
+  ];
+
   return (
     <div className="grid gap-3 xl:grid-cols-3">
       <Card className="flex h-[230px] flex-col p-4 xl:col-span-2">
-        <h3 className="text-lg font-semibold">Company Overview</h3>
-        <div className="company-scroll mt-2 min-h-0 flex-1 overflow-y-auto pr-1">
-          <p className="text-sm leading-6 text-muted">{description}</p>
+        <div className="flex items-center gap-2">
+          <div className="h-5 w-1 rounded-full bg-gradient-to-b from-accent to-amber-400" />
+          <h3 className="text-lg font-semibold">Company Overview</h3>
+        </div>
+        <div className="company-scroll mt-3 min-h-0 flex-1 overflow-y-auto pr-1">
+          <p className="text-sm leading-7 text-muted">{description}</p>
         </div>
       </Card>
       <Card className="flex h-[230px] flex-col p-4">
-        <h3 className="text-lg font-semibold">Profile</h3>
-        <div className="company-scroll mt-2 space-y-2 overflow-y-auto pr-1 text-sm">
-          <p>
-            <span className="text-muted">Incorporation:</span> {incorporationYear}
-          </p>
-          <p>
-            <span className="text-muted">Headquarters:</span> {headquarters}
-          </p>
-          <p>
-            <span className="text-muted">Chairman:</span> {chairman}
-          </p>
-          <p>
-            <span className="text-muted">Previous Name:</span> {previousName}
-          </p>
-          <p>
-            <span className="text-muted">Website:</span>{" "}
-            {website ? (
-              <Link href={website} className="break-all text-accent hover:underline">
-                {website}
-              </Link>
-            ) : (
-              <span>N/A</span>
-            )}
-          </p>
+        <div className="flex items-center gap-2">
+          <div className="h-5 w-1 rounded-full bg-gradient-to-b from-blue-500 to-cyan-400" />
+          <h3 className="text-lg font-semibold">Profile</h3>
+        </div>
+        <div className="company-scroll mt-3 space-y-3 overflow-y-auto pr-1 text-sm">
+          {profileItems.map((item) => (
+            <div key={item.label} className="flex items-start gap-2.5">
+              <span className="mt-0.5 text-muted">{item.icon}</span>
+              <div>
+                <p className="text-[11px] text-muted">{item.label}</p>
+                <p className="font-medium">{item.value}</p>
+              </div>
+            </div>
+          ))}
+          {website ? (
+            <div className="flex items-start gap-2.5">
+              <span className="mt-0.5 text-muted"><Globe className="h-3.5 w-3.5" /></span>
+              <div>
+                <p className="text-[11px] text-muted">Website</p>
+                <Link href={website} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-accent hover:underline">
+                  <span className="break-all text-sm font-medium">{website.replace(/^https?:\/\//, "")}</span>
+                  <ExternalLink className="h-3 w-3 shrink-0" />
+                </Link>
+              </div>
+            </div>
+          ) : null}
         </div>
       </Card>
     </div>

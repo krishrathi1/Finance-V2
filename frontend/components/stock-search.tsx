@@ -1,6 +1,6 @@
 "use client";
 
-import { Search } from "lucide-react";
+import { ArrowRight, Search, TrendingUp } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
@@ -28,7 +28,7 @@ export function StockSearch({ className = "" }: { className?: string }) {
 
   return (
     <div className={`stock-search-shell relative z-[80] ${className}`}>
-      <div className="search-bar relative z-10 flex items-center rounded-xl border border-border/70 bg-panel px-2 shadow-sm sm:rounded-2xl sm:px-3">
+      <div className="search-bar relative z-10 flex items-center rounded-xl border border-border/60 bg-panel/80 px-2 shadow-sm backdrop-blur-sm sm:rounded-2xl sm:px-3">
         <Search className="mr-1.5 h-4 w-4 shrink-0 text-muted sm:mr-2" />
         <input
           value={query}
@@ -39,32 +39,44 @@ export function StockSearch({ className = "" }: { className?: string }) {
               setOpen(false);
             }
           }}
-          placeholder="Search NSE/BSE symbol"
+          placeholder="Search any NSE/BSE stock..."
           className="search-input h-10 w-full bg-transparent text-sm outline-none sm:h-12"
         />
         <button
           onClick={() => canSubmit && router.push(`/stocks/${query.toUpperCase()}`)}
-          className="rounded-xl bg-accent px-3 py-2 text-xs font-semibold text-white shadow-sm hover:-translate-y-0.5 hover:shadow-md"
+          className="flex shrink-0 items-center gap-1.5 rounded-lg bg-gradient-to-r from-accent to-amber-500 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md sm:rounded-xl sm:px-4 sm:py-2"
         >
+          <TrendingUp className="h-3.5 w-3.5" />
           Analyze
         </button>
       </div>
 
       {open && results.length > 0 && (
-        <div className="search-dropdown smooth-panel-enter absolute left-0 right-0 top-full z-[95] mt-3 overflow-hidden rounded-2xl border border-border/80 bg-panel p-2 shadow-xl">
+        <div className="search-dropdown smooth-panel-enter absolute left-0 right-0 top-full z-[95] mt-2 overflow-hidden rounded-xl border border-border/60 bg-panel/95 p-1.5 shadow-2xl backdrop-blur-xl sm:mt-3 sm:rounded-2xl sm:p-2">
           <div className="search-scroll max-h-[290px] overflow-y-auto pr-1">
             {results.map((item) => (
-            <button
-              key={item.symbol}
-              onClick={() => {
-                router.push(`/stocks/${item.symbol}`);
-                setOpen(false);
-              }}
-              className="flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2 text-left hover:translate-x-1 hover:bg-bg"
-            >
-              <span className="shrink-0 font-semibold">{item.symbol}</span>
-              <span className="truncate text-xs text-muted">{item.name}</span>
-            </button>
+              <button
+                key={item.symbol}
+                onClick={() => {
+                  router.push(`/stocks/${item.symbol}`);
+                  setOpen(false);
+                }}
+                className="group flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-left transition hover:bg-accent/8 sm:rounded-xl"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent/10 text-xs font-bold text-accent">
+                    {item.symbol.slice(0, 2)}
+                  </span>
+                  <div>
+                    <p className="text-sm font-semibold">{item.symbol}</p>
+                    <p className="text-[11px] text-muted">{item.name}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="rounded-md bg-bg px-1.5 py-0.5 text-[10px] text-muted">{item.exchange}</span>
+                  <ArrowRight className="h-3.5 w-3.5 text-muted opacity-0 transition group-hover:translate-x-0.5 group-hover:opacity-100" />
+                </div>
+              </button>
             ))}
           </div>
         </div>
