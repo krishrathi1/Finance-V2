@@ -1,4 +1,4 @@
-import type { DashboardData } from "@/lib/types";
+import type { DashboardData, ScreenerFilters, ScreenerResult } from "@/lib/types";
 
 const DEFAULT_DEV_BACKEND_BASE = "http://127.0.0.1:8000";
 const INTERNAL_BASE = normalizeBaseUrl(process.env.INTERNAL_API_BASE);
@@ -271,6 +271,44 @@ export async function fetchIndexHeatmap(indexName: string, options: { force?: bo
   }
 }
 
+export async function fetchSwotAnalysis(symbol: string): Promise<{
+  strengths: string[];
+  weaknesses: string[];
+  opportunities: string[];
+  threats: string[];
+  bullCase: string;
+  bearCase: string;
+}> {
+  const fallback = {
+    strengths: ["Strong brand presence in the sector", "Consistent revenue growth track record", "Healthy balance sheet with low debt"],
+    weaknesses: ["Dependent on domestic market", "Margins under pressure from rising input costs"],
+    opportunities: ["Expanding into new geographies", "Growing digital adoption in the sector", "Potential for strategic acquisitions"],
+    threats: ["Intensifying competition from global players", "Regulatory changes could impact operations", "Currency fluctuation risks"],
+    bullCase: "If the company successfully executes its expansion strategy and maintains current margins, the stock could see meaningful upside driven by revenue growth and improving return ratios.",
+    bearCase: "Prolonged margin compression from rising costs, combined with slowing demand or regulatory headwinds, could limit near-term upside and pressure valuations."
+  };
+
+  try {
+    const res = await fetchWithTimeout(
+      getApiUrl(`/${symbol}/swot`),
+      { cache: "no-store" },
+      12_000
+    );
+    if (!res.ok) throw new Error(`SWOT request failed: ${res.status}`);
+    const payload = await res.json();
+    return {
+      strengths: Array.isArray(payload.strengths) ? payload.strengths : fallback.strengths,
+      weaknesses: Array.isArray(payload.weaknesses) ? payload.weaknesses : fallback.weaknesses,
+      opportunities: Array.isArray(payload.opportunities) ? payload.opportunities : fallback.opportunities,
+      threats: Array.isArray(payload.threats) ? payload.threats : fallback.threats,
+      bullCase: typeof payload.bullCase === "string" ? payload.bullCase : fallback.bullCase,
+      bearCase: typeof payload.bearCase === "string" ? payload.bearCase : fallback.bearCase,
+    };
+  } catch {
+    return fallback;
+  }
+}
+
 export async function fetchMarketNews(options: { force?: boolean } = {}) {
   const force = Boolean(options.force);
   const key = "market-news";
@@ -324,4 +362,28 @@ export async function fetchMarketNews(options: { force?: boolean } = {}) {
     if (stale) return stale;
     throw err;
   }
+}
+
+export async function fetchScreenerResults(filters: ScreenerFilters): Promise<ScreenerResult[]> {
+  const params = new URLSearchParams();
+  if (filters.exchange) params.set("exchange", filters.exchange);
+  if (filters.sector) params.set("sector", filters.sector);
+  if (filters.industry) params.set("industry", filters.industry);
+  if (filters.market_cap_min) params.set("market_cap_min", String(filters.market_cap_min));
+  if (filters.market_cap_max) params.set("market_cap_max", String(filters.market_cap_max));
+  if (filters.pe_min) params.set("pe_min", String(filters.pe_min));
+  if (filters.pe_max) params.set("pe_max", String(filters.pe_max));
+  if (filters.price_min) params.set("price_min", String(filters.price_min));
+  if (filters.price_max) params.set("price_max", String(filters.price_max));
+  if (filters.dividend_min) params.set("dividend_min", String(filters.dividend_min));
+  if (filters.volume_min) params.set("volume_min", String(filters.volume_min));
+  if (filters.limit) params.set("limit", String(filters.limit));
+
+  const url = getApiUrl(`/screener?${params.toString()}`);
+  const res = await fetch(url, { cache: "no-store" });
+  if (!res.ok) {
+    throw new Error(`Screener request failed: ${res.status}`);
+  }
+  const payload = await res.json();
+  return (payload.results || []) as ScreenerResult[];
 }

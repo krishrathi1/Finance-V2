@@ -1,5 +1,6 @@
 import asyncio
 from datetime import datetime, timedelta, timezone
+import hashlib
 import json
 import re
 
@@ -464,6 +465,110 @@ async def get_market_news(refresh: bool = Query(False)) -> dict:
             return {"cached": True, "stale": True, "date": stale_date, "data": stale_rows}
 
     return {"cached": False, "date": today, "data": []}
+
+
+INDIAN_SECTORS = [
+    "Technology", "Financial Services", "Healthcare", "Consumer Cyclical",
+    "Consumer Defensive", "Industrials", "Basic Materials", "Energy",
+    "Communication Services", "Utilities", "Real Estate",
+]
+
+
+@router.get("/screener")
+async def stock_screener(
+    exchange: str = Query("NSE"),
+    sector: str = Query(""),
+    industry: str = Query(""),
+    market_cap_min: float = Query(0),
+    market_cap_max: float = Query(0),
+    pe_min: float = Query(0),
+    pe_max: float = Query(0),
+    price_min: float = Query(0),
+    price_max: float = Query(0),
+    dividend_min: float = Query(0),
+    volume_min: float = Query(0),
+    limit: int = Query(100, ge=1, le=500),
+) -> dict:
+    param_str = f"{exchange}:{sector}:{industry}:{market_cap_min}:{market_cap_max}:{pe_min}:{pe_max}:{price_min}:{price_max}:{dividend_min}:{volume_min}:{limit}"
+    param_hash = hashlib.md5(param_str.encode()).hexdigest()
+    cache_key = f"screener:{param_hash}"
+
+    cached = await redis_cache.get_json(cache_key)
+    if cached:
+        return {"results": cached.get("results", []), "count": cached.get("count", 0), "cached": True}
+
+    try:
+        results = await dashboard_service.screen_stocks(
+            exchange=exchange,
+            sector=sector,
+            industry=industry,
+            market_cap_min=market_cap_min,
+            market_cap_max=market_cap_max,
+            price_min=price_min,
+            price_max=price_max,
+            volume_min=volume_min,
+            dividend_min=dividend_min,
+            limit=limit,
+        )
+
+        # Post-filter by PE if requested (FMP screener may not support PE filters directly)
+        if pe_min > 0 or pe_max > 0:
+            filtered = []
+            for item in results:
+                pe = item.get("pe")
+                if pe is None:
+                    continue
+                if pe_min > 0 and pe < pe_min:
+                    continue
+                if pe_max > 0 and pe > pe_max:
+                    continue
+                filtered.append(item)
+            results = filtered
+
+        payload = {"results": results, "count": len(results)}
+        await redis_cache.set_json(cache_key, payload, ttl_seconds=300)
+        return {"results": results, "count": len(results), "cached": False}
+    except Exception as exc:
+        if cached:
+            return {"results": cached.get("results", []), "count": cached.get("count", 0), "cached": True}
+        raise HTTPException(status_code=502, detail=f"Screener data unavailable: {str(exc)}")
+
+
+@router.get("/screener/sectors")
+async def get_screener_sectors() -> dict:
+    cache_key = "screener:sectors"
+    cached = await redis_cache.get_json(cache_key)
+    if cached:
+        return {"sectors": cached, "cached": True}
+
+    # Return hardcoded Indian market sectors (covers FMP sector taxonomy for Indian stocks)
+    await redis_cache.set_json(cache_key, INDIAN_SECTORS, ttl_seconds=60 * 60 * 24)
+    return {"sectors": INDIAN_SECTORS, "cached": False}
+
+
+@router.get("/{symbol}/swot")
+async def get_swot_analysis(symbol: str) -> dict:
+    cache_key = f"swot:{symbol.upper()}"
+    cached = await redis_cache.get_json(cache_key)
+    if cached:
+        return {"symbol": symbol.upper(), "cached": True, **cached}
+
+    # Fetch dashboard context for AI analysis
+    context: dict = {"symbol": symbol.upper()}
+    try:
+        context = await asyncio.wait_for(dashboard_service.get_dashboard(symbol=symbol), timeout=20)
+    except Exception:
+        context = {"symbol": symbol.upper()}
+
+    try:
+        swot = await asyncio.wait_for(ai_adapter.generate_swot(symbol=symbol, context=context), timeout=15)
+    except Exception:
+        swot = ai_adapter._fallback_swot(symbol=symbol, context=context)
+
+    source = "gemini" if bool(str(settings.gemini_api_key or "").strip()) else "fallback"
+    result = {**swot, "source": source}
+    await redis_cache.set_json(cache_key, result, ttl_seconds=60 * 60)
+    return {"symbol": symbol.upper(), "cached": False, **result}
 
 
 @router.get("/{symbol}/dashboard")

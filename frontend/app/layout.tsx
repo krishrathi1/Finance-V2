@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Manrope, Space_Grotesk } from "next/font/google";
 
 import { ModeToggle } from "@/components/mode-toggle";
+import { NavLinks } from "@/components/nav-links";
 import { MarketTicker } from "@/components/market-ticker";
 import { ScrollProgress } from "@/components/scroll-progress";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -38,7 +39,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 </p>
                 <p className="mt-0.5 text-[10px] text-muted sm:mt-1 sm:text-xs">NSE/BSE Intelligence Platform</p>
               </div>
-              <ModeToggle />
+              <div className="flex items-center gap-2 sm:gap-4">
+                <NavLinks />
+                <ModeToggle />
+              </div>
             </div>
             <MarketTicker />
           </header>

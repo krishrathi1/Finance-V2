@@ -1694,6 +1694,47 @@ class StockDashboardService:
 
         return {"basis": basis, "periods": periods}
 
+    async def screen_stocks(
+        self,
+        exchange: str = "NSE",
+        sector: str = "",
+        industry: str = "",
+        market_cap_min: float = 0,
+        market_cap_max: float = 0,
+        price_min: float = 0,
+        price_max: float = 0,
+        volume_min: float = 0,
+        dividend_min: float = 0,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        raw = await self.providers.get_fmp_stock_screener(
+            exchange=exchange,
+            sector=sector,
+            industry=industry,
+            market_cap_more_than=market_cap_min,
+            market_cap_lower_than=market_cap_max,
+            price_more_than=price_min,
+            price_lower_than=price_max,
+            volume_more_than=volume_min,
+            dividend_more_than=dividend_min,
+            limit=limit,
+        )
+        # Post-processing: filter out entries with no company name and sort by market cap descending
+        processed: list[dict[str, Any]] = []
+        for item in raw:
+            name = str(item.get("companyName") or "").strip()
+            if not name:
+                continue
+            # Round numeric fields for cleaner output
+            item["marketCap"] = round(float(item.get("marketCap") or 0), 2)
+            item["price"] = round(float(item.get("price") or 0), 2)
+            item["change"] = round(float(item.get("change") or 0), 2)
+            item["changePercent"] = round(float(item.get("changePercent") or 0), 2)
+            item["volume"] = round(float(item.get("volume") or 0), 0)
+            processed.append(item)
+        processed.sort(key=lambda x: x.get("marketCap", 0), reverse=True)
+        return processed
+
     def _returns_heatmap(self, history: list[dict]) -> list[dict]:
         grouped: dict[int, dict[int, list[float]]] = defaultdict(lambda: defaultdict(list))
         for point in history:

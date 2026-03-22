@@ -3158,6 +3158,66 @@ class MarketDataProviders:
         except Exception:
             return None
 
+    async def get_fmp_stock_screener(
+        self,
+        exchange: str = "NSE",
+        country: str = "IN",
+        sector: str = "",
+        industry: str = "",
+        market_cap_more_than: float = 0,
+        market_cap_lower_than: float = 0,
+        price_more_than: float = 0,
+        price_lower_than: float = 0,
+        volume_more_than: float = 0,
+        dividend_more_than: float = 0,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        url = "https://financialmodelingprep.com/stable/stock-screener"
+        params: dict[str, Any] = {"apikey": settings.fmp_api_key, "exchange": exchange, "country": country, "limit": limit}
+        if sector:
+            params["sector"] = sector
+        if industry:
+            params["industry"] = industry
+        if market_cap_more_than > 0:
+            params["marketCapMoreThan"] = int(market_cap_more_than)
+        if market_cap_lower_than > 0:
+            params["marketCapLowerThan"] = int(market_cap_lower_than)
+        if price_more_than > 0:
+            params["priceMoreThan"] = price_more_than
+        if price_lower_than > 0:
+            params["priceLowerThan"] = price_lower_than
+        if volume_more_than > 0:
+            params["volumeMoreThan"] = int(volume_more_than)
+        if dividend_more_than > 0:
+            params["dividendMoreThan"] = dividend_more_than
+
+        try:
+            payload = await self._get(url, params=params)
+            if not payload or not isinstance(payload, list):
+                return []
+
+            results: list[dict[str, Any]] = []
+            for item in payload:
+                results.append({
+                    "symbol": str(item.get("symbol") or "").replace(".NS", "").replace(".BO", ""),
+                    "companyName": str(item.get("companyName") or item.get("name") or ""),
+                    "marketCap": float(item.get("marketCap") or 0),
+                    "price": float(item.get("price") or 0),
+                    "change": float(item.get("change") or 0),
+                    "changePercent": float(item.get("changePercentage") or 0),
+                    "volume": float(item.get("volume") or 0),
+                    "sector": str(item.get("sector") or ""),
+                    "industry": str(item.get("industry") or ""),
+                    "pe": float(item.get("pe") or 0) if item.get("pe") else None,
+                    "pb": float(item.get("pb") or 0) if item.get("pb") else None,
+                    "roe": float(item.get("roe") or 0) if item.get("roe") else None,
+                    "dividendYield": float(item.get("lastAnnualDividend") or 0),
+                    "beta": float(item.get("beta") or 0) if item.get("beta") else None,
+                })
+            return results
+        except Exception:
+            return []
+
     @staticmethod
     def _extract_shareholding(major_holders: Any) -> dict[str, Any]:
         """Extract shareholding pattern from yfinance major_holders DataFrame."""

@@ -43,6 +43,10 @@ class GeminiService:
         prompt = self._build_news_analysis_prompt(symbol=symbol, article=article, context=context)
         return await self._generate(prompt)
 
+    async def generate_swot(self, symbol: str, context: dict[str, Any]) -> str:
+        prompt = self._build_swot_prompt(symbol=symbol, context=context)
+        return await self._generate(prompt)
+
     async def _generate(self, prompt: str) -> str:
         payload = {"contents": [{"parts": [{"text": prompt}]}]}
         params = {"key": self.api_key}
@@ -259,6 +263,41 @@ class GeminiService:
             "2) If a field is uncertain, use null.\n"
             "3) Do not invent facts.\n"
             "4) Return JSON only, no markdown."
+        )
+
+    def _build_swot_prompt(self, symbol: str, context: dict[str, Any]) -> str:
+        compact_context = json.dumps(
+            {
+                "symbol": context.get("symbol", symbol),
+                "companyName": context.get("companyName"),
+                "sector": context.get("sector"),
+                "profile": context.get("profile"),
+                "metrics": context.get("metrics"),
+                "smartScore": context.get("smartScore"),
+                "riskScore": context.get("riskScore"),
+                "financials": {
+                    "quarterly": (context.get("financials") or {}).get("quarterly", [])[:4],
+                    "yearly": (context.get("financials") or {}).get("yearly", [])[:3],
+                } if isinstance(context.get("financials"), dict) else {},
+                "news": context.get("news", [])[:5],
+            }
+        )
+        return (
+            "You are Financial Forensics AI, a senior Indian stock market analyst.\n"
+            f"Stock symbol: {symbol}\n"
+            f"Context JSON: {compact_context}\n\n"
+            "Task: Generate a SWOT analysis and bull/bear case for this stock.\n"
+            "Return strict JSON only with these keys:\n"
+            '{"strengths": [string, ...], "weaknesses": [string, ...], '
+            '"opportunities": [string, ...], "threats": [string, ...], '
+            '"bullCase": string, "bearCase": string}\n'
+            "Rules:\n"
+            "1) Each SWOT list should have 2-4 concise bullet points.\n"
+            "2) bullCase and bearCase should each be 2-3 sentences.\n"
+            "3) Use simple, clear language suited for retail investors.\n"
+            "4) Base analysis on the provided context data only.\n"
+            "5) Do not give investment guarantees or specific price targets.\n"
+            "6) Return JSON only, no markdown."
         )
 
     def _build_news_analysis_prompt(self, symbol: str, article: dict[str, Any], context: dict[str, Any]) -> str:

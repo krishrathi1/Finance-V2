@@ -15,6 +15,7 @@ import { ReturnsPanel } from "@/components/sections/returns-panel";
 import { RiskScore } from "@/components/sections/risk-score";
 import { SmartScore } from "@/components/sections/smart-score";
 import { StockSectionTabs } from "@/components/sections/stock-section-tabs";
+import { SwotAnalysis } from "@/components/sections/swot-analysis";
 import { TechnicalsSection } from "@/components/sections/technicals-section";
 import { fetchDashboardEnvelope } from "@/lib/api";
 import type { DashboardData } from "@/lib/types";
@@ -299,6 +300,10 @@ export default async function StockDetailsPage({ params }: Props) {
               label={riskScore.label}
             />
           </div>
+
+          <section id="swot">
+            <SwotAnalysis symbol={symbol} />
+          </section>
 
           <ReturnsPanel summary={data.returnsSummary} heatmap={data.returnsHeatmap} />
 

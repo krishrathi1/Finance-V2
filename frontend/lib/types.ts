@@ -253,3 +253,35 @@ export type KeyRatioTrends = {
   valuation: KeyRatioTrendCard[];
   liquidity: KeyRatioTrendCard[];
 };
+
+export type ScreenerFilters = {
+  exchange: string;
+  sector: string;
+  industry: string;
+  market_cap_min: number;
+  market_cap_max: number;
+  pe_min: number;
+  pe_max: number;
+  price_min: number;
+  price_max: number;
+  dividend_min: number;
+  volume_min: number;
+  limit: number;
+};
+
+export type ScreenerResult = {
+  symbol: string;
+  companyName: string;
+  marketCap: number;
+  price: number;
+  change: number;
+  changePercent: number;
+  volume: number;
+  sector: string;
+  industry: string;
+  pe: number;
+  pb: number;
+  roe: number;
+  dividendYield: number;
+  beta: number;
+};

@@ -130,6 +130,106 @@ class AIAdapter:
                 pass
         return self._offline_news_analysis(symbol=symbol, article=article), "fallback"
 
+    async def generate_swot(self, symbol: str, context: dict[str, Any]) -> dict[str, Any]:
+        if self._gemini and settings.gemini_api_key:
+            try:
+                raw = await self._gemini.generate_swot(symbol=symbol, context=context)
+                parsed = self._parse_swot_json(raw)
+                if parsed:
+                    return parsed
+            except Exception:
+                pass
+        return self._fallback_swot(symbol=symbol, context=context)
+
+    def _parse_swot_json(self, raw: str) -> dict[str, Any] | None:
+        import re as _re
+        text = str(raw or "").strip()
+        if not text:
+            return None
+        match = _re.search(r"\{.*\}", text, flags=_re.DOTALL)
+        candidate = match.group(0) if match else text
+        try:
+            parsed = json.loads(candidate)
+        except Exception:
+            return None
+        if not isinstance(parsed, dict):
+            return None
+        strengths = parsed.get("strengths")
+        weaknesses = parsed.get("weaknesses")
+        opportunities = parsed.get("opportunities")
+        threats = parsed.get("threats")
+        bull_case = parsed.get("bullCase", "")
+        bear_case = parsed.get("bearCase", "")
+        if not (isinstance(strengths, list) and isinstance(weaknesses, list)
+                and isinstance(opportunities, list) and isinstance(threats, list)):
+            return None
+        return {
+            "strengths": [str(s) for s in strengths],
+            "weaknesses": [str(w) for w in weaknesses],
+            "opportunities": [str(o) for o in opportunities],
+            "threats": [str(t) for t in threats],
+            "bullCase": str(bull_case),
+            "bearCase": str(bear_case),
+        }
+
+    def _fallback_swot(self, symbol: str, context: dict[str, Any]) -> dict[str, Any]:
+        smart = (context.get("smartScore") or {}) if isinstance(context, dict) else {}
+        risk = (context.get("riskScore") or {}) if isinstance(context, dict) else {}
+        metrics = (context.get("metrics") or {}) if isinstance(context, dict) else {}
+        profile = (context.get("profile") or {}) if isinstance(context, dict) else {}
+
+        sector = str(profile.get("sector") or "its sector").strip()
+        pe = metrics.get("peRatio")
+        smart_score = float(smart.get("score", 0.0) or 0.0)
+        risk_score = float(risk.get("score", 0.0) or 0.0)
+
+        strengths = [
+            f"Established player in {sector} with consistent market presence.",
+            "Listed on Indian exchanges with adequate trading liquidity.",
+        ]
+        if smart_score >= 3.5:
+            strengths.append(f"Strong Smart Score of {smart_score:.1f}/5 indicates solid fundamentals.")
+
+        weaknesses = [
+            "Detailed competitive positioning data is limited without AI analysis.",
+        ]
+        if isinstance(pe, (int, float)) and pe > 30:
+            weaknesses.append(f"Valuation appears stretched with P/E of {pe:.1f}.")
+        elif isinstance(pe, (int, float)) and pe > 0:
+            weaknesses.append(f"Current P/E of {pe:.1f} needs monitoring relative to sector peers.")
+
+        opportunities = [
+            "India's growing economy provides a positive macro backdrop.",
+            "Potential for margin expansion with operational efficiency gains.",
+        ]
+
+        threats = [
+            "Macro slowdown or interest rate changes could impact performance.",
+            "Sector-specific regulatory changes may affect operations.",
+        ]
+        if risk_score >= 3.5:
+            threats.append(f"Elevated risk score of {risk_score:.1f}/5 suggests near-term caution.")
+
+        tone = "positive" if smart_score >= 3.5 else "neutral" if smart_score >= 2.5 else "cautious"
+        bull_case = (
+            f"{symbol.upper()} benefits from a {tone} fundamental picture. "
+            f"If the company sustains earnings growth and the sector cycle turns favorable, "
+            f"the stock could re-rate meaningfully from current levels."
+        )
+        bear_case = (
+            f"If macro headwinds intensify or earnings disappoint, "
+            f"{symbol.upper()} could see valuation compression. "
+            f"Monitor quarterly results and management commentary closely."
+        )
+        return {
+            "strengths": strengths,
+            "weaknesses": weaknesses,
+            "opportunities": opportunities,
+            "threats": threats,
+            "bullCase": bull_case,
+            "bearCase": bear_case,
+        }
+
     def _offline_chat_response(self, symbol: str, context: dict[str, Any], live_failed: bool) -> str:
         smart = (context.get("smartScore") or {}) if isinstance(context, dict) else {}
         risk = (context.get("riskScore") or {}) if isinstance(context, dict) else {}
