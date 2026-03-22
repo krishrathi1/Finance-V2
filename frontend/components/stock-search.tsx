@@ -2,15 +2,38 @@
 
 import { ArrowRight, Search, TrendingUp } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { searchStocks } from "@/lib/api";
 
 export function StockSearch({ className = "" }: { className?: string }) {
   const router = useRouter();
+  const shellRef = useRef<HTMLDivElement | null>(null);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Array<{ symbol: string; name: string; exchange: string }>>([]);
   const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    function handlePointerDown(event: MouseEvent) {
+      if (!shellRef.current?.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, []);
 
   async function onSearch(value: string) {
     setQuery(value);
@@ -27,7 +50,7 @@ export function StockSearch({ className = "" }: { className?: string }) {
   const canSubmit = useMemo(() => query.trim().length > 0, [query]);
 
   return (
-    <div className={`stock-search-shell relative z-[80] ${className}`}>
+    <div ref={shellRef} className={`stock-search-shell relative z-[80] ${className}`}>
       <div className="search-bar relative z-10 flex items-center rounded-xl border border-border/60 bg-panel/80 px-2 shadow-sm backdrop-blur-sm sm:rounded-2xl sm:px-3">
         <Search className="mr-1.5 h-4 w-4 shrink-0 text-muted sm:mr-2" />
         <input

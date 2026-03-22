@@ -48,11 +48,16 @@ export default function HomePage() {
   return (
     <div className="stagger-fade space-y-6 py-4 sm:space-y-8 sm:py-8">
       {/* Hero Section */}
-      <section className="gradient-border relative z-20 overflow-visible rounded-2xl p-5 sm:rounded-[28px] sm:p-8">
-        {/* Floating orbs */}
-        <div className="hero-orb hero-orb-1" />
-        <div className="hero-orb hero-orb-2" />
-        <div className="hero-orb hero-orb-3" />
+      <section
+        className="gradient-border relative z-30 rounded-2xl p-5 sm:rounded-[28px] sm:p-8"
+        style={{ overflow: "visible" }}
+      >
+        {/* Keep decorative orbs clipped without clipping the search dropdown */}
+        <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-[inherit]">
+          <div className="hero-orb hero-orb-1" />
+          <div className="hero-orb hero-orb-2" />
+          <div className="hero-orb hero-orb-3" />
+        </div>
 
         <div className="relative z-10">
           <div className="flex items-center gap-2">

@@ -79,10 +79,10 @@ export function AIChat({ symbol }: { symbol: string }) {
                 value={input}
                 onChange={(event) => setInput(event.target.value)}
                 onKeyDown={(event) => event.key === "Enter" && submit()}
-                className="w-full bg-transparent text-sm outline-none"
+                className="w-full bg-transparent text-sm outline-none focus:shadow-none focus-visible:shadow-none"
                 placeholder="Ask about valuation, risk, or statements"
               />
-              <button onClick={submit} className="rounded-lg bg-accent p-2 text-white">
+              <button onClick={submit} className="rounded-lg bg-accent p-2 text-white outline-none focus:shadow-none focus-visible:shadow-none">
                 <Send className="h-4 w-4" />
               </button>
             </div>

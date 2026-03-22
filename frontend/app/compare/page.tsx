@@ -127,7 +127,7 @@ function SymbolInput({
           {results.map((item) => (
             <button
               key={item.symbol}
-              onClick={() => select(item.symbol)}
+              onMouseDown={(e) => { e.preventDefault(); select(item.symbol); }}
               className="group flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left transition hover:bg-accent/8"
             >
               <div className="flex items-center gap-2.5">
@@ -354,7 +354,7 @@ export default function ComparePage() {
       </div>
 
       {/* Search Inputs */}
-      <Card>
+      <Card className="overflow-visible">
         <CardContent className="py-5">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
             <SymbolInput
