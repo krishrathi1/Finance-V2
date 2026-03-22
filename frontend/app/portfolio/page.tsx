@@ -22,7 +22,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 
-import { PageHero } from "@/components/page-hero";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PortfolioDoctor } from "@/components/sections/portfolio-doctor";
 import { fetchTickerTape, fetchPortfolioRiskAssessment } from "@/lib/api";
@@ -543,55 +542,8 @@ export default function PortfolioPage() {
 
   return (
     <div className="stagger-fade space-y-6 py-4 sm:space-y-8 sm:py-8">
-      <PageHero
-        breadcrumbs={[{ label: "Home", href: "/" }, { label: "Portfolio" }]}
-        eyebrow="Portfolio workspace"
-        title={
-          <>
-            Track holdings with a
-            <span className="block bg-gradient-to-r from-accent to-amber-400 bg-clip-text text-transparent">
-              cleaner risk surface.
-            </span>
-          </>
-        }
-        description="Present allocation, performance, and AI portfolio analysis in a more credible portfolio cockpit instead of a simple local tracker."
-        actions={
-          <button
-            onClick={() => { setEditTarget(null); setShowModal(true); }}
-            className="shine-btn inline-flex items-center gap-2 rounded-full bg-accent px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-accent/20 transition hover:opacity-95 active:scale-[0.98]"
-          >
-            <Plus className="h-4 w-4" />
-            Add Holding
-          </button>
-        }
-        stats={[
-          { label: "Holdings", value: `${holdings.length}` },
-          { label: "Storage", value: "Local-first", toneClassName: "text-sky-500" },
-          { label: "AI Layer", value: "Risk review", toneClassName: "text-success" },
-        ]}
-        aside={
-          <div className="space-y-3">
-            <div className="flex items-center gap-2 text-sm font-semibold">
-              <Wallet className="h-4 w-4 text-accent" />
-              Portfolio posture
-            </div>
-            <div className="grid gap-2">
-              <div className="rounded-2xl border border-border/45 bg-bg/42 px-3 py-2.5">
-                <p className="text-xs uppercase tracking-[0.14em] text-muted">Current mode</p>
-                <p className="mt-1 text-sm font-semibold text-text">{hasHoldings ? "Live tracking enabled" : "Awaiting first holding"}</p>
-              </div>
-              <div className="rounded-2xl border border-border/45 bg-bg/42 px-3 py-2.5">
-                <p className="text-xs uppercase tracking-[0.14em] text-muted">Performance bias</p>
-                <p className={`mt-1 text-sm font-semibold ${isGain ? "text-success" : "text-danger"}`}>
-                  {hasHoldings ? (isGain ? "Portfolio in profit" : "Portfolio under water") : "No exposure yet"}
-                </p>
-              </div>
-            </div>
-          </div>
-        }
-      />
       {/* Header */}
-      <div className="hidden flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-sm text-muted">
             <Link href="/" className="hover:text-text">Home</Link> / Portfolio

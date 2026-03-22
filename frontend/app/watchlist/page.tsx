@@ -14,7 +14,6 @@ import {
   X,
 } from "lucide-react";
 
-import { PageHero } from "@/components/page-hero";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { WatchlistAnalysisButton } from "@/components/watchlist-analysis-button";
 import { fetchTickerTape } from "@/lib/api";
@@ -127,55 +126,8 @@ export default function WatchlistPage() {
 
   return (
     <div className="stagger-fade space-y-6 py-4 sm:space-y-8 sm:py-8">
-      <PageHero
-        breadcrumbs={[{ label: "Home", href: "/" }, { label: "Watchlist" }]}
-        eyebrow="Monitoring workspace"
-        title={
-          <>
-            Watchlists that feel like a
-            <span className="block bg-gradient-to-r from-accent to-amber-400 bg-clip-text text-transparent">
-              real market desk.
-            </span>
-          </>
-        }
-        description="Organize names into focused lists, scan movement quickly, and jump into deeper analysis without the interface looking lightweight or disposable."
-        actions={
-          <Link
-            href="/compare"
-            className="inline-flex items-center gap-2 rounded-full border border-border/55 bg-bg/60 px-4 py-2 text-sm font-semibold text-text transition hover:border-accent/35 hover:text-accent active:scale-[0.98]"
-          >
-            <TrendingUp className="h-4 w-4" />
-            Compare Stocks
-          </Link>
-        }
-        stats={[
-          { label: "Lists", value: `${lists.length}` },
-          { label: "Tracked", value: `${symbols.length}`, toneClassName: "text-accent" },
-          { label: "Workflow", value: "Multi-list", toneClassName: "text-success" },
-        ]}
-        aside={
-          <div className="space-y-3">
-            <div className="flex items-center gap-2 text-sm font-semibold">
-              <Heart className="h-4 w-4 text-accent" />
-              Watchlist mode
-            </div>
-            <div className="grid gap-2">
-              <div className="rounded-2xl border border-border/45 bg-bg/42 px-3 py-2.5">
-                <p className="text-xs uppercase tracking-[0.14em] text-muted">Active list</p>
-                <p className="mt-1 text-sm font-semibold text-text">{activeList}</p>
-              </div>
-              <div className="rounded-2xl border border-border/45 bg-bg/42 px-3 py-2.5">
-                <p className="text-xs uppercase tracking-[0.14em] text-muted">Coverage</p>
-                <p className="mt-1 text-sm font-semibold text-text">
-                  {symbols.length > 0 ? `${symbols.length} names ready to scan` : "Add names to start tracking"}
-                </p>
-              </div>
-            </div>
-          </div>
-        }
-      />
       {/* Header */}
-      <div className="hidden flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-sm text-muted">
             <Link href="/" className="hover:text-text">
