@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(diff -rq . ./finance_v2-main/ --exclude=finance_v2-main --exclude=.git --exclude=node_modules --exclude=__pycache__ --exclude=*.pyc --exclude=venv --exclude=env --exclude=.env)"
+    ]
+  }
+}

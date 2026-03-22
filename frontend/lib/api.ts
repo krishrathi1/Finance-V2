@@ -26,19 +26,17 @@ function getServerApiBase() {
   return INTERNAL_BASE || PUBLIC_BASE || getDefaultBackendBase();
 }
 
-function getBrowserApiBase() {
-  if (PUBLIC_BASE) return PUBLIC_BASE;
-  if (process.env.NODE_ENV === "production") return DEFAULT_BACKEND_BASE;
-  return "";
-}
-
-function getApiUrl(path: string, options: { requestOrigin?: string } = {}) {
+function getApiUrl(path: string) {
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+
+  // Browser: Use relative paths to stay on same origin and use Nginx/Next.js proxy
   if (typeof window !== "undefined") {
-    const browserBase = getBrowserApiBase();
-    return browserBase ? `${browserBase}/api/v1/stocks${normalizedPath}` : `/api/v1/stocks${normalizedPath}`;
+    return `/api/v1/stocks${normalizedPath}`;
   }
-  return `${getServerApiBase()}/api/v1/stocks${normalizedPath}`;
+
+  // Server: Use full backend URL (e.g. internal Docker network or production API)
+  const base = getServerApiBase().replace(/\/api$/, "");
+  return `${base}/api/v1/stocks${normalizedPath}`;
 }
 
 async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number) {
@@ -88,7 +86,7 @@ export async function fetchDashboardEnvelope(symbol: string, options: { requestO
   for (const attempt of attempts) {
     try {
       const res = await fetchWithTimeout(
-        getApiUrl(`/${symbol}/dashboard?timeframe=5Y${attempt.refresh ? "&refresh=true" : ""}`, options),
+        getApiUrl(`/${symbol}/dashboard?timeframe=5Y${attempt.refresh ? "&refresh=true" : ""}`),
         {
           cache: "no-store"
         },

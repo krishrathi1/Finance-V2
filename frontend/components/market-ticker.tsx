@@ -35,7 +35,6 @@ export function MarketTicker() {
     let alive = true;
     const load = async (forceRefresh = false) => {
       try {
-        // No symbol filter = backend returns the full NSE market ticker feed.
         const data = await fetchTickerTape([], { force: forceRefresh });
         if (alive && data.length) setRows(data);
       } catch {
@@ -58,8 +57,10 @@ export function MarketTicker() {
   }, [rows]);
 
   const durationSeconds = useMemo(() => {
-    // Keep the ticker noticeably slower so prices are easier to read in the navbar.
-    return Math.max(120, Math.min(2400, Math.round(tape.length * 0.45)));
+    const minDuration = 360;
+    const maxDuration = 3200;
+    const secondsPerItem = 10;
+    return Math.max(minDuration, Math.min(maxDuration, Math.round(tape.length * secondsPerItem)));
   }, [tape.length]);
 
   if (!tape.length) {
