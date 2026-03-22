@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { fetchDashboard, searchStocks } from "@/lib/api";
+import { fetchCompareAnalysis, fetchDashboard, searchStocks } from "@/lib/api";
 import type { DashboardData } from "@/lib/types";
 
 type SearchResult = { symbol: string; name: string; exchange: string };
@@ -100,7 +100,7 @@ function SymbolInput({
   }
 
   return (
-    <div className="relative flex-1" ref={containerRef}>
+    <div className={`relative flex-1 ${open ? "z-[80]" : "z-0"}`} ref={containerRef}>
       <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-wider text-muted">
         {label}
       </label>
@@ -119,11 +119,11 @@ function SymbolInput({
             if (results.length > 0) setOpen(true);
           }}
           placeholder="e.g. RELIANCE"
-          className="h-10 w-full bg-transparent text-sm outline-none sm:h-11"
+          className="h-10 w-full bg-transparent text-sm outline-none focus:shadow-none focus-visible:shadow-none sm:h-11"
         />
       </div>
       {open && results.length > 0 && (
-        <div className="absolute left-0 right-0 top-full z-50 mt-1.5 max-h-60 overflow-y-auto rounded-xl border border-border/60 bg-panel/95 p-1 shadow-2xl backdrop-blur-xl">
+        <div className="absolute left-0 right-0 top-full z-[90] mt-1.5 max-h-60 overflow-y-auto rounded-xl border border-border/60 bg-panel/95 p-1 shadow-2xl backdrop-blur-xl">
           {results.map((item) => (
             <button
               key={item.symbol}
@@ -282,13 +282,15 @@ function Section({
 
 /* ─── Main Page ─── */
 
-export default function ComparePage() {
+function ComparePageContent() {
   const searchParams = useSearchParams();
   const [symbolA, setSymbolA] = useState(() => searchParams.get("a") || "");
   const [symbolB, setSymbolB] = useState(() => searchParams.get("b") || "");
   const [dataA, setDataA] = useState<DashboardData | null>(null);
   const [dataB, setDataB] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(false);
+  const [analysisLoading, setAnalysisLoading] = useState(false);
+  const [analysis, setAnalysis] = useState<{ answer: string; source: "gemini" | "fallback" } | null>(null);
   const [error, setError] = useState("");
 
   const handleCompare = useCallback(async () => {
@@ -306,6 +308,7 @@ export default function ComparePage() {
     setLoading(true);
     setDataA(null);
     setDataB(null);
+    setAnalysis(null);
     try {
       const [resA, resB] = await Promise.all([
         fetchDashboard(a),
@@ -319,6 +322,19 @@ export default function ComparePage() {
       );
     } finally {
       setLoading(false);
+    }
+  }, [symbolA, symbolB]);
+
+  const handleAIAnalysis = useCallback(async () => {
+    const a = symbolA.trim().toUpperCase();
+    const b = symbolB.trim().toUpperCase();
+    if (!a || !b || a === b) return;
+    setAnalysisLoading(true);
+    try {
+      const result = await fetchCompareAnalysis(a, b);
+      setAnalysis(result);
+    } finally {
+      setAnalysisLoading(false);
     }
   }, [symbolA, symbolB]);
 
@@ -354,7 +370,7 @@ export default function ComparePage() {
       </div>
 
       {/* Search Inputs */}
-      <Card className="overflow-visible">
+      <Card className="relative z-40 overflow-visible">
         <CardContent className="py-5">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
             <SymbolInput
@@ -404,6 +420,40 @@ export default function ComparePage() {
       {/* Results */}
       {hasData && !loading && (
         <div className="space-y-4">
+          <Card className="border-accent/20 bg-gradient-to-r from-accent/6 via-amber-500/5 to-transparent">
+            <CardContent className="flex flex-col gap-3 py-4 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-accent" />
+                  <p className="text-sm font-semibold">AI Comparison Summary</p>
+                  {analysis ? (
+                    <span className="rounded-full border border-border/60 bg-panel/70 px-2 py-0.5 text-[10px] font-medium text-muted">
+                      Source: {analysis.source === "gemini" ? "Gemini" : "Fallback"}
+                    </span>
+                  ) : null}
+                </div>
+                <p className="mt-1 text-xs text-muted">
+                  Quant-style summary comparing {dataA.symbol} and {dataB.symbol}
+                </p>
+              </div>
+              <button
+                onClick={handleAIAnalysis}
+                disabled={analysisLoading}
+                className="flex shrink-0 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-accent to-amber-500 px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md disabled:opacity-50 disabled:hover:translate-y-0"
+              >
+                {analysisLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                {analysisLoading ? "Analyzing..." : "AI Analysis"}
+              </button>
+            </CardContent>
+            {analysis ? (
+              <CardContent className="pt-0">
+                <div className="rounded-2xl border border-border/60 bg-bg/40 p-4">
+                  <p className="whitespace-pre-line text-sm leading-7 text-text">{analysis.answer}</p>
+                </div>
+              </CardContent>
+            ) : null}
+          </Card>
+
           {/* Company Names Banner */}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             {[dataA, dataB].map((d) => (
@@ -770,5 +820,13 @@ export default function ComparePage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function ComparePage() {
+  return (
+    <Suspense fallback={<div className="py-4 text-sm text-muted">Loading comparison...</div>}>
+      <ComparePageContent />
+    </Suspense>
   );
 }

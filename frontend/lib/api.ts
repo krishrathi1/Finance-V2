@@ -177,6 +177,31 @@ export async function fetchWatchlistAnalysis(symbol: string): Promise<{ answer: 
   }
 }
 
+export async function fetchCompareAnalysis(
+  symbolA: string,
+  symbolB: string
+): Promise<{ answer: string; source: "gemini" | "fallback" }> {
+  try {
+    const res = await fetch(getApiUrl("/compare-analysis"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ symbol_a: symbolA, symbol_b: symbolB }),
+      cache: "no-store"
+    });
+    if (!res.ok) throw new Error("compare analysis failed");
+    const payload = await res.json();
+    return {
+      answer: payload.answer || "No analysis available.",
+      source: payload.source === "gemini" ? "gemini" : "fallback"
+    };
+  } catch {
+    return {
+      answer: "AI comparison analysis is unavailable right now.",
+      source: "fallback"
+    };
+  }
+}
+
 export async function analyzeNewsItem(
   symbol: string,
   article: { title: string; summary: string; source: string; publishedAt: string; sentimentScore: number }

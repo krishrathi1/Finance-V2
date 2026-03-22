@@ -76,7 +76,7 @@ function normalizeDashboardData(raw: DashboardData | Record<string, unknown>, sy
       previousName: String(profile.previousName || "N/A"),
       industry: profile.industry ? String(profile.industry) : undefined,
       ceo: profile.ceo ? String(profile.ceo) : undefined,
-      employees: profile.employees ?? undefined,
+      employees: typeof profile.employees === "number" || typeof profile.employees === "string" ? profile.employees : undefined,
       ipoDate: profile.ipoDate ? String(profile.ipoDate) : undefined,
       country: profile.country ? String(profile.country) : undefined,
     },

@@ -400,7 +400,7 @@ function AllocationChart({ enriched }: { enriched: HoldingWithValue[] }) {
         </CardTitle>
       </CardHeader>
       <CardContent className="p-0">
-        <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-start">
+        <div className="flex flex-col items-center gap-4">
           <div className="h-44 w-44 shrink-0">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
@@ -418,7 +418,7 @@ function AllocationChart({ enriched }: { enriched: HoldingWithValue[] }) {
                   ))}
                 </Pie>
                 <Tooltip
-                  formatter={(v: number) => [fmtINR(v), "Value"]}
+                  formatter={(v: number | string | undefined) => [fmtINR(Number(v || 0)), "Value"]}
                   contentStyle={{ background: "var(--color-panel)", border: "1px solid var(--color-border)", borderRadius: 12 }}
                   labelStyle={{ fontSize: 12 }}
                 />

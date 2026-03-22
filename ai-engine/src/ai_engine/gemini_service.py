@@ -39,6 +39,10 @@ class GeminiService:
         prompt = self._build_watchlist_review_prompt(symbol=symbol, context=context)
         return await self._generate(prompt)
 
+    async def generate_compare_analysis(self, symbol_a: str, symbol_b: str, context_a: dict[str, Any], context_b: dict[str, Any]) -> str:
+        prompt = self._build_compare_analysis_prompt(symbol_a=symbol_a, symbol_b=symbol_b, context_a=context_a, context_b=context_b)
+        return await self._generate(prompt)
+
     async def extract_profile_details(self, symbol: str, context: dict[str, Any]) -> str:
         prompt = self._build_profile_prompt(symbol=symbol, context=context)
         return await self._generate(prompt)
@@ -396,4 +400,77 @@ class GeminiService:
             "4) Focus on quality, valuation regime, balance-sheet risk, factor profile, news flow, and trend confirmation.\n"
             "5) If evidence is mixed, say so directly.\n"
             "6) Keep the whole response under 220 words."
+        )
+
+    def _build_compare_analysis_prompt(self, symbol_a: str, symbol_b: str, context_a: dict[str, Any], context_b: dict[str, Any]) -> str:
+        def compact(ctx: dict[str, Any], fallback_symbol: str) -> dict[str, Any]:
+            smart = ctx.get("smartScore", {}) or {}
+            risk = ctx.get("riskScore", {}) or {}
+            metrics = ctx.get("metrics", {}) or {}
+            technicals = ctx.get("technicals", {}) or {}
+            financials = ctx.get("financials", {}) or {}
+            return {
+                "symbol": ctx.get("symbol", fallback_symbol),
+                "companyName": ctx.get("companyName"),
+                "sector": ctx.get("sector"),
+                "profile": ctx.get("profile"),
+                "smartScore": {
+                    "score": smart.get("score"),
+                    "label": smart.get("label"),
+                    "dimensions": smart.get("dimensions"),
+                },
+                "riskScore": {
+                    "score": risk.get("score"),
+                    "label": risk.get("label"),
+                    "components": risk.get("components"),
+                },
+                "metrics": {
+                    "peRatio": metrics.get("peRatio"),
+                    "pbRatio": metrics.get("pbRatio"),
+                    "roe": metrics.get("roe"),
+                    "roce": metrics.get("roce"),
+                    "debtToEquity": metrics.get("debtToEquity"),
+                    "currentRatio": metrics.get("currentRatio"),
+                    "dividendYield": metrics.get("dividendYield"),
+                    "marketCap": metrics.get("marketCap"),
+                    "revenueGrowth": metrics.get("revenueGrowth"),
+                    "profitGrowth": metrics.get("profitGrowth"),
+                    "operatingMargin": metrics.get("operatingMargin"),
+                    "netMargin": metrics.get("netMargin"),
+                },
+                "technicals": {
+                    "trend": technicals.get("trend"),
+                    "rsi14": technicals.get("rsi14"),
+                    "macd": technicals.get("macd"),
+                    "ema20": technicals.get("ema20"),
+                    "ema50": technicals.get("ema50"),
+                },
+                "financials": {
+                    "quarterly": financials.get("quarterly", [])[:4],
+                    "yearly": financials.get("yearly", [])[:3],
+                } if isinstance(financials, dict) else {},
+                "news": ctx.get("news", [])[:4],
+                "brokerageSummary": ((ctx.get("brokerageResearch") or {}).get("summary") if isinstance(ctx.get("brokerageResearch"), dict) else {}),
+            }
+
+        compact_context = json.dumps(
+            {
+                "stockA": compact(context_a, symbol_a),
+                "stockB": compact(context_b, symbol_b),
+            }
+        )
+        return (
+            "You are the lead quantamental researcher at an elite investment fund covering Indian equities.\n"
+            "Write like a high-end buy-side analyst: direct, skeptical, evidence-based, and decisive.\n"
+            "Use only the facts in the context JSON. Do not invent numbers. Do not give price targets or guarantees.\n"
+            f"Compare {symbol_a.upper()} versus {symbol_b.upper()}.\n"
+            f"Context JSON: {compact_context}\n\n"
+            "Task: Produce a short comparative AI summary for the user.\n"
+            "Output rules:\n"
+            "1) Plain text only, no markdown bullets or tables.\n"
+            "2) Use exactly these section labels on separate lines: Winner right now:, Why:, What still worries me:, Best fit for:, Bottom line:.\n"
+            "3) Each section must be 1-2 sentences.\n"
+            "4) Judge on quality, valuation regime, risk, trend confirmation, and resilience of the setup.\n"
+            "5) If the answer is close, say it is close instead of forcing a strong winner.\n"
+            "6) Keep the full response under 230 words."
         )
