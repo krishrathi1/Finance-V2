@@ -83,12 +83,12 @@ export function PriceSidebar({ data }: { data: DashboardData }) {
   const bullish = bearish === null ? null : 100 - bearish;
 
   const rangeSelector = (
-    <div className="mt-3 grid grid-cols-5 gap-1">
+    <div className="mt-3 grid grid-cols-5 gap-1 sm:gap-1.5">
       {ranges.map((item) => (
         <button
           key={item.key}
           onClick={() => setRange(item.key)}
-          className={`rounded-lg px-2 py-1 text-xs ${range === item.key ? "bg-accent text-white" : "bg-bg text-muted"}`}
+          className={`rounded-lg px-2 py-1.5 text-xs font-medium ${range === item.key ? "bg-accent text-white" : "bg-bg text-muted"}`}
         >
           {item.key}
         </button>
@@ -99,9 +99,9 @@ export function PriceSidebar({ data }: { data: DashboardData }) {
   return (
     <>
       <Card className="p-3 sm:p-4 lg:sticky lg:top-24">
-        <div className="flex items-start justify-between">
-          <div className="space-y-1">
-            <p className="font-[var(--font-space)] text-lg font-bold sm:text-2xl">{data.companyName}</p>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0 space-y-1">
+            <p className="font-[var(--font-space)] text-xl font-bold leading-tight sm:text-2xl">{data.companyName}</p>
             <div className="flex flex-wrap items-center gap-2 text-sm text-muted">
               <p>
                 {data.symbol} • {data.exchange}
@@ -109,22 +109,22 @@ export function PriceSidebar({ data }: { data: DashboardData }) {
               <MarketStatusBadge compact />
             </div>
           </div>
-          <div className="flex items-center gap-1.5">
-            <WatchlistButton symbol={data.symbol} />
-            <PriceAlertButton symbol={data.symbol} currentPrice={data.price.cmp} />
-            <AddToPortfolioButton symbol={data.symbol} companyName={data.companyName} currentPrice={data.price.cmp} />
+          <div className="flex flex-wrap items-center justify-end gap-1.5 sm:flex-nowrap sm:self-start">
+            <WatchlistButton symbol={data.symbol} className="h-9 w-9 p-0" />
+            <PriceAlertButton symbol={data.symbol} currentPrice={data.price.cmp} className="h-9 w-9 p-0" />
+            <AddToPortfolioButton symbol={data.symbol} companyName={data.companyName} currentPrice={data.price.cmp} className="h-9 w-9 p-0" />
             <button
               onClick={() => setIsExpanded(true)}
-              className="rounded-md p-2 text-muted transition-colors hover:bg-accent/20 hover:text-foreground"
+              className="flex h-9 w-9 items-center justify-center rounded-md p-0 text-muted transition-colors hover:bg-accent/20 hover:text-foreground"
             >
               <Maximize2 className="h-5 w-5" />
             </button>
           </div>
         </div>
 
-        <div className="mt-4 grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 gap-y-1">
+        <div className="mt-4 flex flex-col gap-2 sm:grid sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start sm:gap-x-3 sm:gap-y-1">
           <p className="min-w-0 text-2xl font-bold leading-none sm:text-3xl">{formatCurrency(data.price.cmp, data.price.currency)}</p>
-          <div className={`min-w-0 text-right ${isPositive ? "text-success" : "text-danger"}`}>
+          <div className={`min-w-0 sm:text-right ${isPositive ? "text-success" : "text-danger"}`}>
             <p className="text-xl font-semibold leading-none sm:text-2xl">
               {isPositive ? "+" : ""}
               {formatCurrency(pointChange, data.price.currency)}
@@ -136,13 +136,13 @@ export function PriceSidebar({ data }: { data: DashboardData }) {
         </div>
 
         <div className="mt-4">
-          <PriceChart data={rangeHistory} trend={trend} />
+          <PriceChart data={rangeHistory} trend={trend} height="clamp(220px, 56vw, 260px)" />
         </div>
 
         {rangeSelector}
 
         <div className="mt-4">
-          <div className="mb-1 flex justify-between text-xs text-muted">
+          <div className="mb-1 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs text-muted">
             <span>52W Low {formatCurrency(data.price.fiftyTwoWeekLow)}</span>
             <span>52W High {formatCurrency(data.price.fiftyTwoWeekHigh)}</span>
           </div>
@@ -167,7 +167,7 @@ export function PriceSidebar({ data }: { data: DashboardData }) {
                 <div className="bg-success" style={{ width: `${bullish}%` }} />
                 <div className="bg-danger" style={{ width: `${bearish}%` }} />
               </div>
-              <div className="mt-2 flex justify-between text-xs">
+              <div className="mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs">
                 <p className="text-success">{bullish}% Bullish</p>
                 <p className="text-danger">{bearish}% Bearish</p>
               </div>

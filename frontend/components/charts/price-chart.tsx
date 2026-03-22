@@ -35,8 +35,8 @@ export function PriceChart({ data, trend, height = 260 }: { data: PricePoint[]; 
             </linearGradient>
           </defs>
           <CartesianGrid strokeDasharray="3 3" stroke="rgba(130, 148, 179, 0.2)" />
-          <XAxis dataKey="date" tick={{ fill: "currentColor", fontSize: 11 }} minTickGap={22} />
-          <YAxis tick={{ fill: "currentColor", fontSize: 11 }} width={56} domain={["auto", "auto"]} />
+          <XAxis dataKey="date" tick={{ fill: "currentColor", fontSize: 10 }} minTickGap={14} />
+          <YAxis tick={{ fill: "currentColor", fontSize: 10 }} width={42} domain={["auto", "auto"]} />
           <Tooltip
             contentStyle={{
               background: "hsl(var(--panel))",
