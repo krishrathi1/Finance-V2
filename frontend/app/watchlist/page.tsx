@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { WatchlistAnalysisButton } from "@/components/watchlist-analysis-button";
 import { fetchTickerTape } from "@/lib/api";
 import {
   getWatchlist,
@@ -278,11 +279,12 @@ export default function WatchlistPage() {
           {!loading && rows.length > 0 && (
             <div className="space-y-2">
               {/* Table Header - hidden on mobile */}
-              <div className="hidden grid-cols-[1fr_auto_auto_auto_auto] items-center gap-4 px-4 pb-1 text-[11px] font-medium uppercase tracking-wider text-muted sm:grid">
+              <div className="hidden grid-cols-[1fr_auto_auto_auto_auto_auto] items-center gap-4 px-4 pb-1 text-[11px] font-medium uppercase tracking-wider text-muted sm:grid">
                 <span>Symbol</span>
                 <span className="w-24 text-right">Price</span>
                 <span className="w-24 text-right">Change</span>
                 <span className="w-20 text-right">Change %</span>
+                <span className="w-24 text-right">AI View</span>
                 <span className="w-10" />
               </div>
 
@@ -291,7 +293,7 @@ export default function WatchlistPage() {
                 return (
                   <div
                     key={row.symbol}
-                    className="glow-card group grid grid-cols-[1fr_auto] items-center gap-3 rounded-xl border border-border/50 bg-panel/60 px-4 py-3 backdrop-blur-sm transition sm:grid-cols-[1fr_auto_auto_auto_auto] sm:gap-4"
+                    className="glow-card group grid grid-cols-[1fr_auto] items-center gap-3 rounded-xl border border-border/50 bg-panel/60 px-4 py-3 backdrop-blur-sm transition sm:grid-cols-[1fr_auto_auto_auto_auto_auto] sm:gap-4"
                   >
                     {/* Symbol */}
                     <button
@@ -334,6 +336,7 @@ export default function WatchlistPage() {
                           {row.changePercent.toFixed(2)}%
                         </span>
                       )}
+                      <WatchlistAnalysisButton symbol={row.symbol} compactLabel />
                       <button
                         onClick={() => handleRemove(row.symbol)}
                         className="rounded-lg p-1.5 text-muted transition hover:bg-danger/15 hover:text-danger"
@@ -381,6 +384,11 @@ export default function WatchlistPage() {
                       ) : (
                         "---"
                       )}
+                    </span>
+
+                    {/* Desktop: AI Analysis */}
+                    <span className="hidden w-24 sm:flex sm:justify-end">
+                      <WatchlistAnalysisButton symbol={row.symbol} compactLabel />
                     </span>
 
                     {/* Desktop: Remove */}

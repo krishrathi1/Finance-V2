@@ -35,6 +35,10 @@ class GeminiService:
         prompt = self._build_risk_score_prompt(symbol=symbol, context=context)
         return await self._generate(prompt)
 
+    async def generate_watchlist_review(self, symbol: str, context: dict[str, Any]) -> str:
+        prompt = self._build_watchlist_review_prompt(symbol=symbol, context=context)
+        return await self._generate(prompt)
+
     async def extract_profile_details(self, symbol: str, context: dict[str, Any]) -> str:
         prompt = self._build_profile_prompt(symbol=symbol, context=context)
         return await self._generate(prompt)
@@ -330,4 +334,66 @@ class GeminiService:
             "4) Do not give guarantees or price targets.\n"
             "5) If the article is vague, say what is still unclear.\n"
             "6) Return JSON only, no markdown."
+        )
+
+    def _build_watchlist_review_prompt(self, symbol: str, context: dict[str, Any]) -> str:
+        smart = context.get("smartScore", {}) or {}
+        risk = context.get("riskScore", {}) or {}
+        metrics = context.get("metrics", {}) or {}
+        technicals = context.get("technicals", {}) or {}
+        financials = context.get("financials", {}) or {}
+        compact_context = json.dumps(
+            {
+                "symbol": context.get("symbol", symbol),
+                "companyName": context.get("companyName"),
+                "sector": context.get("sector"),
+                "profile": context.get("profile"),
+                "smartScore": {
+                    "score": smart.get("score"),
+                    "label": smart.get("label"),
+                    "dimensions": smart.get("dimensions"),
+                },
+                "riskScore": {
+                    "score": risk.get("score"),
+                    "label": risk.get("label"),
+                    "components": risk.get("components"),
+                },
+                "metrics": {
+                    "peRatio": metrics.get("peRatio"),
+                    "pbRatio": metrics.get("pbRatio"),
+                    "roe": metrics.get("roe"),
+                    "roce": metrics.get("roce"),
+                    "debtToEquity": metrics.get("debtToEquity"),
+                    "currentRatio": metrics.get("currentRatio"),
+                    "dividendYield": metrics.get("dividendYield"),
+                },
+                "technicals": {
+                    "trend": technicals.get("trend"),
+                    "rsi14": technicals.get("rsi14"),
+                    "macd": technicals.get("macd"),
+                    "ema20": technicals.get("ema20"),
+                    "ema50": technicals.get("ema50"),
+                },
+                "financials": {
+                    "quarterly": financials.get("quarterly", [])[:4],
+                    "yearly": financials.get("yearly", [])[:3],
+                } if isinstance(financials, dict) else {},
+                "news": context.get("news", [])[:5],
+                "brokerageSummary": ((context.get("brokerageResearch") or {}).get("summary") if isinstance(context.get("brokerageResearch"), dict) else {}),
+            }
+        )
+        return (
+            "You are the lead quantamental researcher at an elite investment fund covering Indian equities.\n"
+            "Think like a high-end buy-side analyst: skeptical, evidence-driven, and concise.\n"
+            "Use only the facts in the context JSON. Do not invent missing numbers. Do not give price targets or guarantees.\n"
+            f"Stock symbol: {symbol}\n"
+            f"Context JSON: {compact_context}\n\n"
+            "Task: Write a short watchlist review of what you think about this stock right now.\n"
+            "Output rules:\n"
+            "1) Plain text only, no markdown bullets or tables.\n"
+            "2) Use exactly these section labels on separate lines: Core view:, What supports it:, What can go wrong:, What changes my mind:, Bottom line:.\n"
+            "3) Each section must be 1-2 sentences.\n"
+            "4) Focus on quality, valuation regime, balance-sheet risk, factor profile, news flow, and trend confirmation.\n"
+            "5) If evidence is mixed, say so directly.\n"
+            "6) Keep the whole response under 220 words."
         )

@@ -823,6 +823,27 @@ async def chat_with_ai(symbol: str, payload: ChatRequest) -> ChatResponse:
     return ChatResponse(answer=answer, source=source)
 
 
+@router.get("/{symbol}/watchlist-analysis", response_model=ChatResponse)
+async def get_watchlist_analysis(symbol: str) -> ChatResponse:
+    cache_key = f"watchlist-analysis:{symbol.upper()}"
+    cached = await redis_cache.get_json(cache_key)
+    if isinstance(cached, dict):
+        return ChatResponse(
+            answer=str(cached.get("answer") or "No response."),
+            source=str(cached.get("source") or "fallback"),
+        )
+
+    try:
+        dashboard = await asyncio.wait_for(dashboard_service.get_dashboard(symbol=symbol), timeout=20)
+    except Exception:
+        dashboard = get_sample_dashboard(symbol=symbol)
+
+    answer, source = await ai_adapter.generate_watchlist_review(symbol=symbol, context=dashboard)
+    payload = {"answer": answer, "source": source}
+    await redis_cache.set_json(cache_key, payload, ttl_seconds=60 * 30)
+    return ChatResponse(answer=answer, source=source)
+
+
 @router.post("/{symbol}/news-analysis", response_model=NewsAnalysisResponse)
 async def analyze_news_item(symbol: str, payload: NewsAnalysisRequest) -> NewsAnalysisResponse:
     context: dict = {"symbol": symbol.upper()}

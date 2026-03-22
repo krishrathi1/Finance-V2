@@ -34,6 +34,15 @@ class AIAdapter:
                 return self._offline_chat_response(symbol=symbol, context=context, live_failed=True), "fallback"
         return self._offline_chat_response(symbol=symbol, context=context, live_failed=False), "fallback"
 
+    async def generate_watchlist_review(self, symbol: str, context: dict[str, Any]) -> tuple[str, str]:
+        if self._gemini and settings.gemini_api_key:
+            try:
+                answer = await self._gemini.generate_watchlist_review(symbol=symbol, context=context)
+                return answer, "gemini"
+            except Exception:
+                return self._fallback_watchlist_review(symbol=symbol, context=context, live_failed=True), "fallback"
+        return self._fallback_watchlist_review(symbol=symbol, context=context, live_failed=False), "fallback"
+
     async def generate_report(self, symbol: str, context: dict[str, Any]) -> str:
         if self._gemini and settings.gemini_api_key:
             try:
@@ -256,6 +265,58 @@ class AIAdapter:
             f"and a Risk Score of {risk_score:.1f}/5, which means risk is {risk_level}. "
             f"Right now {pe_text}, and {dividend_text}. "
             "Before taking a position, check debt trend, margin stability, and profit consistency."
+        )
+
+    def _fallback_watchlist_review(self, symbol: str, context: dict[str, Any], live_failed: bool) -> str:
+        smart = (context.get("smartScore") or {}) if isinstance(context, dict) else {}
+        risk = (context.get("riskScore") or {}) if isinstance(context, dict) else {}
+        metrics = (context.get("metrics") or {}) if isinstance(context, dict) else {}
+        technicals = (context.get("technicals") or {}) if isinstance(context, dict) else {}
+        news = context.get("news", []) if isinstance(context, dict) else []
+
+        smart_score = float(smart.get("score", 0.0) or 0.0)
+        risk_score = float(risk.get("score", 0.0) or 0.0)
+        pe_ratio = metrics.get("peRatio")
+        roe = metrics.get("roe")
+        debt_to_equity = metrics.get("debtToEquity")
+        trend = str(technicals.get("trend") or "Neutral")
+        rsi = technicals.get("rsi14")
+        recent_news = len(news) if isinstance(news, list) else 0
+
+        quality_view = "above average" if smart_score >= 3.5 else "mixed" if smart_score >= 2.5 else "weak"
+        risk_view = "contained" if risk_score < 2.0 else "watchable" if risk_score < 3.5 else "elevated"
+        valuation_view = (
+            f"valuation is not obviously cheap with P/E near {float(pe_ratio):.1f}"
+            if isinstance(pe_ratio, (int, float)) and pe_ratio > 0
+            else "valuation needs more work because P/E context is incomplete"
+        )
+        quality_metric = (
+            f"ROE is around {float(roe):.1f}%"
+            if isinstance(roe, (int, float))
+            else "profit quality metrics are incomplete"
+        )
+        leverage_view = (
+            f"debt-to-equity is about {float(debt_to_equity):.2f}"
+            if isinstance(debt_to_equity, (int, float))
+            else "balance-sheet leverage needs confirmation"
+        )
+        momentum_view = (
+            f"trend reads {trend.lower()} with RSI near {float(rsi):.1f}"
+            if isinstance(rsi, (int, float))
+            else f"trend reads {trend.lower()}"
+        )
+        lead = "Live quant review is temporarily unavailable." if live_failed else "Fallback quant review."
+
+        return (
+            f"{lead}\n\n"
+            f"Core view: {symbol.upper()} screens as a {quality_view} name with Smart Score {smart_score:.1f}/5 and risk {risk_view} at {risk_score:.1f}/5. "
+            f"My first read is that {valuation_view}.\n\n"
+            f"What stands out: {quality_metric}, {leverage_view}, and {momentum_view}. "
+            f"News flow coverage is {'active' if recent_news >= 3 else 'limited'}, which affects short-term conviction.\n\n"
+            "What can break the thesis: any slowdown in earnings quality, weaker margins, or a rise in balance-sheet stress will matter more than narrative. "
+            "If the stock is already expensive, even decent execution may not protect downside.\n\n"
+            "Bottom line: keep it on the watchlist if you can justify both valuation and business durability on the next review. "
+            "I would want stronger evidence on earnings consistency before treating it as a high-conviction position."
         )
 
     def _parse_news_analysis(self, raw: str) -> dict[str, str]:

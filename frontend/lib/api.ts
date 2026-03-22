@@ -158,6 +158,25 @@ export async function sendAiQuestion(symbol: string, question: string): Promise<
   }
 }
 
+export async function fetchWatchlistAnalysis(symbol: string): Promise<{ answer: string; source: "gemini" | "fallback" }> {
+  try {
+    const res = await fetch(getApiUrl(`/${symbol}/watchlist-analysis`), {
+      cache: "no-store"
+    });
+    if (!res.ok) throw new Error("watchlist analysis failed");
+    const payload = await res.json();
+    return {
+      answer: payload.answer || "No analysis available.",
+      source: payload.source === "gemini" ? "gemini" : "fallback"
+    };
+  } catch {
+    return {
+      answer: "AI review is unavailable right now.",
+      source: "fallback"
+    };
+  }
+}
+
 export async function analyzeNewsItem(
   symbol: string,
   article: { title: string; summary: string; source: string; publishedAt: string; sentimentScore: number }
