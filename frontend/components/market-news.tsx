@@ -47,7 +47,31 @@ export function MarketNews() {
   }, []);
 
   if (loading) {
-    return <div className="h-40 w-full animate-pulse rounded-2xl bg-panel/50" />;
+    return (
+      <div className="grid [grid-template-columns:repeat(auto-fit,minmax(280px,1fr))] gap-3 sm:gap-4">
+        {Array.from({ length: 3 }).map((_, idx) => (
+          <div key={idx} className="overflow-hidden rounded-2xl border border-border/60 bg-panel/70">
+            <div className="shimmer h-36 w-full sm:h-40" />
+            <div className="space-y-3 p-[var(--panel-padding)]">
+              <div className="flex items-center justify-between">
+                <div className="shimmer h-3 w-20 rounded-full" />
+                <div className="shimmer h-3 w-14 rounded-full" />
+              </div>
+              <div className="space-y-2">
+                <div className="shimmer h-4 w-full rounded-full" />
+                <div className="shimmer h-4 w-11/12 rounded-full" />
+                <div className="shimmer h-4 w-3/4 rounded-full" />
+              </div>
+              <div className="space-y-2">
+                <div className="shimmer h-3 w-full rounded-full" />
+                <div className="shimmer h-3 w-10/12 rounded-full" />
+                <div className="shimmer h-3 w-8/12 rounded-full" />
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
   }
 
   if (!articles.length) {
@@ -61,14 +85,14 @@ export function MarketNews() {
   return (
     <div className="space-y-3">
       {lastUpdated ? <p className="text-xs text-muted">Updated: {lastUpdated}</p> : null}
-      <div className="news-grid-stagger grid gap-3 sm:grid-cols-2 sm:gap-4 md:grid-cols-3">
+      <div className="news-grid-stagger grid [grid-template-columns:repeat(auto-fit,minmax(280px,1fr))] gap-3 sm:gap-4">
         {articles.map((article, idx) => (
           <a
             key={`${article.url}-${idx}`}
             href={article.url}
             target="_blank"
             rel="noreferrer"
-            className="news-card group flex h-auto min-h-[240px] flex-col overflow-hidden rounded-xl border border-border/50 bg-panel hover:border-accent hover:bg-panel/80 sm:h-[320px] sm:rounded-2xl"
+            className="news-card group flex min-h-[260px] flex-col overflow-hidden rounded-xl border border-border/50 bg-panel hover:border-accent hover:bg-panel/80 active:scale-[0.98] sm:rounded-2xl"
           >
             {article.imageUrl ? (
               <div className="relative h-32 w-full shrink-0 overflow-hidden bg-background/50 sm:h-40">
@@ -92,13 +116,13 @@ export function MarketNews() {
             ) : (
               <div className="news-image-fallback flex h-32 w-full shrink-0 items-center justify-center text-xs text-muted sm:h-40">No Image</div>
             )}
-            <div className="flex flex-1 flex-col p-3 sm:p-4">
+            <div className="flex flex-1 flex-col p-[var(--panel-padding)]">
               <div className="mb-2 flex items-center justify-between text-xs text-muted">
                 <span className="font-semibold text-accent/80">{article.source}</span>
                 <span>{article.publishedAt}</span>
               </div>
-              <h3 className="line-clamp-3 text-sm font-semibold leading-snug transition-colors group-hover:text-accent">{article.title}</h3>
-              <p className="mt-2 line-clamp-3 text-xs text-muted">{article.summary}</p>
+              <h3 className="density-copy line-clamp-3 text-sm font-semibold leading-snug transition-colors group-hover:text-accent">{article.title}</h3>
+              <p className="density-copy mt-2 line-clamp-3 text-xs text-muted">{article.summary}</p>
             </div>
           </a>
         ))}

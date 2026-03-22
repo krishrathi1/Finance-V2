@@ -8,6 +8,8 @@ import { MarketStatsBar } from "@/components/market-stats-bar";
 import { PopularStocks } from "@/components/popular-stocks";
 import { StockSearch } from "@/components/stock-search";
 import { TopMovers } from "@/components/top-movers";
+import { ViewportMotionSection } from "@/components/viewport-motion-section";
+import { Badge } from "@/components/ui/badge";
 
 const FEATURE_CARDS = [
   {
@@ -48,7 +50,7 @@ export default function HomePage() {
   return (
     <div className="stagger-fade space-y-6 py-4 sm:space-y-8 sm:py-8">
       {/* Hero Section */}
-      <section
+      <ViewportMotionSection
         className="gradient-border relative z-30 rounded-2xl p-5 sm:rounded-[28px] sm:p-8"
         style={{ overflow: "visible" }}
       >
@@ -79,33 +81,32 @@ export default function HomePage() {
           </p>
           <StockSearch className="mt-4 max-w-3xl sm:mt-6" />
 
-          {/* Quick feature tags */}
+          {/* Quick feature tags updated using the new Shadcn Badge */}
           <div className="mt-4 flex flex-wrap gap-2">
             {["Smart Score", "Risk Analysis", "AI Chat", "Brokerage Reports", "Live Heatmap"].map((tag) => (
-              <span
-                key={tag}
-                className="rounded-full border border-border/50 bg-bg/50 px-2.5 py-1 text-[10px] font-medium text-muted backdrop-blur sm:text-xs"
-              >
+              <Badge key={tag} variant="secondary" className="backdrop-blur bg-bg/50 border-border/50 font-medium text-[10px] sm:text-xs">
                 {tag}
-              </span>
+              </Badge>
             ))}
           </div>
         </div>
-      </section>
+      </ViewportMotionSection>
 
       {/* Popular Stocks — client component, renders without blocking the page */}
       <PopularStocks />
 
       {/* Market Stats Bar */}
-      <MarketStatsBar />
+      <section className="sticky top-[5.6rem] z-20 rounded-2xl border border-border/40 bg-bg/70 p-2 backdrop-blur-xl sm:top-[6.4rem]">
+        <MarketStatsBar />
+      </section>
 
       {/* Feature Quick-Access Cards */}
-      <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <section className="grid [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))] gap-3">
         {FEATURE_CARDS.map(({ href, icon: Icon, gradient, glow, label, desc }) => (
           <Link
             key={href}
             href={href}
-            className="glow-card group flex items-center gap-4 rounded-2xl border border-border/70 bg-panel/70 p-4 transition hover:border-accent/40 sm:p-5"
+            className="glow-card group flex items-center gap-4 rounded-2xl border border-border/70 bg-panel/70 p-[var(--panel-padding-lg)] transition hover:border-accent/40 active:scale-[0.98]"
           >
             <div
               className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br ${gradient} ${glow} shadow-lg`}
@@ -113,10 +114,10 @@ export default function HomePage() {
               <Icon className="h-5 w-5 text-white" />
             </div>
             <div className="min-w-0">
-              <p className="font-[var(--font-space)] text-sm font-bold group-hover:text-accent">
+              <p className="density-copy font-[var(--font-space)] text-sm font-bold group-hover:text-accent">
                 {label}
               </p>
-              <p className="mt-0.5 text-[11px] text-muted">{desc}</p>
+              <p className="density-copy mt-0.5 text-[11px] text-muted">{desc}</p>
             </div>
           </Link>
         ))}

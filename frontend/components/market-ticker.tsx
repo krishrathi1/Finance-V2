@@ -15,14 +15,16 @@ function TrendMarker({ up }: { up: boolean }) {
   if (up) {
     return (
       <span
-        className="inline-block h-0 w-0 border-l-[7px] border-r-[7px] border-b-[11px] border-l-transparent border-r-transparent border-b-[#39ff14] align-middle"
+        className="inline-block h-0 w-0 border-l-[7px] border-r-[7px] border-b-[11px] border-l-transparent border-r-transparent align-middle"
+        style={{ borderBottomColor: "hsl(var(--success))" }}
         aria-hidden="true"
       />
     );
   }
   return (
     <span
-      className="inline-block h-0 w-0 border-l-[7px] border-r-[7px] border-t-[11px] border-l-transparent border-r-transparent border-t-[#ff0015] align-middle"
+      className="inline-block h-0 w-0 border-l-[7px] border-r-[7px] border-t-[11px] border-l-transparent border-r-transparent align-middle"
+      style={{ borderTopColor: "hsl(var(--danger))" }}
       aria-hidden="true"
     />
   );
@@ -97,7 +99,7 @@ export function MarketTicker() {
             <Link
               key={`${item.symbol}-${idx}`}
               href={`/stocks/${symbolPath}`}
-              className="ticker-item inline-flex items-center gap-1.5 px-3 text-xs font-semibold hover:opacity-90 sm:gap-2 sm:px-5 sm:text-sm"
+              className="ticker-item inline-flex items-center gap-1.5 px-3 text-xs font-semibold hover:opacity-90 active:scale-[0.98] sm:gap-2 sm:px-5 sm:text-sm"
             >
               {content}
             </Link>

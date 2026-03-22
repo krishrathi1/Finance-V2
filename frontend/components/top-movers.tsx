@@ -61,12 +61,12 @@ export function TopMovers() {
     icon: React.ReactNode,
     isGainer: boolean
   ) => (
-    <div className="glow-card rounded-2xl border border-border/70 bg-panel/70 p-4 sm:p-5">
+    <div className="glow-card density-panel-lg rounded-2xl border border-border/70 bg-panel/70">
       <div className="flex items-center gap-2">
         <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${isGainer ? "bg-success/15 text-success" : "bg-danger/15 text-danger"}`}>
           {icon}
         </div>
-        <h3 className="font-[var(--font-space)] text-sm font-bold uppercase tracking-wider text-muted">
+        <h3 className="density-copy font-[var(--font-space)] text-sm font-bold uppercase tracking-wider text-muted">
           {title}
         </h3>
       </div>
@@ -75,23 +75,23 @@ export function TopMovers() {
           const isStock = !item.symbol.includes(" ");
           const symbolPath = item.symbol.replace(/\s+/g, "");
           const content = (
-            <div className="flex items-center justify-between rounded-xl px-3 py-2.5 transition hover:bg-bg/80">
+            <div className="flex items-center justify-between rounded-xl px-3 py-2.5 transition hover:bg-bg/80 active:scale-[0.98]">
               <div className="flex items-center gap-3">
                 <span className="flex h-6 w-6 items-center justify-center rounded-md bg-bg text-[11px] font-bold text-muted">
                   {idx + 1}
                 </span>
                 <div>
-                  <p className="text-sm font-semibold">{item.symbol}</p>
-                  <p className="text-[11px] text-muted">
+                  <p className="density-copy text-sm font-semibold">{item.symbol}</p>
+                  <p className="density-copy text-[11px] text-muted">
                     Rs {item.cmp.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
                   </p>
                 </div>
               </div>
               <div className="text-right">
-                <p className={`text-sm font-bold ${isGainer ? "text-success" : "text-danger"}`}>
+                <p className={`density-value text-sm font-bold ${isGainer ? "text-success" : "text-danger"}`}>
                   {formatSigned(item.changePercent)}%
                 </p>
-                <p className={`text-[11px] ${isGainer ? "text-success/70" : "text-danger/70"}`}>
+                <p className={`density-copy text-[11px] ${isGainer ? "text-success/70" : "text-danger/70"}`}>
                   {formatSigned(item.change)}
                 </p>
               </div>

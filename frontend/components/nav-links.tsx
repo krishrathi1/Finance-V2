@@ -32,7 +32,7 @@ export function NavLinks() {
           <Link
             key={link.href}
             href={link.href}
-            className={`rounded-lg px-3 py-1.5 text-sm transition-colors ${
+            className={`rounded-lg px-3 py-1.5 text-sm transition-colors active:scale-[0.98] ${
               isActive(link.href)
                 ? "font-semibold text-accent"
                 : "text-muted hover:text-text"
@@ -49,7 +49,7 @@ export function NavLinks() {
           type="button"
           onClick={() => setOpen(!open)}
           aria-label={open ? "Close menu" : "Open menu"}
-          className="flex h-8 w-8 items-center justify-center rounded-lg border border-border/50 text-muted transition hover:text-text"
+          className="flex h-8 w-8 items-center justify-center rounded-lg border border-border/50 text-muted transition hover:text-text active:scale-[0.98]"
         >
           {open ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
         </button>
@@ -62,7 +62,7 @@ export function NavLinks() {
                   key={link.href}
                   href={link.href}
                   onClick={() => setOpen(false)}
-                  className={`rounded-lg px-3 py-2 text-sm transition-colors ${
+                  className={`rounded-lg px-3 py-2 text-sm transition-colors active:scale-[0.98] ${
                     isActive(link.href)
                       ? "font-semibold text-accent"
                       : "text-muted hover:text-text"

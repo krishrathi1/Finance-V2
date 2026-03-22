@@ -88,13 +88,13 @@ export function PopularStocks() {
         /* Fallback: show plain symbol links when prices are unavailable */
         <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
           {POPULAR_SYMBOLS.map((sym) => (
-            <Link
-              key={sym}
-              href={`/stocks/${sym}`}
-              className="shrink-0 rounded-full border border-border/70 bg-panel/60 px-4 py-2 text-xs font-semibold text-muted backdrop-blur transition hover:border-accent/50 hover:text-text"
-            >
-              {sym}
-            </Link>
+              <Link
+                key={sym}
+                href={`/stocks/${sym}`}
+                className="shrink-0 rounded-full border border-border/70 bg-panel/60 px-4 py-2 text-xs font-semibold text-muted backdrop-blur transition hover:border-accent/50 hover:text-text active:scale-[0.98]"
+              >
+                {sym}
+              </Link>
           ))}
         </div>
       ) : (
@@ -105,7 +105,7 @@ export function PopularStocks() {
               <Link
                 key={row.symbol}
                 href={`/stocks/${row.symbol}`}
-                className="group flex shrink-0 items-center gap-2 rounded-full border border-border/70 bg-panel/70 px-3 py-1.5 backdrop-blur transition hover:border-accent/40 hover:bg-panel"
+                className="group flex shrink-0 items-center gap-2 rounded-full border border-border/70 bg-panel/70 px-3 py-1.5 backdrop-blur transition hover:border-accent/40 hover:bg-panel active:scale-[0.98]"
               >
                 <span className="text-xs font-bold tracking-wide text-text group-hover:text-accent">
                   {row.symbol}

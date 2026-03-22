@@ -19,6 +19,7 @@ import {
   Send,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import { ViewportMotionSection } from "@/components/viewport-motion-section";
 import { fetchScreenerResults, fetchAIScreenerResults } from "@/lib/api";
 import type { ScreenerFilters, ScreenerResult } from "@/lib/types";
 
@@ -227,7 +228,7 @@ export default function ScreenerPage() {
   return (
     <div className="stagger-fade space-y-5 py-4 sm:space-y-6 sm:py-6">
       {/* Header */}
-      <section className="gradient-border relative overflow-hidden rounded-2xl p-5 sm:rounded-[28px] sm:p-8">
+      <ViewportMotionSection className="gradient-border relative overflow-hidden rounded-2xl p-5 sm:rounded-[28px] sm:p-8">
         <div className="hero-orb hero-orb-1" />
         <div className="hero-orb hero-orb-2" />
         <div className="relative z-10">
@@ -248,7 +249,7 @@ export default function ScreenerPage() {
             dividend yield, sector, and more.
           </p>
         </div>
-      </section>
+      </ViewportMotionSection>
 
       {/* AI Natural Language Screener */}
       <section className="rounded-2xl border border-accent/30 bg-gradient-to-r from-accent/5 via-purple-500/5 to-transparent p-4 sm:p-6">

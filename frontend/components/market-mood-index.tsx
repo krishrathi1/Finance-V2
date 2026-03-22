@@ -81,17 +81,17 @@ export function MarketMoodIndex() {
   }
 
   return (
-    <div className="glow-card rounded-2xl border border-border/70 bg-panel/70 p-4 sm:p-5">
+    <div className="glow-card density-panel-lg rounded-2xl border border-border/70 bg-panel/70">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="font-[var(--font-space)] text-sm font-bold uppercase tracking-wider text-muted">
+          <h3 className="density-copy font-[var(--font-space)] text-sm font-bold uppercase tracking-wider text-muted">
             Market Mood Index
           </h3>
-          <p className="mt-0.5 text-[11px] text-muted">Based on market breadth & momentum</p>
+          <p className="density-copy mt-0.5 text-[11px] text-muted">Based on market breadth & momentum</p>
         </div>
         <div className="flex h-8 items-center gap-1.5 rounded-full border border-border/70 bg-bg/60 px-3">
           <span className="pulse-dot h-2 w-2 rounded-full bg-success" />
-          <span className="text-[11px] font-medium text-muted">Live</span>
+          <span className="density-copy text-[11px] font-medium text-muted">Live</span>
         </div>
       </div>
 

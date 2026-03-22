@@ -7,7 +7,7 @@ export function Card({ className, ...props }: React.HTMLAttributes<HTMLDivElemen
 }
 
 export function CardHeader({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("px-4 py-3", className)} {...props} />;
+  return <div className={cn("px-[var(--panel-padding)] py-[calc(var(--panel-padding)*0.9)]", className)} {...props} />;
 }
 
 export function CardTitle({ className, ...props }: React.HTMLAttributes<HTMLHeadingElement>) {
@@ -15,5 +15,5 @@ export function CardTitle({ className, ...props }: React.HTMLAttributes<HTMLHead
 }
 
 export function CardContent({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("px-4 pb-4", className)} {...props} />;
+  return <div className={cn("px-[var(--panel-padding)] pb-[var(--panel-padding)]", className)} {...props} />;
 }
