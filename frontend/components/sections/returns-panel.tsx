@@ -21,7 +21,7 @@ export function ReturnsPanel({
     <div className="space-y-3">
       <Card className="p-4">
         <h3 className="text-lg font-semibold">Stock Returns</h3>
-        <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-6">
+        <div className="mt-3 grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-3 lg:grid-cols-6">
           {summary.map((item) => (
             <div
               key={item.label}
@@ -29,9 +29,9 @@ export function ReturnsPanel({
                 item.value === null ? "bg-zinc-500/15" : item.value >= 0 ? "bg-success/20" : "bg-danger/20"
               }`}
             >
-              <p className="text-sm text-muted">{item.label}</p>
+              <p className="text-xs text-muted sm:text-sm">{item.label}</p>
               <p
-                className={`mt-1 text-2xl font-semibold ${
+                className={`mt-1 text-xl font-semibold sm:text-2xl ${
                   item.value === null ? "text-muted" : item.value >= 0 ? "text-success" : "text-danger"
                 }`}
               >

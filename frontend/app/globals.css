@@ -345,6 +345,24 @@ textarea:focus {
   background-repeat: no-repeat;
 }
 
+/* Mobile touch improvements */
+@media (max-width: 639px) {
+  .ticker-track {
+    animation-duration: 60s;
+  }
+
+  /* Ensure all scrollable tables have momentum scrolling */
+  .overflow-auto {
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Prevent text size adjustment on orientation change */
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;

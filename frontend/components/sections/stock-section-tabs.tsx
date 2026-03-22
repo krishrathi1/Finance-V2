@@ -11,10 +11,10 @@ const sections = [
 
 export function StockSectionTabs() {
   return (
-    <div className="sticky top-[118px] z-30 overflow-auto rounded-2xl border border-border/70 bg-panel/90 p-2 md:top-[122px]">
-      <div className="flex min-w-max items-center gap-1">
+    <div className="sticky top-[96px] z-30 -mx-3 overflow-auto rounded-2xl border border-border/70 bg-panel/90 p-1.5 sm:-mx-0 sm:top-[118px] sm:p-2 md:top-[122px]">
+      <div className="flex min-w-max items-center gap-0.5 sm:gap-1">
         {sections.map((item) => (
-          <a key={item.id} href={`#${item.id}`} className="rounded-xl px-3 py-2 text-sm text-muted transition hover:bg-bg hover:text-text">
+          <a key={item.id} href={`#${item.id}`} className="rounded-xl px-2.5 py-1.5 text-xs text-muted transition hover:bg-bg hover:text-text sm:px-3 sm:py-2 sm:text-sm">
             {item.label}
           </a>
         ))}

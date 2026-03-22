@@ -69,9 +69,9 @@ export function MetricsGrid({
 
   return (
     <TooltipProvider>
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-4">
         {metricConfig.map((metric) => (
-          <Card key={metric.key} className="min-h-[108px] p-4">
+          <Card key={metric.key} className="min-h-[90px] p-3 sm:min-h-[108px] sm:p-4">
             <div className="flex items-start justify-between gap-2">
               <p className="text-sm text-muted">{metric.label}</p>
               <Tooltip>
@@ -83,11 +83,11 @@ export function MetricsGrid({
                 <TooltipContent>{metric.formula}</TooltipContent>
               </Tooltip>
             </div>
-            <p className="mt-3 text-2xl font-semibold">{metricText(mergedMetrics[metric.key], metric.type)}</p>
+            <p className="mt-2 text-lg font-semibold sm:mt-3 sm:text-2xl">{metricText(mergedMetrics[metric.key], metric.type)}</p>
           </Card>
         ))}
 
-        <Card className="min-h-[108px] p-4">
+        <Card className="min-h-[90px] p-3 sm:min-h-[108px] sm:p-4">
           <div className="flex items-start justify-between gap-2">
             <p className="text-sm text-muted">Book Value &amp; P/B</p>
             <Tooltip>
@@ -99,7 +99,7 @@ export function MetricsGrid({
               <TooltipContent>Book Value Per Share with Price-to-Book multiple</TooltipContent>
             </Tooltip>
           </div>
-          <p className="mt-3 text-2xl font-semibold">{bookValuePb}</p>
+          <p className="mt-2 text-lg font-semibold sm:mt-3 sm:text-2xl">{bookValuePb}</p>
         </Card>
       </div>
     </TooltipProvider>

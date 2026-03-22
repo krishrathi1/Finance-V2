@@ -69,7 +69,7 @@ export function MarketTicker() {
 
   return (
     <div className="ticker-shell border-t border-border/60 bg-panel/70">
-      <div className="ticker-track py-2" style={{ animationDuration: `${durationSeconds}s` }}>
+      <div className="ticker-track py-1.5 sm:py-2" style={{ animationDuration: `${durationSeconds}s` }}>
         {tape.map((item, idx) => {
           const up = item.change >= 0;
           const color = up ? "text-success" : "text-danger";
@@ -87,7 +87,7 @@ export function MarketTicker() {
 
           if (!isStockSymbol) {
             return (
-              <span key={`${item.symbol}-${idx}`} className="ticker-item inline-flex items-center gap-2 px-5 text-sm font-semibold">
+              <span key={`${item.symbol}-${idx}`} className="ticker-item inline-flex items-center gap-1.5 px-3 text-xs font-semibold sm:gap-2 sm:px-5 sm:text-sm">
                 {content}
               </span>
             );
@@ -97,7 +97,7 @@ export function MarketTicker() {
             <Link
               key={`${item.symbol}-${idx}`}
               href={`/stocks/${symbolPath}`}
-              className="ticker-item inline-flex items-center gap-2 px-5 text-sm font-semibold hover:opacity-90"
+              className="ticker-item inline-flex items-center gap-1.5 px-3 text-xs font-semibold hover:opacity-90 sm:gap-2 sm:px-5 sm:text-sm"
             >
               {content}
             </Link>

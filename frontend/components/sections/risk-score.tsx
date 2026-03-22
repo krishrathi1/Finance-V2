@@ -47,7 +47,7 @@ export function RiskScore({
             <summary className="flex h-7 w-7 cursor-pointer list-none items-center justify-center rounded-full border border-border/70 text-muted transition hover:text-text">
               <Info className="h-4 w-4" />
             </summary>
-            <div className="absolute right-0 z-20 mt-2 w-[340px] rounded-xl border border-border/70 bg-panel p-3 text-xs leading-5 text-muted shadow-xl">
+            <div className="absolute right-0 z-20 mt-2 w-[260px] rounded-xl border border-border/70 bg-panel p-3 text-xs leading-5 text-muted shadow-xl sm:w-[340px]">
               {methodText}
             </div>
           </details>

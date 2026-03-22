@@ -151,21 +151,21 @@ export function QuarterlyResultsSection({
 
   return (
     <Card className="space-y-3 p-4">
-      <div className="mb-3 flex flex-wrap items-center gap-2 text-lg font-semibold">
+      <div className="mb-3 flex flex-wrap items-center gap-1.5 text-base font-semibold sm:gap-2 sm:text-lg">
         <span>Quarterly Results</span>
         <button
           type="button"
           onClick={() => setView("consolidated")}
-          className={view === "consolidated" ? "text-primary" : "text-muted hover:text-text"}
+          className={`text-sm sm:text-base ${view === "consolidated" ? "text-primary" : "text-muted hover:text-text"}`}
         >
-          / View Consolidated
+          / Consolidated
         </button>
         <button
           type="button"
           onClick={() => setView("standalone")}
-          className={view === "standalone" ? "text-primary" : "text-muted hover:text-text"}
+          className={`text-sm sm:text-base ${view === "standalone" ? "text-primary" : "text-muted hover:text-text"}`}
         >
-          / View Standalone
+          / Standalone
         </button>
       </div>
       <FinancialBarChart data={chartData} firstKey="revenue" secondKey="profit" />

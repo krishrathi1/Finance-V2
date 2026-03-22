@@ -29,7 +29,7 @@ export function BrokerageSummary({ brokerage }: { brokerage?: BrokeragePayload }
   const reports = brokerage?.reports || [];
 
   return (
-    <Card className="flex h-[54rem] flex-col overflow-hidden p-4">
+    <Card className="flex max-h-[80vh] flex-col overflow-hidden p-3 sm:p-4 xl:h-[54rem] xl:max-h-none">
       <div className="flex items-start justify-between gap-3">
         <div>
           <h3 className="text-lg font-semibold">Brokerage Summary</h3>

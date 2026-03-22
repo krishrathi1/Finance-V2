@@ -61,17 +61,17 @@ export function MarketNews() {
   return (
     <div className="space-y-3">
       {lastUpdated ? <p className="text-xs text-muted">Updated: {lastUpdated}</p> : null}
-      <div className="news-grid-stagger grid gap-4 sm:grid-cols-2 md:grid-cols-3">
+      <div className="news-grid-stagger grid gap-3 sm:grid-cols-2 sm:gap-4 md:grid-cols-3">
         {articles.map((article, idx) => (
           <a
             key={`${article.url}-${idx}`}
             href={article.url}
             target="_blank"
             rel="noreferrer"
-            className="news-card group flex h-[320px] flex-col overflow-hidden rounded-2xl border border-border/50 bg-panel hover:border-accent hover:bg-panel/80"
+            className="news-card group flex h-auto min-h-[240px] flex-col overflow-hidden rounded-xl border border-border/50 bg-panel hover:border-accent hover:bg-panel/80 sm:h-[320px] sm:rounded-2xl"
           >
             {article.imageUrl ? (
-              <div className="relative h-40 w-full shrink-0 overflow-hidden bg-background/50">
+              <div className="relative h-32 w-full shrink-0 overflow-hidden bg-background/50 sm:h-40">
                 <div className="absolute inset-0 z-[1] bg-gradient-to-t from-black/20 via-transparent to-transparent opacity-70" />
                 <img
                   src={article.imageUrl}
@@ -90,9 +90,9 @@ export function MarketNews() {
                 />
               </div>
             ) : (
-              <div className="news-image-fallback flex h-40 w-full shrink-0 items-center justify-center text-xs text-muted">No Image</div>
+              <div className="news-image-fallback flex h-32 w-full shrink-0 items-center justify-center text-xs text-muted sm:h-40">No Image</div>
             )}
-            <div className="flex flex-1 flex-col p-4">
+            <div className="flex flex-1 flex-col p-3 sm:p-4">
               <div className="mb-2 flex items-center justify-between text-xs text-muted">
                 <span className="font-semibold text-accent/80">{article.source}</span>
                 <span>{article.publishedAt}</span>

@@ -28,8 +28,8 @@ export function StockSearch({ className = "" }: { className?: string }) {
 
   return (
     <div className={`stock-search-shell relative z-[80] ${className}`}>
-      <div className="search-bar relative z-10 flex items-center rounded-2xl border border-border/70 bg-panel px-3 shadow-sm">
-        <Search className="mr-2 h-4 w-4 text-muted" />
+      <div className="search-bar relative z-10 flex items-center rounded-xl border border-border/70 bg-panel px-2 shadow-sm sm:rounded-2xl sm:px-3">
+        <Search className="mr-1.5 h-4 w-4 shrink-0 text-muted sm:mr-2" />
         <input
           value={query}
           onChange={(event) => onSearch(event.target.value)}
@@ -39,8 +39,8 @@ export function StockSearch({ className = "" }: { className?: string }) {
               setOpen(false);
             }
           }}
-          placeholder="Search NSE/BSE symbol, e.g. HDFCBANK"
-          className="search-input h-12 w-full bg-transparent text-sm outline-none"
+          placeholder="Search NSE/BSE symbol"
+          className="search-input h-10 w-full bg-transparent text-sm outline-none sm:h-12"
         />
         <button
           onClick={() => canSubmit && router.push(`/stocks/${query.toUpperCase()}`)}

@@ -95,10 +95,10 @@ export function PriceSidebar({ data }: { data: DashboardData }) {
 
   return (
     <>
-      <Card className="sticky top-24 p-4">
+      <Card className="p-3 sm:p-4 lg:sticky lg:top-24">
         <div className="flex items-start justify-between">
           <div className="space-y-1">
-            <p className="font-[var(--font-space)] text-2xl font-bold">{data.companyName}</p>
+            <p className="font-[var(--font-space)] text-lg font-bold sm:text-2xl">{data.companyName}</p>
             <div className="flex flex-wrap items-center gap-2 text-sm text-muted">
               <p>
                 {data.symbol} • {data.exchange}
@@ -115,9 +115,9 @@ export function PriceSidebar({ data }: { data: DashboardData }) {
         </div>
 
         <div className="mt-4 grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 gap-y-1">
-          <p className="min-w-0 text-3xl font-bold leading-none">{formatCurrency(data.price.cmp, data.price.currency)}</p>
+          <p className="min-w-0 text-2xl font-bold leading-none sm:text-3xl">{formatCurrency(data.price.cmp, data.price.currency)}</p>
           <div className={`min-w-0 text-right ${isPositive ? "text-success" : "text-danger"}`}>
-            <p className="text-2xl font-semibold leading-none">
+            <p className="text-xl font-semibold leading-none sm:text-2xl">
               {isPositive ? "+" : ""}
               {formatCurrency(pointChange, data.price.currency)}
             </p>
@@ -181,7 +181,7 @@ export function PriceSidebar({ data }: { data: DashboardData }) {
                     initial={{ scale: 0.95, opacity: 0 }}
                     animate={{ scale: 1, opacity: 1 }}
                     exit={{ scale: 0.95, opacity: 0 }}
-                    className="relative flex h-[80vh] w-full max-w-6xl flex-col rounded-2xl border border-border/70 bg-panel/68 p-6 shadow-2xl backdrop-blur-2xl"
+                    className="relative flex h-[90vh] w-full max-w-6xl flex-col rounded-2xl border border-border/70 bg-panel/68 p-4 shadow-2xl backdrop-blur-2xl sm:h-[80vh] sm:p-6"
                   >
                     <button
                       onClick={() => setIsExpanded(false)}
@@ -191,17 +191,17 @@ export function PriceSidebar({ data }: { data: DashboardData }) {
                     </button>
 
                     <div className="mb-6 space-y-1">
-                      <p className="font-[var(--font-space)] text-3xl font-bold">{data.companyName}</p>
+                      <p className="font-[var(--font-space)] text-xl font-bold sm:text-3xl">{data.companyName}</p>
                       <p className="text-muted">
                         {data.symbol} • {data.exchange}
                       </p>
                     </div>
 
-                    <div className="flex items-center gap-3">
-                      <p className="text-4xl font-bold">{formatCurrency(data.price.cmp, data.price.currency)}</p>
-                      <div className={`flex items-baseline gap-2 text-xl font-semibold ${isPositive ? "text-success" : "text-danger"}`}>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <p className="text-2xl font-bold sm:text-4xl">{formatCurrency(data.price.cmp, data.price.currency)}</p>
+                      <div className={`flex items-baseline gap-2 text-base font-semibold sm:text-xl ${isPositive ? "text-success" : "text-danger"}`}>
                         <span>{isPositive ? "+" : ""}{formatCurrency(pointChange, data.price.currency)}</span>
-                        <span className="text-base opacity-90">({formatPercent(percentChange)}) {changeLabel}</span>
+                        <span className="text-sm opacity-90 sm:text-base">({formatPercent(percentChange)}) {changeLabel}</span>
                       </div>
                     </div>
 

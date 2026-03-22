@@ -297,7 +297,7 @@ export function CorporateActionsSection({ actions }: { actions: Record<string, A
     <Card className="p-4">
       <h3 className="text-lg font-semibold">Corporate Actions and Deals</h3>
       <Tabs defaultValue="boardMeetings" className="mt-3">
-        <TabsList className="h-auto flex-wrap">
+        <TabsList className="h-auto flex-wrap gap-1">
           <TabsTrigger value="boardMeetings">Board Meetings</TabsTrigger>
           <TabsTrigger value="dividends">Dividends</TabsTrigger>
           <TabsTrigger value="bonusIssues">Bonus Issues</TabsTrigger>

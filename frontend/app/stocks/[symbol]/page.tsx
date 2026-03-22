@@ -263,7 +263,7 @@ export default async function StockDetailsPage({ params }: Props) {
 
       <DashboardAutoRefresh symbol={symbol} active={shouldAutoRefresh} warning={refreshWarning} />
 
-      <div className="grid gap-4 2xl:grid-cols-[minmax(300px,360px)_minmax(0,1fr)]">
+      <div className="grid gap-4 lg:grid-cols-[minmax(280px,340px)_minmax(0,1fr)] 2xl:grid-cols-[minmax(300px,360px)_minmax(0,1fr)]">
         <aside className="min-w-0">
           <PriceSidebar data={data} />
         </aside>

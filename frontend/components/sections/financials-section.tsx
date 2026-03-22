@@ -93,14 +93,14 @@ export function FinancialsSection({
             {visibleGrowthPeriods.map((period) => (
               <div key={period.label} className="space-y-2">
                 <p className="text-sm font-semibold text-text">{period.label}</p>
-                <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(260px,1fr))]">
+                <div className="grid gap-3 sm:gap-4 [grid-template-columns:repeat(auto-fit,minmax(200px,1fr))] sm:[grid-template-columns:repeat(auto-fit,minmax(260px,1fr))]">
                   {period.metrics.map((metric) => (
                     <div
                       key={`${period.label}-${metric.label}`}
-                      className="min-h-[132px] rounded-3xl border border-border/70 bg-bg px-6 py-5"
+                      className="min-h-[100px] rounded-2xl border border-border/70 bg-bg px-4 py-3 sm:min-h-[132px] sm:rounded-3xl sm:px-6 sm:py-5"
                     >
-                      <p className="text-sm font-medium text-muted">{metric.label}</p>
-                      <p className={`mt-4 text-3xl font-semibold ${growthValueClass(metric.value)}`}>{formatGrowthValue(metric.value)}</p>
+                      <p className="text-xs font-medium text-muted sm:text-sm">{metric.label}</p>
+                      <p className={`mt-2 text-2xl font-semibold sm:mt-4 sm:text-3xl ${growthValueClass(metric.value)}`}>{formatGrowthValue(metric.value)}</p>
                     </div>
                   ))}
                 </div>

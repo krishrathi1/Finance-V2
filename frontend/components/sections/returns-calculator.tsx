@@ -80,7 +80,7 @@ export function ReturnsCalculator({
   const confidencePct = (simulation.confidence * 100).toFixed(0);
 
   return (
-    <Card className="flex h-[52rem] flex-col overflow-hidden p-4">
+    <Card className="flex flex-col overflow-hidden p-3 sm:p-4 xl:h-[52rem]">
       <h3 className="text-lg font-semibold">Predictive ROI Simulator</h3>
       <p className="mt-1 text-sm text-muted">3-year path shaped by the same bounded ML trend signal used in the stock score.</p>
 

@@ -4,14 +4,14 @@ import { StockSearch } from "@/components/stock-search";
 
 export default function HomePage() {
   return (
-    <div className="stagger-fade space-y-8 py-8">
-      <section className="relative z-20 overflow-visible rounded-[28px] border border-border/70 bg-panel/70 p-8">
-        <p className="text-xs uppercase tracking-[0.3em] text-accent">Indian Equity Intelligence</p>
-        <h1 className="mt-3 font-[var(--font-space)] text-4xl font-bold md:text-5xl">AI Stock Research For NSE and BSE</h1>
-        <p className="mt-3 max-w-3xl text-sm text-muted md:text-base">
+    <div className="stagger-fade space-y-6 py-4 sm:space-y-8 sm:py-8">
+      <section className="relative z-20 overflow-visible rounded-2xl border border-border/70 bg-panel/70 p-4 sm:rounded-[28px] sm:p-8">
+        <p className="text-[10px] uppercase tracking-[0.3em] text-accent sm:text-xs">Indian Equity Intelligence</p>
+        <h1 className="mt-2 font-[var(--font-space)] text-2xl font-bold sm:mt-3 sm:text-4xl md:text-5xl">AI Stock Research For NSE and BSE</h1>
+        <p className="mt-2 max-w-3xl text-xs text-muted sm:mt-3 sm:text-sm md:text-base">
           Analyze fundamentals, risk, sentiment, financial statements, corporate actions, and returns projection with one integrated fintech workspace.
         </p>
-        <StockSearch className="mt-6 max-w-3xl" />
+        <StockSearch className="mt-4 max-w-3xl sm:mt-6" />
       </section>
 
       <section className="mt-8">

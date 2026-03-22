@@ -32,12 +32,12 @@ export function AIChat({ symbol }: { symbol: string }) {
     <>
       <button
         onClick={() => setOpen((value) => !value)}
-        className="fixed bottom-5 right-5 z-50 inline-flex h-16 w-16 items-center justify-center rounded-full border border-border/60 bg-panel p-1.5 shadow-xl"
+        className="fixed bottom-4 right-3 z-50 inline-flex h-12 w-12 items-center justify-center rounded-full border border-border/60 bg-panel p-1 shadow-xl sm:bottom-5 sm:right-5 sm:h-16 sm:w-16 sm:p-1.5"
       >
         {open ? (
           <X className="h-5 w-5 text-text" />
         ) : (
-          <Image src="/chatbot-logo.svg" alt="Chatbot" width={52} height={52} className="h-12 w-12 object-contain" priority />
+          <Image src="/chatbot-logo.svg" alt="Chatbot" width={52} height={52} className="h-9 w-9 object-contain sm:h-12 sm:w-12" priority />
         )}
       </button>
 
@@ -47,7 +47,7 @@ export function AIChat({ symbol }: { symbol: string }) {
             initial={{ opacity: 0, y: 20, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 20, scale: 0.98 }}
-            className="fixed bottom-24 right-5 z-50 flex h-[540px] w-[360px] flex-col rounded-2xl border border-border bg-panel p-3 shadow-2xl"
+            className="fixed bottom-20 right-2 z-50 flex h-[70vh] w-[calc(100vw-1rem)] max-w-[360px] flex-col rounded-2xl border border-border bg-panel p-3 shadow-2xl sm:bottom-24 sm:right-5 sm:h-[540px] sm:w-[360px]"
           >
             <div className="flex items-center gap-3 border-b border-border pb-3">
               <div className="rounded-2xl border border-border/60 bg-bg p-2">

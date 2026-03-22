@@ -19,7 +19,7 @@ function ScoreArc({ score, color }: { score: number; color: string }) {
   const circumference = 283;
   const progress = (normalized / 5) * circumference;
   return (
-    <svg viewBox="0 0 120 120" className="h-52 w-52">
+    <svg viewBox="0 0 120 120" className="h-36 w-36 sm:h-52 sm:w-52">
       <circle cx="60" cy="60" r="45" fill="none" stroke="rgba(130,148,179,0.25)" strokeWidth="10" strokeLinecap="round" />
       <circle
         cx="60"
@@ -73,15 +73,15 @@ export function SmartScore({
             <summary className="flex h-7 w-7 cursor-pointer list-none items-center justify-center rounded-full border border-border/70 text-muted transition hover:text-text">
               <Info className="h-4 w-4" />
             </summary>
-            <div className="absolute right-0 z-20 mt-2 w-[360px] rounded-xl border border-border/70 bg-panel p-3 text-xs leading-5 text-muted shadow-xl">
+            <div className="absolute right-0 z-20 mt-2 w-[280px] rounded-xl border border-border/70 bg-panel p-3 text-xs leading-5 text-muted shadow-xl sm:w-[360px]">
               {methodText}
             </div>
           </details>
         </div>
       </div>
 
-      <div className="mt-4 grid gap-5 lg:grid-cols-[280px_1fr]">
-        <div className="flex flex-col items-center rounded-2xl border border-border/70 bg-bg/40 p-3">
+      <div className="mt-4 grid gap-4 sm:gap-5 lg:grid-cols-[280px_1fr]">
+        <div className="flex flex-col items-center rounded-2xl border border-border/70 bg-bg/40 p-2 sm:p-3">
           <ScoreArc score={score} color="#8b5cf6" />
           <p className="-mt-2 text-sm text-muted">out of 5.0</p>
         </div>
