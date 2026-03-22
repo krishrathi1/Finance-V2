@@ -512,17 +512,22 @@ async def stock_screener(
             limit=limit,
         )
 
-        # Post-filter by PE if requested (FMP screener may not support PE filters directly)
-        if pe_min > 0 or pe_max > 0:
+        # Post-filter by PE and Dividend if requested
+        if pe_min > 0 or pe_max > 0 or dividend_min > 0:
             filtered = []
             for item in results:
-                pe = item.get("pe")
-                if pe is None:
-                    continue
-                if pe_min > 0 and pe < pe_min:
-                    continue
-                if pe_max > 0 and pe > pe_max:
-                    continue
+                if pe_min > 0 or pe_max > 0:
+                    pe = item.get("pe")
+                    if pe is None:
+                        continue
+                    if pe_min > 0 and pe < pe_min:
+                        continue
+                    if pe_max > 0 and pe > pe_max:
+                        continue
+                if dividend_min > 0:
+                    div = item.get("dividendYield")
+                    if div is None or div < dividend_min:
+                        continue
                 filtered.append(item)
             results = filtered
 
@@ -606,13 +611,22 @@ async def ai_stock_screener(payload: AIScreenerRequest) -> dict:
             price_min=price_min, price_max=price_max,
             volume_min=volume_min, dividend_min=dividend_min, limit=limit,
         )
-        if pe_min > 0 or pe_max > 0:
-            results = [
-                r for r in results
-                if r.get("pe") is not None
-                and (pe_min <= 0 or r["pe"] >= pe_min)
-                and (pe_max <= 0 or r["pe"] <= pe_max)
-            ]
+        if pe_min > 0 or pe_max > 0 or dividend_min > 0:
+            filtered = []
+            for r in results:
+                if pe_min > 0 or pe_max > 0:
+                    if r.get("pe") is None:
+                        continue
+                    if pe_min > 0 and r["pe"] < pe_min:
+                        continue
+                    if pe_max > 0 and r["pe"] > pe_max:
+                        continue
+                if dividend_min > 0:
+                    div = r.get("dividendYield")
+                    if div is None or div < dividend_min:
+                        continue
+                filtered.append(r)
+            results = filtered
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Screener error: {exc}")
 

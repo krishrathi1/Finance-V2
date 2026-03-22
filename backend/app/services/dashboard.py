@@ -1758,6 +1758,201 @@ class StockDashboardService:
         for years, label in ((1, "1 Year CAGR"), (3, "3 Year CAGR"), (5, "5 Year CAGR")):
             dividend_value = one_year_change("dividend") if years == 1 else cagr_change("dividend", years)
             if dividend_value is None and dividend_yearly_totals:
+                net_npa_card["average3Y"] = round(sum(recent_values) / len(recent_values), 2) if recent_values else None
+
+        sector_text = str(sector or "").lower()
+        is_financial = any(token in sector_text for token in ["financial", "bank", "insurance"])
+        if not is_financial:
+            balance_rows = financials.get("balanceSheet") or []
+            yearly_rows = financials.get("yearly") or []
+
+            current_ratio_series: list[dict[str, Any]] = []
+            debt_equity_series: list[dict[str, Any]] = []
+            for row in balance_rows:
+                if not isinstance(row, dict):
+                    continue
+                parsed_dt = parse_period(str(row.get("period") or ""))
+                if parsed_dt is None:
+                    continue
+                current_assets = self._num(row.get("currentAssets"))
+                current_liabilities = self._num(row.get("currentLiabilities"))
+                total_debt = self._num(row.get("totalDebt"))
+                equity = self._num(row.get("equity"))
+                if current_assets is not None and current_liabilities not in {None, 0}:
+                    current_ratio_series.append({"period": str(parsed_dt.year), "value": round(current_assets / current_liabilities, 2)})
+                if total_debt is not None and equity not in {None, 0}:
+                    debt_equity_series.append({"period": str(parsed_dt.year), "value": round(total_debt / equity, 2)})
+
+            asset_turnover_series: list[dict[str, Any]] = []
+            cash_flow_margin_series: list[dict[str, Any]] = []
+            for row in yearly_rows:
+                if not isinstance(row, dict):
+                    continue
+                parsed_dt = parse_period(str(row.get("period") or ""))
+                if parsed_dt is None:
+                    continue
+                revenue = self._num(row.get("revenue"))
+                assets = self._num(row.get("assets"))
+                cash_flow = self._num(row.get("cashFlow"))
+                if revenue is not None and assets not in {None, 0}:
+                    asset_turnover_series.append({"period": str(parsed_dt.year), "value": round(revenue / assets, 2)})
+                if revenue not in {None, 0} and cash_flow is not None:
+                    cash_flow_margin_series.append({"period": str(parsed_dt.year), "value": round((cash_flow / revenue) * 100.0, 2)})
+
+            if not current_ratio_series and self._num(metrics.get("currentRatio")) is not None:
+                current_ratio_series = [{"period": point.get("period") or str(2021 + idx), "value": round(float(metrics["currentRatio"]), 2)} for idx, point in enumerate((asset_turnover_series or [{"period": str(2021 + idx)} for idx in range(5)]))]
+            if not debt_equity_series and self._num(metrics.get("debtToEquity")) is not None:
+                debt_equity_series = [{"period": point.get("period") or str(2021 + idx), "value": round(float(metrics["debtToEquity"]), 2)} for idx, point in enumerate((asset_turnover_series or [{"period": str(2021 + idx)} for idx in range(5)]))]
+
+            normalized["liquidity"] = [
+                {
+                    "label": "Current Ratio",
+                    "average3Y": average_from_series(current_ratio_series),
+                    "series": current_ratio_series[-5:],
+                },
+                {
+                    "label": "Debt to Equity",
+                    "average3Y": average_from_series(debt_equity_series),
+                    "series": debt_equity_series[-5:],
+                },
+                {
+                    "label": "Asset Turnover",
+                    "average3Y": average_from_series(asset_turnover_series),
+                    "series": asset_turnover_series[-5:],
+                },
+                {
+                    "label": "Operating CF Margin",
+                    "average3Y": average_from_series(cash_flow_margin_series),
+                    "series": cash_flow_margin_series[-5:],
+                },
+            ]
+
+        for group in ("profitability", "valuation", "liquidity"):
+            normalized[group] = [card for card in normalized.get(group, []) if not card_is_blank(card)]
+
+        return normalized
+
+    def _build_financial_growth_snapshot(
+        self,
+        trendlyne_financials: dict[str, Any] | None,
+        financials: dict[str, Any] | None,
+        returns_summary: list[dict[str, Any]],
+        dividends: list[dict[str, Any]],
+    ) -> dict[str, Any] | None:
+        annual_consolidated = trendlyne_financials.get("annualConsolidated") or [] if isinstance(trendlyne_financials, dict) else []
+        annual_standalone = trendlyne_financials.get("annualStandalone") or [] if isinstance(trendlyne_financials, dict) else []
+        annual_rows = annual_consolidated if annual_consolidated else annual_standalone
+        basis = "consolidated" if annual_consolidated else "standalone"
+
+        if not annual_rows and isinstance(financials, dict):
+            yearly_rows = financials.get("yearly") or []
+            annual_rows = [
+                {
+                    "period": row.get("period"),
+                    "totalRevenue": row.get("revenue"),
+                    "netProfit": row.get("profit"),
+                    "dividend": None,
+                }
+                for row in yearly_rows
+                if isinstance(row, dict) and row.get("period")
+            ]
+            basis = "standalone"
+        if not annual_rows:
+            return None
+
+        def annual_value(index_from_end: int, key: str) -> float | None:
+            if len(annual_rows) <= index_from_end:
+                return None
+            row = annual_rows[-(index_from_end + 1)]
+            if not isinstance(row, dict):
+                return None
+            return self._num(row.get(key))
+
+        dividend_yearly_totals: list[float] = []
+        if dividends:
+            grouped_dividends: dict[int, float] = defaultdict(float)
+            for row in dividends:
+                if not isinstance(row, dict):
+                    continue
+                amount = self._num(row.get("dividendAmount"))
+                if amount is None:
+                    continue
+                date_raw = str(row.get("exDate") or row.get("recordDate") or row.get("date") or "").strip()
+                if not date_raw:
+                    continue
+                parsed_year = None
+                for fmt in ("%d-%b-%Y", "%Y-%m-%d", "%d %b %Y"):
+                    try:
+                        parsed_year = datetime.strptime(date_raw[:11], fmt).year
+                        break
+                    except Exception:
+                        continue
+                if parsed_year is None:
+                    continue
+                grouped_dividends[parsed_year] += amount
+            if grouped_dividends:
+                dividend_yearly_totals = [grouped_dividends[year] for year in sorted(grouped_dividends.keys())[-6:]]
+
+        def growth_from_series(values: list[float], years: int) -> float | None:
+            if years == 1:
+                if len(values) < 2:
+                    return None
+                latest = self._num(values[-1])
+                previous = self._num(values[-2])
+                if latest is None or previous is None or latest <= 0 or previous <= 0:
+                    return None
+                return round(((latest - previous) / previous) * 100, 2)
+
+            if len(values) <= years:
+                return None
+            latest = self._num(values[-1])
+            base = self._num(values[-(years + 1)])
+            if latest is None or base is None or latest <= 0 or base <= 0:
+                return None
+            try:
+                return round((((latest / base) ** (1 / years)) - 1) * 100, 2)
+            except Exception:
+                return None
+
+        def one_year_change(key: str) -> float | None:
+            latest = annual_value(0, key)
+            previous = annual_value(1, key)
+            if latest is None or previous in {None, 0}:
+                return None
+            if latest <= 0 or previous <= 0:
+                return None
+            return round(((latest - previous) / previous) * 100, 2)
+
+        def cagr_change(key: str, years: int) -> float | None:
+            latest = annual_value(0, key)
+            base = annual_value(years, key)
+            if latest is None or base is None or latest <= 0 or base <= 0:
+                return None
+            try:
+                return round((((latest / base) ** (1 / years)) - 1) * 100, 2)
+            except Exception:
+                return None
+
+        def returns_cagr(years: int) -> float | None:
+            label_map = {1: "1 Year", 3: "3 Years", 5: "5 Years"}
+            target = next((item for item in returns_summary if item.get("label") == label_map[years]), None)
+            total_return = self._num(target.get("value")) if isinstance(target, dict) else None
+            if total_return is None:
+                return None
+            if years == 1:
+                return round(total_return, 2)
+            gross = 1 + (total_return / 100)
+            if gross <= 0:
+                return None
+            try:
+                return round(((gross ** (1 / years)) - 1) * 100, 2)
+            except Exception:
+                return None
+
+        periods = []
+        for years, label in ((1, "1 Year CAGR"), (3, "3 Year CAGR"), (5, "5 Year CAGR")):
+            dividend_value = one_year_change("dividend") if years == 1 else cagr_change("dividend", years)
+            if dividend_value is None and dividend_yearly_totals:
                 dividend_value = growth_from_series(dividend_yearly_totals, years)
 
             period_metrics = [
@@ -1786,37 +1981,67 @@ class StockDashboardService:
         dividend_min: float = 0,
         limit: int = 100,
     ) -> list[dict[str, Any]]:
-        raw = await self.providers.get_fmp_stock_screener(
-            exchange=exchange,
-            sector=sector,
-            industry=industry,
-            market_cap_more_than=market_cap_min,
-            market_cap_lower_than=market_cap_max,
-            price_more_than=price_min,
-            price_lower_than=price_max,
-            volume_more_than=volume_min,
-            dividend_more_than=dividend_min,
-            limit=limit,
-        )
-        processed = self._normalize_screener_rows(raw)
-        if not processed and self._can_use_live_screener_fallback(
-            exchange=exchange,
-            sector=sector,
-            industry=industry,
-            market_cap_min=market_cap_min,
-            market_cap_max=market_cap_max,
-            dividend_min=dividend_min,
-            volume_min=volume_min,
-        ):
+        is_nse = str(exchange or "NSE").strip().upper() == "NSE"
+        
+        # FMP sector mapping for India is sparse. For NSE+sector queries, directly use live market fallback.
+        if is_nse and (sector or industry):
             processed = await self._screen_stocks_from_live_market(
                 price_min=price_min,
                 price_max=price_max,
+                limit=max(limit * 3, 300), # fetch a larger pool for post-filtering
+            )
+        else:
+            raw = await self.providers.get_fmp_stock_screener(
+                exchange=exchange,
+                sector=sector,
+                industry=industry,
+                market_cap_more_than=market_cap_min,
+                market_cap_lower_than=market_cap_max,
+                price_more_than=price_min,
+                price_lower_than=price_max,
+                volume_more_than=volume_min,
+                dividend_more_than=dividend_min,
                 limit=limit,
             )
+            processed = self._normalize_screener_rows(raw)
+            if not processed and self._can_use_live_screener_fallback(
+                exchange=exchange,
+                sector=sector,
+                industry=industry,
+                market_cap_min=market_cap_min,
+                market_cap_max=market_cap_max,
+                dividend_min=dividend_min,
+                volume_min=volume_min,
+            ):
+                processed = await self._screen_stocks_from_live_market(
+                    price_min=price_min,
+                    price_max=price_max,
+                    limit=limit,
+                )
+                
         if processed:
-            processed = await self._enrich_screener_rows(processed, limit=limit)
-        processed.sort(key=lambda x: x.get("marketCap", 0), reverse=True)
-        return processed
+            processed = await self._enrich_screener_rows(processed, limit=max(limit * 3, 500))
+            
+        # Post-filter to ensure strict adherence even if FMP failed or if using fallback
+        filtered = []
+        for item in processed:
+            if sector and str(item.get("sector") or "").strip().lower() != sector.strip().lower():
+                continue
+            if industry and str(item.get("industry") or "").strip().lower() != industry.strip().lower():
+                continue
+            item_mcap = float(item.get("marketCap") or 0)
+            if market_cap_min > 0 and item_mcap < market_cap_min:
+                continue
+            if market_cap_max > 0 and item_mcap > market_cap_max:
+                continue
+            if volume_min > 0 and float(item.get("volume") or 0) < volume_min:
+                continue
+            if dividend_min > 0 and float(item.get("dividendYield") or 0) < dividend_min:
+                continue
+            filtered.append(item)
+
+        filtered.sort(key=lambda x: float(x.get("marketCap") or 0), reverse=True)
+        return filtered[:limit]
 
     def _normalize_screener_rows(self, rows: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
         processed: list[dict[str, Any]] = []
@@ -1930,7 +2155,7 @@ class StockDashboardService:
         if not rows:
             return rows
 
-        target_count = max(1, min(len(rows), int(limit or len(rows)), 100))
+        target_count = max(1, min(len(rows), int(limit or len(rows)), 500))
         target_rows = rows[:target_count]
         snapshots = await asyncio.gather(
             *(self.providers.get_yfinance_screener_snapshot(str(row.get("symbol") or "")) for row in target_rows),

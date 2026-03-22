@@ -3510,8 +3510,8 @@ class MarketDataProviders:
             params["priceLowerThan"] = price_lower_than
         if volume_more_than > 0:
             params["volumeMoreThan"] = int(volume_more_than)
-        if dividend_more_than > 0:
-            params["dividendMoreThan"] = dividend_more_than
+        # Note: Do not pass dividend_more_than to FMP here since FMP expects absolute
+        # dividend amount. Instead, we post-filter dividendYield in the endpoint router.
 
         def _parse_screener_payload(payload: list) -> list[dict[str, Any]]:
             results: list[dict[str, Any]] = []
