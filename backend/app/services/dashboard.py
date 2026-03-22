@@ -1798,21 +1798,170 @@ class StockDashboardService:
             dividend_more_than=dividend_min,
             limit=limit,
         )
-        # Post-processing: filter out entries with no company name and sort by market cap descending
+        processed = self._normalize_screener_rows(raw)
+        if not processed and self._can_use_live_screener_fallback(
+            exchange=exchange,
+            sector=sector,
+            industry=industry,
+            market_cap_min=market_cap_min,
+            market_cap_max=market_cap_max,
+            dividend_min=dividend_min,
+            volume_min=volume_min,
+        ):
+            processed = await self._screen_stocks_from_live_market(
+                price_min=price_min,
+                price_max=price_max,
+                limit=limit,
+            )
+        if processed:
+            processed = await self._enrich_screener_rows(processed, limit=limit)
+        processed.sort(key=lambda x: x.get("marketCap", 0), reverse=True)
+        return processed
+
+    def _normalize_screener_rows(self, rows: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
         processed: list[dict[str, Any]] = []
-        for item in raw:
+        for item in rows or []:
             name = str(item.get("companyName") or "").strip()
             if not name:
                 continue
-            # Round numeric fields for cleaner output
             item["marketCap"] = round(float(item.get("marketCap") or 0), 2)
             item["price"] = round(float(item.get("price") or 0), 2)
             item["change"] = round(float(item.get("change") or 0), 2)
             item["changePercent"] = round(float(item.get("changePercent") or 0), 2)
             item["volume"] = round(float(item.get("volume") or 0), 0)
             processed.append(item)
-        processed.sort(key=lambda x: x.get("marketCap", 0), reverse=True)
         return processed
+
+    def _can_use_live_screener_fallback(
+        self,
+        exchange: str,
+        sector: str,
+        industry: str,
+        market_cap_min: float,
+        market_cap_max: float,
+        dividend_min: float,
+        volume_min: float,
+    ) -> bool:
+        return (
+            str(exchange or "NSE").strip().upper() == "NSE"
+            and not str(sector or "").strip()
+            and not str(industry or "").strip()
+            and market_cap_min <= 0
+            and market_cap_max <= 0
+            and dividend_min <= 0
+            and volume_min <= 0
+        )
+
+    async def _screen_stocks_from_live_market(
+        self,
+        price_min: float,
+        price_max: float,
+        limit: int,
+    ) -> list[dict[str, Any]]:
+        market_rows = await self.providers.get_nse_index_constituents("NIFTY 500")
+        if not market_rows:
+            market_rows = await self.providers.get_nse_market_ticker()
+        if not market_rows:
+            return []
+
+        candidate_market_rows = []
+        for row in market_rows:
+            price = self._num(row.get("cmp")) or 0.0
+            if price <= 0:
+                continue
+            if price_min > 0 and price < price_min:
+                continue
+            if price_max > 0 and price > price_max:
+                continue
+            candidate_market_rows.append(row)
+
+        candidate_market_rows.sort(
+            key=lambda item: (
+                abs(self._num(item.get("changePercent")) or 0.0),
+                self._num(item.get("cmp")) or 0.0,
+            ),
+            reverse=True,
+        )
+        scan_rows = candidate_market_rows[: max(1, min(len(candidate_market_rows), max(limit * 4, 120)))]
+
+        symbols = [str(row.get("symbol") or "").strip().upper() for row in scan_rows if row.get("symbol")]
+        company_names = await self.providers.get_company_names_for_symbols(symbols)
+
+        fallback_rows: list[dict[str, Any]] = []
+        for row in scan_rows:
+            symbol = str(row.get("symbol") or "").strip().upper()
+            price = self._num(row.get("cmp")) or 0.0
+            if not symbol or price <= 0:
+                continue
+            fallback_rows.append(
+                {
+                    "symbol": symbol,
+                    "companyName": company_names.get(symbol) or symbol,
+                    "marketCap": 0.0,
+                    "price": round(price, 2),
+                    "change": round(self._num(row.get("change")) or 0.0, 2),
+                    "changePercent": round(self._num(row.get("changePercent")) or 0.0, 2),
+                    "volume": 0.0,
+                    "sector": "",
+                    "industry": "",
+                    "pe": None,
+                    "pb": None,
+                    "roe": None,
+                    "dividendYield": None,
+                    "beta": None,
+                }
+            )
+
+        fallback_rows = await self._enrich_screener_rows(fallback_rows, limit=len(fallback_rows))
+        fallback_rows.sort(
+            key=lambda item: (
+                float(item.get("marketCap") or 0.0),
+                abs(float(item.get("changePercent") or 0.0)),
+            ),
+            reverse=True,
+        )
+        return fallback_rows[: max(1, int(limit or 100))]
+
+    async def _enrich_screener_rows(
+        self,
+        rows: list[dict[str, Any]],
+        limit: int,
+    ) -> list[dict[str, Any]]:
+        if not rows:
+            return rows
+
+        target_count = max(1, min(len(rows), int(limit or len(rows)), 100))
+        target_rows = rows[:target_count]
+        snapshots = await asyncio.gather(
+            *(self.providers.get_yfinance_screener_snapshot(str(row.get("symbol") or "")) for row in target_rows),
+            return_exceptions=True,
+        )
+
+        for row, snapshot in zip(target_rows, snapshots):
+            if isinstance(snapshot, Exception) or not isinstance(snapshot, dict):
+                continue
+            if (not row.get("companyName")) and snapshot.get("companyName"):
+                row["companyName"] = snapshot["companyName"]
+            if (self._num(row.get("marketCap")) or 0) <= 0 and snapshot.get("marketCap") is not None:
+                row["marketCap"] = round(float(snapshot["marketCap"]), 2)
+            if (self._num(row.get("volume")) or 0) <= 0 and snapshot.get("volume") is not None:
+                row["volume"] = round(float(snapshot["volume"]), 0)
+            if not str(row.get("sector") or "").strip() and snapshot.get("sector"):
+                row["sector"] = str(snapshot["sector"])
+            if not str(row.get("industry") or "").strip() and snapshot.get("industry"):
+                row["industry"] = str(snapshot["industry"])
+            if row.get("pe") is None and snapshot.get("pe") is not None:
+                row["pe"] = round(float(snapshot["pe"]), 2)
+            if row.get("pb") is None and snapshot.get("pb") is not None:
+                row["pb"] = round(float(snapshot["pb"]), 2)
+            if row.get("roe") is None and snapshot.get("roe") is not None:
+                row["roe"] = round(float(snapshot["roe"]), 2)
+            if row.get("dividendYield") is None and snapshot.get("dividendYield") is not None:
+                row["dividendYield"] = round(float(snapshot["dividendYield"]), 2)
+            if row.get("beta") is None and snapshot.get("beta") is not None:
+                row["beta"] = round(float(snapshot["beta"]), 2)
+
+        return rows
 
     def _returns_heatmap(self, history: list[dict]) -> list[dict]:
         grouped: dict[int, dict[int, list[float]]] = defaultdict(lambda: defaultdict(list))

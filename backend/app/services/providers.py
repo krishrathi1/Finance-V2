@@ -57,9 +57,20 @@ class MarketDataProviders:
         self._trendlyne_financials_cache: dict[str, tuple[float, dict[str, Any] | None]] = {}
         self._trendlyne_shareholding_cache: dict[str, tuple[float, dict[str, Any] | None]] = {}
         self._trendlyne_documents_cache: dict[str, tuple[float, dict[str, Any] | None]] = {}
+        self._yfinance_screener_cache: dict[str, tuple[float, dict[str, Any] | None]] = {}
+        self._bse_listed_scrips_cache: dict[str, tuple[float, list[dict[str, Any]] | None]] = {}
 
     async def search_indian_stocks(self, query: str, limit: int = 25) -> list[dict[str, str]]:
         return await asyncio.to_thread(self._search_indian_stocks_sync, query, limit)
+
+    async def get_company_names_for_symbols(self, symbols: list[str]) -> dict[str, str]:
+        return await asyncio.to_thread(self._get_company_names_for_symbols_sync, symbols)
+
+    async def get_yfinance_screener_snapshot(self, symbol: str, exchange: str = "NSE") -> dict[str, Any] | None:
+        return await asyncio.to_thread(self._get_yfinance_screener_snapshot_sync, symbol, exchange)
+
+    async def get_bse_listed_scrips(self, segment: str = "Equity", status: str = "Active") -> list[dict[str, Any]] | None:
+        return await asyncio.to_thread(self._get_bse_listed_scrips_sync, segment, status)
 
     async def get_bse_index_symbols(self, index_name: str) -> list[str]:
         return await asyncio.to_thread(self._get_bse_index_symbols_sync, index_name)
@@ -672,6 +683,174 @@ class MarketDataProviders:
         matches = [item for item in rows if q in item["symbol"].lower() or q in item["name"].lower()]
         matches.sort(key=score)
         return matches[: max(1, int(limit or 25))]
+
+    def _get_company_names_for_symbols_sync(self, symbols: list[str]) -> dict[str, str]:
+        self._refresh_trendlyne_equity_map_if_needed()
+        results: dict[str, str] = {}
+        for raw_symbol in symbols:
+            symbol = str(raw_symbol or "").replace(".NS", "").replace(".BO", "").strip().upper()
+            if not symbol or symbol in results:
+                continue
+            meta = self._resolve_trendlyne_equity_meta(symbol)
+            if meta:
+                results[symbol] = self._trendlyne_name_from_slug(meta[1], symbol)
+            else:
+                results[symbol] = symbol
+        return results
+
+    def _get_yfinance_screener_snapshot_sync(self, symbol: str, exchange: str = "NSE") -> dict[str, Any] | None:
+        key = str(symbol or "").replace(".NS", "").replace(".BO", "").strip().upper()
+        if not key:
+            return None
+
+        now = time.time()
+        cache_key = f"{str(exchange or 'NSE').strip().upper()}:{key}"
+        cached = self._yfinance_screener_cache.get(cache_key)
+        if cached and now - cached[0] < 15 * 60:
+            return cached[1]
+
+        try:
+            import yfinance as yf  # type: ignore
+        except Exception:
+            return None
+
+        normalized_exchange = str(exchange or "NSE").strip().upper()
+        if key.endswith(".NS") or key.endswith(".BO"):
+            candidates = [key]
+        elif normalized_exchange == "BSE":
+            candidates = [f"{key}.BO", f"{key}.NS"]
+        else:
+            candidates = [f"{key}.NS", f"{key}.BO"]
+
+        def normalize_dividend_yield(info: dict[str, Any], last_price: float | None) -> float | None:
+            dividend_rate = self._to_float(info.get("dividendRate"))
+            trailing_annual_yield = self._to_float(info.get("trailingAnnualDividendYield"))
+            raw_dividend_yield = self._to_float(info.get("dividendYield"))
+            if dividend_rate is not None and last_price not in {None, 0}:
+                return (dividend_rate / last_price) * 100
+            if trailing_annual_yield is not None and trailing_annual_yield > 0:
+                return trailing_annual_yield * 100
+            if raw_dividend_yield is not None:
+                return raw_dividend_yield
+            return None
+
+        result: dict[str, Any] | None = None
+        for ticker in candidates:
+            try:
+                tk = yf.Ticker(ticker)
+                info = tk.info or {}
+                fast_info = tk.fast_info or {}
+            except Exception:
+                continue
+
+            market_cap_inr = self._to_float(
+                fast_info.get("marketCap")
+                or info.get("marketCap")
+            )
+            last_price = self._to_float(
+                fast_info.get("lastPrice")
+                or info.get("currentPrice")
+                or info.get("regularMarketPrice")
+            )
+            previous_close = self._to_float(
+                fast_info.get("previousClose")
+                or fast_info.get("regularMarketPreviousClose")
+                or info.get("previousClose")
+                or info.get("regularMarketPreviousClose")
+            )
+            sector = str(info.get("sector") or info.get("sectorDisp") or "").strip()
+            company_name = str(info.get("longName") or info.get("shortName") or "").strip()
+            if not any([market_cap_inr, sector, company_name]):
+                continue
+
+            raw_roe = self._to_float(info.get("returnOnEquity"))
+            roe = raw_roe * 100 if raw_roe is not None and raw_roe <= 1 else raw_roe
+            change = None
+            change_percent = None
+            if last_price is not None and previous_close not in {None, 0}:
+                change = last_price - previous_close
+                change_percent = (change / previous_close) * 100
+
+            result = {
+                "symbol": key,
+                "companyName": company_name or key,
+                "price": last_price,
+                "change": change,
+                "changePercent": change_percent,
+                # Screener UI currently expects market cap in FMP-style USD terms.
+                "marketCap": (market_cap_inr / 84.0) if market_cap_inr is not None else None,
+                "volume": self._to_float(
+                    fast_info.get("lastVolume")
+                    or info.get("volume")
+                    or info.get("averageVolume")
+                ),
+                "sector": sector,
+                "industry": str(info.get("industry") or info.get("industryDisp") or "").strip(),
+                "pe": self._to_float(info.get("trailingPE")),
+                "pb": self._to_float(info.get("priceToBook")),
+                "roe": roe,
+                "dividendYield": normalize_dividend_yield(info, last_price),
+                "beta": self._to_float(info.get("beta")),
+            }
+            break
+
+        self._yfinance_screener_cache[cache_key] = (now, result)
+        return result
+
+    def _get_bse_listed_scrips_sync(self, segment: str = "Equity", status: str = "Active") -> list[dict[str, Any]] | None:
+        cache_key = f"{str(segment or 'Equity').strip().upper()}:{str(status or 'Active').strip().upper()}"
+        now = time.time()
+        cached = self._bse_listed_scrips_cache.get(cache_key)
+        if cached and now - cached[0] < 6 * 60 * 60:
+            return cached[1]
+
+        try:
+            response = requests.get(
+                "https://api.bseindia.com/BseIndiaAPI/api/ListofScripData/w",
+                params={
+                    "segment": segment,
+                    "status": status,
+                    "Group": "",
+                    "Scripcode": "",
+                },
+                headers={
+                    **WEB_PAGE_HEADERS,
+                    "referer": "https://www.bseindia.com/corporates/List_Scrips.html",
+                },
+                timeout=20,
+            )
+            response.raise_for_status()
+            payload = response.json() if response.content else []
+            if not isinstance(payload, list):
+                self._bse_listed_scrips_cache[cache_key] = (now, [])
+                return []
+
+            rows: list[dict[str, Any]] = []
+            for item in payload:
+                if not isinstance(item, dict):
+                    continue
+                symbol = str(item.get("scrip_id") or "").strip().upper()
+                company_name = str(item.get("Issuer_Name") or item.get("Scrip_Name") or "").strip()
+                market_cap_crore = self._to_float(item.get("Mktcap"))
+                rows.append(
+                    {
+                        "symbol": symbol,
+                        "companyName": company_name or symbol,
+                        "scripCode": str(item.get("SCRIP_CD") or "").strip(),
+                        "group": str(item.get("GROUP") or "").strip(),
+                        "industry": str(item.get("INDUSTRY") or "").strip(),
+                        "marketCap": ((market_cap_crore * 10_000_000) / 84.0) if market_cap_crore is not None else None,
+                        "exchange": "BSE",
+                    }
+                )
+
+            rows = [row for row in rows if row.get("symbol")]
+            rows.sort(key=lambda row: float(row.get("marketCap") or 0.0), reverse=True)
+            self._bse_listed_scrips_cache[cache_key] = (now, rows)
+            return rows
+        except Exception:
+            fallback = cached[1] if cached else None
+            return fallback
 
     def _normalize_company_name(self, value: str) -> str:
         text = str(value or "").lower()

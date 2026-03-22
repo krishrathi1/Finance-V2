@@ -492,10 +492,10 @@ async def stock_screener(
 ) -> dict:
     param_str = f"{exchange}:{sector}:{industry}:{market_cap_min}:{market_cap_max}:{pe_min}:{pe_max}:{price_min}:{price_max}:{dividend_min}:{volume_min}:{limit}"
     param_hash = hashlib.md5(param_str.encode()).hexdigest()
-    cache_key = f"screener:{param_hash}"
+    cache_key = f"screener:v3:{param_hash}"
 
     cached = await redis_cache.get_json(cache_key)
-    if cached:
+    if cached and cached.get("results"):
         return {"results": cached.get("results", []), "count": cached.get("count", 0), "cached": True}
 
     try:
@@ -527,7 +527,8 @@ async def stock_screener(
             results = filtered
 
         payload = {"results": results, "count": len(results)}
-        await redis_cache.set_json(cache_key, payload, ttl_seconds=300)
+        if results:
+            await redis_cache.set_json(cache_key, payload, ttl_seconds=300)
         return {"results": results, "count": len(results), "cached": False}
     except Exception as exc:
         if cached:
