@@ -37,62 +37,143 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
           <DisplaySettingsProvider>
             <ScrollProgress />
-            <header className="header-enter sticky top-0 z-40 border-b border-border/40 bg-bg/70 backdrop-blur-xl">
-              <div className="mx-auto flex max-w-[1640px] items-center justify-between px-3 py-2 sm:px-4 sm:py-3 md:px-6">
-                <div className="min-w-0">
-                  <p className="font-[var(--font-space)] text-base font-bold tracking-tight sm:text-xl">
-                    <span className="bg-gradient-to-r from-accent to-amber-400 bg-clip-text text-transparent">Financial Forensics</span>
-                    {" "}AI
-                  </p>
-                  <p className="mt-0.5 text-[10px] text-muted sm:mt-1 sm:text-xs">NSE/BSE Intelligence Platform</p>
-                </div>
-                <div className="flex items-center gap-2 sm:gap-4">
+
+            {/* ── Header ── */}
+            <header className="header-enter sticky top-0 z-40 border-b border-border/40 bg-bg/80 backdrop-blur-xl">
+              <div className="mx-auto flex max-w-[1640px] items-center justify-between px-3 py-2.5 sm:px-5 sm:py-3 md:px-7">
+
+                {/* Logo */}
+                <Link href="/" className="group min-w-0 flex-shrink-0">
+                  <div className="flex items-center gap-2.5">
+                    <div className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-accent to-amber-400 shadow-lg shadow-accent/30 transition group-hover:shadow-accent/50 group-hover:scale-105">
+                      <svg width="15" height="15" viewBox="0 0 16 16" fill="none" className="relative z-10">
+                        <polyline points="1,12 5,7 9,10 15,3" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        <circle cx="15" cy="3" r="1.5" fill="white"/>
+                      </svg>
+                      <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-white/20 to-transparent" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-[var(--font-space)] text-sm font-bold leading-none tracking-tight sm:text-base">
+                        <span className="bg-gradient-to-r from-accent via-amber-400 to-orange-400 bg-clip-text text-transparent">
+                          Financial Forensics
+                        </span>
+                        <span className="ml-1 text-text/80">AI</span>
+                      </p>
+                      <p className="mt-0.5 hidden text-[10px] font-medium text-muted sm:block">
+                        NSE · BSE Intelligence Platform
+                      </p>
+                    </div>
+                  </div>
+                </Link>
+
+                {/* Right controls */}
+                <div className="flex items-center gap-1.5 sm:gap-2.5">
                   <NavLinks />
+                  <div className="hidden h-4 w-px bg-border/60 sm:block" />
                   <DisplaySettingsToggle />
                   <ModeToggle />
                 </div>
               </div>
-              <MarketTicker />
-            </header>
-            <main className="page-enter mx-auto max-w-[1640px] px-3 py-3 sm:px-4 sm:py-4 md:px-6 md:py-6">{children}</main>
 
-            <footer className="border-t border-border/40 bg-panel/30 backdrop-blur">
-              <div className="mx-auto max-w-[1640px] px-4 py-6 md:px-6">
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <p className="font-[var(--font-space)] text-sm font-bold">
-                      <span className="bg-gradient-to-r from-accent to-amber-400 bg-clip-text text-transparent">
-                        StockVision AI
-                      </span>
+              <div className="border-t border-border/25 bg-bg/40">
+                <MarketTicker />
+              </div>
+            </header>
+
+            {/* ── Main ── */}
+            <main className="page-enter mx-auto max-w-[1640px] px-3 py-4 sm:px-5 sm:py-5 md:px-7 md:py-7">
+              {children}
+            </main>
+
+            {/* ── Footer ── */}
+            <footer className="mt-12 border-t border-border/40 bg-panel/20 backdrop-blur-sm">
+              <div className="h-px w-full bg-gradient-to-r from-transparent via-accent/35 to-transparent" />
+
+              <div className="mx-auto max-w-[1640px] px-5 py-10 md:px-7">
+                <div className="grid grid-cols-2 gap-8 sm:grid-cols-2 md:grid-cols-4">
+
+                  {/* Brand */}
+                  <div className="col-span-2 md:col-span-1">
+                    <div className="flex items-center gap-2">
+                      <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-accent to-amber-400 shadow-md shadow-accent/25">
+                        <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+                          <polyline points="1,12 5,7 9,10 15,3" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/>
+                          <circle cx="15" cy="3" r="1.5" fill="white"/>
+                        </svg>
+                      </div>
+                      <p className="font-[var(--font-space)] text-sm font-bold">
+                        <span className="bg-gradient-to-r from-accent to-amber-400 bg-clip-text text-transparent">StockVision AI</span>
+                      </p>
+                    </div>
+                    <p className="mt-3 max-w-[210px] text-xs leading-5 text-muted">
+                      AI-powered equity research for NSE &amp; BSE — Smart Scores, risk analysis &amp; live market data.
                     </p>
-                    <p className="mt-0.5 text-[11px] text-muted">
-                      Smarter investing, powered by AI &mdash; NSE &amp; BSE Intelligence
-                    </p>
+                    <div className="mt-3 flex items-center gap-1.5">
+                      <span className="pulse-dot h-1.5 w-1.5 rounded-full bg-success" />
+                      <span className="text-[10px] font-medium text-success">Live Market Data</span>
+                    </div>
                   </div>
 
-                  <nav className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
-                    {[
-                      { href: "/screener", label: "Screener" },
-                      { href: "/watchlist", label: "Watchlist" },
-                      { href: "/portfolio", label: "Portfolio" },
-                      { href: "/compare", label: "Compare" },
-                      { href: "/ipo", label: "IPO" },
-                      { href: "/alerts", label: "Alerts" },
-                    ].map(({ href, label }) => (
-                      <Link
-                        key={href}
-                        href={href}
-                        className="transition hover:text-accent"
-                      >
-                        {label}
-                      </Link>
-                    ))}
-                  </nav>
+                  {/* Tools */}
+                  <div>
+                    <p className="mb-3 text-[10px] font-semibold uppercase tracking-widest text-muted">Tools</p>
+                    <nav className="flex flex-col gap-2.5">
+                      {[
+                        { href: "/screener", label: "Stock Screener" },
+                        { href: "/screener/ai", label: "AI Screener" },
+                        { href: "/compare", label: "Compare Stocks" },
+                        { href: "/portfolio", label: "Portfolio Tracker" },
+                      ].map(({ href, label }) => (
+                        <Link key={href} href={href} className="text-xs text-muted transition hover:text-accent">
+                          {label}
+                        </Link>
+                      ))}
+                    </nav>
+                  </div>
+
+                  {/* Market */}
+                  <div>
+                    <p className="mb-3 text-[10px] font-semibold uppercase tracking-widest text-muted">Market</p>
+                    <nav className="flex flex-col gap-2.5">
+                      {[
+                        { href: "/watchlist", label: "Watchlist" },
+                        { href: "/ipo", label: "IPO Calendar" },
+                        { href: "/alerts", label: "Price Alerts" },
+                      ].map(({ href, label }) => (
+                        <Link key={href} href={href} className="text-xs text-muted transition hover:text-accent">
+                          {label}
+                        </Link>
+                      ))}
+                    </nav>
+                  </div>
+
+                  {/* AI Features */}
+                  <div>
+                    <p className="mb-3 text-[10px] font-semibold uppercase tracking-widest text-muted">AI Features</p>
+                    <div className="flex flex-col gap-2">
+                      {["Smart Score™", "AI Risk Analysis", "Earnings TL;DR", "Portfolio Doctor", "Competitor Verdict"].map((f) => (
+                        <div key={f} className="flex items-center gap-1.5 text-xs text-muted">
+                          <span className="h-1 w-1 flex-shrink-0 rounded-full bg-accent/70" />
+                          {f}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
 
-                <div className="mt-4 flex flex-col items-start justify-between gap-1 border-t border-border/30 pt-4 text-[11px] text-muted sm:flex-row sm:items-center">
-                  <p>Data sourced from NSE, BSE &amp; public APIs. Not investment advice.</p>
-                  <p>&copy; {new Date().getFullYear()} StockVision AI. All rights reserved.</p>
+                {/* Bottom bar */}
+                <div className="mt-8 flex flex-col items-start justify-between gap-3 border-t border-border/30 pt-5 sm:flex-row sm:items-center">
+                  <p className="text-[11px] text-muted/60">
+                    Data sourced from NSE, BSE &amp; public APIs. Not investment advice.
+                  </p>
+                  <div className="flex items-center gap-3">
+                    <span className="rounded-full border border-border/50 bg-panel/60 px-2 py-0.5 text-[10px] font-medium text-muted">
+                      Beta v1.0
+                    </span>
+                    <p className="text-[11px] text-muted/60">
+                      &copy; {new Date().getFullYear()} StockVision AI
+                    </p>
+                  </div>
                 </div>
               </div>
             </footer>

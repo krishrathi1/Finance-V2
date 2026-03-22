@@ -27,20 +27,23 @@ export function NavLinks() {
   return (
     <>
       {/* Desktop nav */}
-      <nav className="hidden items-center gap-1 sm:flex">
-        {LINKS.map((link) => (
-          <Link
-            key={link.href}
-            href={link.href}
-            className={`rounded-lg px-3 py-1.5 text-sm transition-colors active:scale-[0.98] ${
-              isActive(link.href)
-                ? "font-semibold text-accent"
-                : "text-muted hover:text-text"
-            }`}
-          >
-            {link.label}
-          </Link>
-        ))}
+      <nav className="hidden items-center gap-0.5 sm:flex">
+        {LINKS.map((link) => {
+          const active = isActive(link.href);
+          return (
+            <Link
+              key={link.href}
+              href={link.href}
+              className={`relative rounded-lg px-3 py-1.5 text-sm font-medium transition-all active:scale-[0.97] ${
+                active
+                  ? "nav-active"
+                  : "text-muted hover:bg-panel/70 hover:text-text"
+              }`}
+            >
+              {link.label}
+            </Link>
+          );
+        })}
       </nav>
 
       {/* Mobile hamburger */}
@@ -49,28 +52,31 @@ export function NavLinks() {
           type="button"
           onClick={() => setOpen(!open)}
           aria-label={open ? "Close menu" : "Open menu"}
-          className="flex h-8 w-8 items-center justify-center rounded-lg border border-border/50 text-muted transition hover:text-text active:scale-[0.98]"
+          className="flex h-8 w-8 items-center justify-center rounded-lg border border-border/60 bg-panel/60 text-muted backdrop-blur-sm transition hover:border-accent/40 hover:text-text active:scale-[0.97]"
         >
           {open ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
         </button>
 
         {open && (
-          <div className="absolute left-0 right-0 top-full z-50 border-b border-border/40 bg-bg/95 backdrop-blur-xl">
-            <nav className="mx-auto flex max-w-[1640px] flex-col px-3 py-2">
-              {LINKS.map((link) => (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  onClick={() => setOpen(false)}
-                  className={`rounded-lg px-3 py-2 text-sm transition-colors active:scale-[0.98] ${
-                    isActive(link.href)
-                      ? "font-semibold text-accent"
-                      : "text-muted hover:text-text"
-                  }`}
-                >
-                  {link.label}
-                </Link>
-              ))}
+          <div className="absolute left-0 right-0 top-full z-50 border-b border-border/40 bg-bg/96 backdrop-blur-xl">
+            <nav className="mx-auto flex max-w-[1640px] flex-col gap-0.5 px-3 py-3">
+              {LINKS.map((link) => {
+                const active = isActive(link.href);
+                return (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    onClick={() => setOpen(false)}
+                    className={`rounded-xl px-4 py-2.5 text-sm font-medium transition-all active:scale-[0.98] ${
+                      active
+                        ? "nav-active"
+                        : "text-muted hover:bg-panel/60 hover:text-text"
+                    }`}
+                  >
+                    {link.label}
+                  </Link>
+                );
+              })}
             </nav>
           </div>
         )}

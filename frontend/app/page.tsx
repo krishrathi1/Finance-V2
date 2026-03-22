@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Filter, GitCompareArrows, Heart, Wallet } from "lucide-react";
+import { ArrowRight, Filter, GitCompareArrows, Heart, Wallet } from "lucide-react";
 
 import { MarketHeatmap } from "@/components/market-heatmap";
 import { MarketMoodIndex } from "@/components/market-mood-index";
@@ -16,75 +16,109 @@ const FEATURE_CARDS = [
     href: "/screener",
     icon: Filter,
     gradient: "from-violet-500 to-indigo-500",
-    glow: "bg-violet-500/10",
+    shadow: "shadow-violet-500/25",
+    bg: "from-violet-500/8 to-indigo-500/5",
     label: "Stock Screener",
-    desc: "Find stocks by filters",
+    desc: "Filter NSE & BSE stocks by PE, market cap, sector, and 30+ metrics instantly.",
+    badge: "50+ filters",
   },
   {
     href: "/watchlist",
     icon: Heart,
     gradient: "from-rose-500 to-pink-500",
-    glow: "bg-rose-500/10",
+    shadow: "shadow-rose-500/25",
+    bg: "from-rose-500/8 to-pink-500/5",
     label: "Watchlist",
-    desc: "Track your favorites",
+    desc: "Track your favourite stocks with live prices and instant alerts.",
+    badge: "Live prices",
   },
   {
     href: "/compare",
     icon: GitCompareArrows,
     gradient: "from-cyan-500 to-sky-500",
-    glow: "bg-cyan-500/10",
+    shadow: "shadow-cyan-500/25",
+    bg: "from-cyan-500/8 to-sky-500/5",
     label: "Compare",
-    desc: "Side-by-side analysis",
+    desc: "Side-by-side valuation, profitability and Smart Score comparison.",
+    badge: "AI analysis",
   },
   {
     href: "/portfolio",
     icon: Wallet,
     gradient: "from-amber-500 to-orange-500",
-    glow: "bg-amber-500/10",
+    shadow: "shadow-amber-500/25",
+    bg: "from-amber-500/8 to-orange-500/5",
     label: "Portfolio",
-    desc: "Track your holdings & P&L",
+    desc: "Track holdings, monitor P&L, and get AI risk assessment of your portfolio.",
+    badge: "AI risk score",
   },
 ] as const;
 
+const FEATURE_TAGS = [
+  "Smart Score™",
+  "Risk Analysis",
+  "AI Chat",
+  "Brokerage Reports",
+  "Live Heatmap",
+  "Earnings TL;DR",
+  "Portfolio Doctor",
+];
+
 export default function HomePage() {
   return (
-    <div className="stagger-fade space-y-6 py-4 sm:space-y-8 sm:py-8">
-      {/* Hero Section */}
+    <div className="stagger-fade space-y-8 py-4 sm:space-y-10 sm:py-8">
+
+      {/* ── Hero ── */}
       <ViewportMotionSection
-        className="gradient-border relative z-30 rounded-2xl p-5 sm:rounded-[28px] sm:p-8"
+        className="gradient-border relative z-30 rounded-2xl p-6 sm:rounded-[28px] sm:p-10 md:p-14"
         style={{ overflow: "visible" }}
       >
-        {/* Keep decorative orbs clipped without clipping the search dropdown */}
+        {/* Decorative orbs clipped inside hero */}
         <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-[inherit]">
           <div className="hero-orb hero-orb-1" />
           <div className="hero-orb hero-orb-2" />
           <div className="hero-orb hero-orb-3" />
         </div>
 
-        <div className="relative z-10">
-          <div className="flex items-center gap-2">
+        <div className="relative z-10 max-w-3xl">
+          {/* Live badge */}
+          <div className="mb-4 flex items-center gap-2">
             <span className="pulse-dot h-2 w-2 rounded-full bg-success" />
-            <p className="text-[10px] uppercase tracking-[0.3em] text-accent sm:text-xs">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.3em] text-accent sm:text-xs">
               Live Indian Equity Intelligence
             </p>
           </div>
-          <h1 className="mt-3 font-[var(--font-space)] text-2xl font-bold leading-tight sm:mt-4 sm:text-4xl md:text-5xl">
+
+          {/* Headline */}
+          <h1 className="font-[var(--font-space)] text-3xl font-bold leading-[1.15] tracking-tight sm:text-5xl md:text-6xl">
             AI-Powered Stock Research
             <br />
-            <span className="bg-gradient-to-r from-accent via-amber-500 to-orange-400 bg-clip-text text-transparent">
-              For NSE and BSE
+            <span className="bg-gradient-to-r from-accent via-amber-400 to-orange-400 bg-clip-text text-transparent">
+              For NSE &amp; BSE
             </span>
           </h1>
-          <p className="mt-2 max-w-2xl text-xs text-muted sm:mt-3 sm:text-sm md:text-base">
-            Analyze fundamentals, risk scoring, sentiment, financial statements, corporate actions,
-            and AI-driven returns projection &mdash; all in one unified workspace.
-          </p>
-          <StockSearch className="mt-4 max-w-3xl sm:mt-6" />
 
-          {/* Quick feature tags updated using the new Shadcn Badge */}
-          <div className="mt-4 flex flex-wrap gap-2">
-            {["Smart Score", "Risk Analysis", "AI Chat", "Brokerage Reports", "Live Heatmap"].map((tag) => (
-              <Badge key={tag} variant="secondary" className="backdrop-blur bg-bg/50 border-border/50 font-medium text-[10px] sm:text-xs">
+          <p className="mt-4 max-w-xl text-sm leading-7 text-muted sm:text-base">
+            Analyse fundamentals, risk scores, AI sentiment, financial statements, brokerage reports,
+            and returns projections — all in one unified workspace.
+          </p>
+
+          {/* Search */}
+          <div className="mt-6 sm:mt-8">
+            <StockSearch className="max-w-2xl" />
+            <p className="mt-2 text-[11px] text-muted/70">
+              Search any NSE / BSE stock — e.g. RELIANCE, HDFCBANK, INFY
+            </p>
+          </div>
+
+          {/* Feature tags */}
+          <div className="mt-5 flex flex-wrap gap-2">
+            {FEATURE_TAGS.map((tag) => (
+              <Badge
+                key={tag}
+                variant="secondary"
+                className="border-border/50 bg-bg/60 text-[10px] font-semibold backdrop-blur sm:text-xs"
+              >
                 {tag}
               </Badge>
             ))}
@@ -92,60 +126,79 @@ export default function HomePage() {
         </div>
       </ViewportMotionSection>
 
-      {/* Popular Stocks — client component, renders without blocking the page */}
+      {/* ── Popular Stocks ── */}
       <PopularStocks />
 
-      {/* Market Stats Bar */}
-      <section className="sticky top-[5.6rem] z-20 rounded-2xl border border-border/40 bg-bg/70 p-2 backdrop-blur-xl sm:top-[6.4rem]">
+      {/* ── Sticky Market Stats Bar ── */}
+      <section className="sticky top-[5.4rem] z-20 rounded-2xl border border-border/40 bg-bg/75 p-2 backdrop-blur-xl sm:top-[6.2rem]">
         <MarketStatsBar />
       </section>
 
-      {/* Feature Quick-Access Cards */}
-      <section className="grid [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))] gap-3">
-        {FEATURE_CARDS.map(({ href, icon: Icon, gradient, glow, label, desc }) => (
-          <Link
-            key={href}
-            href={href}
-            className="glow-card group flex items-center gap-4 rounded-2xl border border-border/70 bg-panel/70 p-[var(--panel-padding-lg)] transition hover:border-accent/40 active:scale-[0.98]"
-          >
-            <div
-              className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br ${gradient} ${glow} shadow-lg`}
+      {/* ── Feature Quick-Access Cards ── */}
+      <section>
+        <div className="mb-5 flex items-center gap-3">
+          <div className="h-5 w-0.5 rounded-full bg-gradient-to-b from-accent to-amber-400" />
+          <h2 className="font-[var(--font-space)] text-base font-bold sm:text-lg">Quick Access</h2>
+        </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {FEATURE_CARDS.map(({ href, icon: Icon, gradient, shadow, bg, label, desc, badge }) => (
+            <Link
+              key={href}
+              href={href}
+              className={`feature-card group flex flex-col gap-4 rounded-2xl border border-border/60 bg-gradient-to-br ${bg} bg-panel/60 p-5 backdrop-blur-sm`}
             >
-              <Icon className="h-5 w-5 text-white" />
-            </div>
-            <div className="min-w-0">
-              <p className="density-copy font-[var(--font-space)] text-sm font-bold group-hover:text-accent">
-                {label}
-              </p>
-              <p className="density-copy mt-0.5 text-[11px] text-muted">{desc}</p>
-            </div>
-          </Link>
-        ))}
+              {/* Icon + badge row */}
+              <div className="flex items-start justify-between">
+                <div className={`flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br ${gradient} shadow-lg ${shadow}`}>
+                  <Icon className="h-5 w-5 text-white" />
+                </div>
+                <span className="rounded-full border border-border/50 bg-bg/60 px-2 py-0.5 text-[10px] font-semibold text-muted backdrop-blur">
+                  {badge}
+                </span>
+              </div>
+
+              {/* Label + desc */}
+              <div className="flex-1">
+                <p className="font-[var(--font-space)] text-sm font-bold group-hover:text-accent sm:text-base">
+                  {label}
+                </p>
+                <p className="mt-1 text-xs leading-5 text-muted">{desc}</p>
+              </div>
+
+              {/* CTA arrow */}
+              <div className="flex items-center gap-1 text-xs font-semibold text-accent opacity-0 transition-all group-hover:translate-x-1 group-hover:opacity-100">
+                Explore <ArrowRight className="h-3.5 w-3.5" />
+              </div>
+            </Link>
+          ))}
+        </div>
       </section>
 
-      {/* Market Mood + Top Movers */}
+      {/* ── Market Mood + Top Movers ── */}
       <section className="grid gap-4 lg:grid-cols-[300px_1fr] xl:grid-cols-[320px_1fr]">
         <MarketMoodIndex />
         <TopMovers />
       </section>
 
-      {/* Index Heatmap */}
-      <section className="mt-2">
-        <div className="mb-3 flex items-center gap-3">
-          <div className="h-6 w-1 rounded-full bg-gradient-to-b from-accent to-amber-400" />
+      {/* ── Index Heatmap ── */}
+      <section>
+        <div className="mb-4 flex items-center gap-3">
+          <div className="h-5 w-0.5 rounded-full bg-gradient-to-b from-accent to-amber-400" />
           <div>
-            <h2 className="text-lg font-bold font-[var(--font-space)] sm:text-xl">Index Heatmap</h2>
-            <p className="text-xs text-muted sm:text-sm">All constituents by intraday move, with one-click access to each stock dashboard.</p>
+            <h2 className="font-[var(--font-space)] text-base font-bold sm:text-lg">Index Heatmap</h2>
+            <p className="text-xs text-muted">All constituents by intraday move — click any cell to open the stock dashboard.</p>
           </div>
         </div>
         <MarketHeatmap />
       </section>
 
-      {/* Market News */}
+      {/* ── Market News ── */}
       <section>
-        <div className="mb-3 flex items-center gap-3">
-          <div className="h-6 w-1 rounded-full bg-gradient-to-b from-blue-500 to-cyan-400" />
-          <h2 className="text-lg font-bold font-[var(--font-space)] sm:text-xl">Today&apos;s Market News</h2>
+        <div className="mb-4 flex items-center gap-3">
+          <div className="h-5 w-0.5 rounded-full bg-gradient-to-b from-blue-500 to-cyan-400" />
+          <h2 className="font-[var(--font-space)] text-base font-bold sm:text-lg">
+            Today&apos;s Market News
+          </h2>
         </div>
         <MarketNews />
       </section>
