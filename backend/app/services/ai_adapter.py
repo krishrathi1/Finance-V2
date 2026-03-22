@@ -43,6 +43,26 @@ class AIAdapter:
                 return self._fallback_watchlist_review(symbol=symbol, context=context, live_failed=True), "fallback"
         return self._fallback_watchlist_review(symbol=symbol, context=context, live_failed=False), "fallback"
 
+    async def generate_compare_analysis(
+        self,
+        symbol_a: str,
+        symbol_b: str,
+        context_a: dict[str, Any],
+        context_b: dict[str, Any],
+    ) -> tuple[str, str]:
+        if self._gemini and settings.gemini_api_key:
+            try:
+                answer = await self._gemini.generate_compare_analysis(
+                    symbol_a=symbol_a,
+                    symbol_b=symbol_b,
+                    context_a=context_a,
+                    context_b=context_b,
+                )
+                return answer, "gemini"
+            except Exception:
+                return self._fallback_compare_analysis(symbol_a, symbol_b, context_a, context_b, live_failed=True), "fallback"
+        return self._fallback_compare_analysis(symbol_a, symbol_b, context_a, context_b, live_failed=False), "fallback"
+
     async def generate_report(self, symbol: str, context: dict[str, Any]) -> str:
         if self._gemini and settings.gemini_api_key:
             try:
@@ -317,6 +337,84 @@ class AIAdapter:
             "If the stock is already expensive, even decent execution may not protect downside.\n\n"
             "Bottom line: keep it on the watchlist if you can justify both valuation and business durability on the next review. "
             "I would want stronger evidence on earnings consistency before treating it as a high-conviction position."
+        )
+
+    def _fallback_compare_analysis(
+        self,
+        symbol_a: str,
+        symbol_b: str,
+        context_a: dict[str, Any],
+        context_b: dict[str, Any],
+        live_failed: bool,
+    ) -> str:
+        def score_bundle(ctx: dict[str, Any]) -> dict[str, float]:
+            metrics = (ctx.get("metrics") or {}) if isinstance(ctx, dict) else {}
+            smart = (ctx.get("smartScore") or {}) if isinstance(ctx, dict) else {}
+            risk = (ctx.get("riskScore") or {}) if isinstance(ctx, dict) else {}
+            technicals = (ctx.get("technicals") or {}) if isinstance(ctx, dict) else {}
+            return {
+                "smart": float(smart.get("score", 0.0) or 0.0),
+                "risk": float(risk.get("score", 0.0) or 0.0),
+                "roe": float(metrics.get("roe", 0.0) or 0.0),
+                "roce": float(metrics.get("roce", 0.0) or 0.0),
+                "pe": float(metrics.get("peRatio", 0.0) or 0.0),
+                "debt": float(metrics.get("debtToEquity", 0.0) or 0.0),
+                "rev_growth": float(metrics.get("revenueGrowth", 0.0) or 0.0),
+                "profit_growth": float(metrics.get("profitGrowth", 0.0) or 0.0),
+                "trend_up": 1.0 if str(technicals.get("trend") or "").lower() in {"bullish", "uptrend", "positive"} else 0.0,
+            }
+
+        a = score_bundle(context_a)
+        b = score_bundle(context_b)
+
+        def composite(s: dict[str, float]) -> float:
+            quality = s["smart"] * 1.6 + s["roe"] * 0.04 + s["roce"] * 0.04
+            growth = s["rev_growth"] * 0.04 + s["profit_growth"] * 0.04
+            risk_penalty = s["risk"] * 0.8 + max(s["debt"], 0.0) * 0.15
+            valuation_penalty = s["pe"] * 0.02 if s["pe"] > 0 else 0.0
+            trend_bonus = s["trend_up"] * 0.5
+            return quality + growth + trend_bonus - risk_penalty - valuation_penalty
+
+        score_a = composite(a)
+        score_b = composite(b)
+        winner = symbol_a.upper() if score_a > score_b + 0.35 else symbol_b.upper() if score_b > score_a + 0.35 else "Close call"
+        lead = "Live compare analysis is temporarily unavailable." if live_failed else "Fallback compare analysis."
+
+        if winner == "Close call":
+            why = (
+                f"Both names screen close on the current factor mix. {symbol_a.upper()} looks better on some quality or trend inputs, "
+                f"while {symbol_b.upper()} offsets that on valuation or risk."
+            )
+            fit = f"{symbol_a.upper()} suits a user leaning toward relative quality, while {symbol_b.upper()} may suit someone prioritizing cheaper entry or lower explicit risk."
+        elif winner == symbol_a.upper():
+            why = (
+                f"{symbol_a.upper()} has the cleaner combined profile on Smart Score, quality, growth support, and near-term setup, "
+                f"while {symbol_b.upper()} needs more justification on either valuation or resilience."
+            )
+            fit = f"{symbol_a.upper()} fits a higher-conviction watchlist slot right now. {symbol_b.upper()} is still usable for value hunters if they have a specific thesis."
+        else:
+            why = (
+                f"{symbol_b.upper()} has the cleaner combined profile on quality, valuation discipline, risk control, or setup, "
+                f"while {symbol_a.upper()} looks less efficient on the current evidence."
+            )
+            fit = f"{symbol_b.upper()} fits a higher-conviction watchlist slot right now. {symbol_a.upper()} is more suited to users willing to underwrite extra uncertainty."
+
+        risk_line = (
+            f"The main uncertainty is that one or both setups may be paying up for quality without enough earnings confirmation. "
+            f"I would also want to re-check balance-sheet stress and whether the recent trend is durable rather than just noisy."
+        )
+        bottom = (
+            f"If I had to rank them today, I would place {winner} first." if winner != "Close call"
+            else f"I would not force a strong winner between {symbol_a.upper()} and {symbol_b.upper()} until the next fundamental or trend confirmation comes through."
+        )
+
+        return (
+            f"{lead}\n\n"
+            f"Winner right now: {winner}.\n"
+            f"Why: {why}\n"
+            f"What still worries me: {risk_line}\n"
+            f"Best fit for: {fit}\n"
+            f"Bottom line: {bottom}"
         )
 
     def _parse_news_analysis(self, raw: str) -> dict[str, str]:

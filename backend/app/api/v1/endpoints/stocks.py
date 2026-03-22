@@ -9,7 +9,7 @@ from pydantic import BaseModel
 
 from app.core.cache import redis_cache
 from app.core.config import get_settings
-from app.schemas.stock import ChatRequest, ChatResponse, NewsAnalysisRequest, NewsAnalysisResponse, ReportResponse
+from app.schemas.stock import ChatRequest, ChatResponse, CompareAnalysisRequest, NewsAnalysisRequest, NewsAnalysisResponse, ReportResponse
 from app.services.ai_adapter import AIAdapter
 from app.services.dashboard import StockDashboardService
 from app.services.sample_data import get_sample_dashboard
@@ -841,6 +841,41 @@ async def get_watchlist_analysis(symbol: str) -> ChatResponse:
     answer, source = await ai_adapter.generate_watchlist_review(symbol=symbol, context=dashboard)
     payload = {"answer": answer, "source": source}
     await redis_cache.set_json(cache_key, payload, ttl_seconds=60 * 30)
+    return ChatResponse(answer=answer, source=source)
+
+
+@router.post("/compare-analysis", response_model=ChatResponse)
+async def get_compare_analysis(payload: CompareAnalysisRequest) -> ChatResponse:
+    symbol_a = payload.symbol_a.strip().upper()
+    symbol_b = payload.symbol_b.strip().upper()
+    if not symbol_a or not symbol_b:
+        raise HTTPException(status_code=422, detail="Both symbols are required")
+    if symbol_a == symbol_b:
+        raise HTTPException(status_code=422, detail="Choose two different symbols")
+
+    cache_key = f"compare-analysis:{symbol_a}:{symbol_b}"
+    cached = await redis_cache.get_json(cache_key)
+    if isinstance(cached, dict):
+        return ChatResponse(
+            answer=str(cached.get("answer") or "No response."),
+            source=str(cached.get("source") or "fallback"),
+        )
+
+    async def load_context(sym: str) -> dict:
+        try:
+            return await asyncio.wait_for(dashboard_service.get_dashboard(symbol=sym), timeout=20)
+        except Exception:
+            return get_sample_dashboard(symbol=sym)
+
+    context_a, context_b = await asyncio.gather(load_context(symbol_a), load_context(symbol_b))
+    answer, source = await ai_adapter.generate_compare_analysis(
+        symbol_a=symbol_a,
+        symbol_b=symbol_b,
+        context_a=context_a,
+        context_b=context_b,
+    )
+    response_payload = {"answer": answer, "source": source}
+    await redis_cache.set_json(cache_key, response_payload, ttl_seconds=60 * 30)
     return ChatResponse(answer=answer, source=source)
 
 

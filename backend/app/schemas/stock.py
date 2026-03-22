@@ -10,6 +10,11 @@ class ChatResponse(BaseModel):
     source: str = "fallback"
 
 
+class CompareAnalysisRequest(BaseModel):
+    symbol_a: str = Field(..., min_length=1, max_length=50)
+    symbol_b: str = Field(..., min_length=1, max_length=50)
+
+
 class NewsAnalysisRequest(BaseModel):
     title: str = Field(..., min_length=3, max_length=500)
     summary: str = Field("", max_length=4000)
