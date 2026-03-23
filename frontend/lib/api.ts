@@ -416,7 +416,50 @@ export type IpoItem = {
   shares: number | null;
   priceRange: string;
   marketCap: number | null;
+  // NSE upcoming fields
+  issueStartDate?: string;
+  issueEndDate?: string;
+  status?: string;
+  series?: string;
+  // NSE recent fields
+  currentPrice?: number;
+  prevClose?: number;
+  changePercent?: number;
+  yearHigh?: number;
 };
+
+export type IpoAiAnalysis = {
+  verdict: string;
+  verdictColor: "green" | "red" | "yellow";
+  summary: string;
+  keyStrengths: string[];
+  keyRisks: string[];
+  valuation: string;
+  listingOutlook: string;
+  whoShouldApply: string;
+  quickTake: string;
+};
+
+export async function fetchIpoAiAnalysis(symbol: string): Promise<IpoAiAnalysis> {
+  const fallback: IpoAiAnalysis = {
+    verdict: "Neutral", verdictColor: "yellow",
+    summary: "AI analysis unavailable. Please review the DRHP and sector peers before making a subscription decision.",
+    keyStrengths: ["Public listing improves brand visibility", "Access to growth capital"],
+    keyRisks: ["Market volatility may affect listing performance", "Post-listing lock-in expiry risk"],
+    valuation: "Compare price-to-earnings with listed sector peers to assess fairness.",
+    listingOutlook: "neutral",
+    whoShouldApply: "Long-term investors with high risk tolerance",
+    quickTake: "Do thorough research before subscribing to this IPO.",
+  };
+  try {
+    const res = await fetchWithTimeout(getApiUrl(`/ipo/${symbol}/ai-analysis`), { cache: "no-store" }, 20_000);
+    if (!res.ok) return fallback;
+    const payload = await res.json();
+    return { ...fallback, ...payload };
+  } catch {
+    return fallback;
+  }
+}
 
 export async function fetchIpoData(type: "upcoming" | "recent" = "upcoming"): Promise<IpoItem[]> {
   const key = `ipo:${type}`;

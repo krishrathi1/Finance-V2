@@ -3552,29 +3552,110 @@ class MarketDataProviders:
             return []
 
     async def get_ipo_calendar(self, from_date: str, to_date: str) -> list[dict[str, Any]]:
-        url = "https://financialmodelingprep.com/stable/ipo-calendar"
-        params: dict[str, Any] = {
-            "apikey": settings.fmp_api_key,
-            "from": from_date,
-            "to": to_date,
+        """Fetch upcoming IPOs from NSE India."""
+        return await self._get_nse_upcoming_ipos()
+
+    async def get_ipo_recent(self) -> list[dict[str, Any]]:
+        """Fetch recently listed IPOs from NSE India (NIFTY IPO index)."""
+        return await self._get_nse_recent_ipos()
+
+    async def _nse_get(self, url: str) -> Any:
+        """GET request with NSE-required headers and cookie priming."""
+        import httpx as _httpx
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/122 Safari/537.36",
+            "Accept": "application/json, text/plain, */*",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Referer": "https://www.nseindia.com/",
+            "X-Requested-With": "XMLHttpRequest",
         }
+        async with _httpx.AsyncClient(timeout=15, headers=headers, follow_redirects=True) as client:
+            await client.get("https://www.nseindia.com")
+            r = await client.get(url, headers=headers)
+            r.raise_for_status()
+            return r.json()
+
+    async def _get_nse_upcoming_ipos(self) -> list[dict[str, Any]]:
         try:
-            payload = await self._get(url, params=params)
-            if not payload or not isinstance(payload, list):
+            data = await self._nse_get("https://www.nseindia.com/api/all-upcoming-issues?category=ipo")
+            if not isinstance(data, list):
                 return []
-            results: list[dict[str, Any]] = []
-            for item in payload:
+            results = []
+            for item in data:
+                symbol = str(item.get("symbol") or "")
+                company = str(item.get("companyName") or symbol)
+                issue_price = str(item.get("issuePrice") or "")
+                issue_size_shares = item.get("issueSize")
+                # Parse issue size (shares count) to estimate market cap
+                market_cap = None
+                try:
+                    shares = int(str(issue_size_shares).replace(",", ""))
+                    # Extract upper price
+                    import re as _re
+                    prices = _re.findall(r"[\d,]+(?:\.\d+)?", issue_price)
+                    if prices:
+                        upper_price = float(prices[-1].replace(",", ""))
+                        market_cap = shares * upper_price
+                except Exception:
+                    pass
+
+                # Use issue end date as the key date
+                date_str = str(item.get("issueEndDate") or item.get("issueStartDate") or "")
+                try:
+                    from datetime import datetime as _dt
+                    date_str = _dt.strptime(date_str, "%d-%b-%Y").strftime("%Y-%m-%d")
+                except Exception:
+                    pass
+
                 results.append({
-                    "symbol": str(item.get("symbol") or "").replace(".NS", "").replace(".BO", ""),
-                    "company": str(item.get("company") or item.get("name") or ""),
-                    "date": str(item.get("date") or ""),
-                    "exchange": str(item.get("exchange") or ""),
-                    "actions": str(item.get("actions") or ""),
-                    "shares": item.get("shares"),
-                    "priceRange": str(item.get("priceRange") or ""),
-                    "marketCap": item.get("marketCap"),
+                    "symbol": symbol,
+                    "company": company,
+                    "date": date_str,
+                    "exchange": "NSE",
+                    "actions": "IPO",
+                    "shares": int(str(issue_size_shares).replace(",", "")) if issue_size_shares else None,
+                    "priceRange": issue_price,
+                    "marketCap": market_cap,
+                    "issueStartDate": str(item.get("issueStartDate") or ""),
+                    "issueEndDate": str(item.get("issueEndDate") or ""),
+                    "status": str(item.get("status") or ""),
+                    "series": str(item.get("series") or "EQ"),
                 })
             return results
+        except Exception:
+            return []
+
+    async def _get_nse_recent_ipos(self) -> list[dict[str, Any]]:
+        """Recent IPOs = all stocks in the NIFTY IPO index (last ~2 years)."""
+        try:
+            data = await self._nse_get(
+                "https://www.nseindia.com/api/equity-stockIndices?index=NIFTY%20IPO"
+            )
+            items = data.get("data", []) if isinstance(data, dict) else []
+            results = []
+            for item in items:
+                symbol = str(item.get("symbol") or "")
+                if not symbol or symbol == "NIFTY IPO":
+                    continue
+                last_price = item.get("lastPrice") or item.get("lastUpdateTime")
+                prev_close = item.get("previousClose")
+                p_change = item.get("pChange")
+                year_high = item.get("yearHigh")
+                results.append({
+                    "symbol": symbol,
+                    "company": symbol,  # NSE index doesn't give full name here
+                    "date": "",
+                    "exchange": "NSE",
+                    "actions": "Listed",
+                    "shares": None,
+                    "priceRange": f"₹{last_price}" if last_price else "",
+                    "marketCap": None,
+                    "currentPrice": last_price,
+                    "prevClose": prev_close,
+                    "changePercent": p_change,
+                    "yearHigh": year_high,
+                })
+            return results[:50]  # limit to 50 most recent
         except Exception:
             return []
 

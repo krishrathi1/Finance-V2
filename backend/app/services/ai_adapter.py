@@ -804,3 +804,72 @@ class AIAdapter:
             ],
             "verdict": f"Your portfolio of {n} stocks shows room for improvement. Focus on quality over quantity and review position sizing.",
         }
+
+    async def generate_ipo_analysis(self, symbol: str, company: str, ipo_data: dict[str, Any]) -> dict[str, Any]:
+        """AI analysis of an IPO — verdict, risks, opportunity, and subscription recommendation."""
+        price_range = ipo_data.get("priceRange") or "N/A"
+        market_cap = ipo_data.get("marketCap") or "N/A"
+        exchange = ipo_data.get("exchange") or "NSE/BSE"
+        actions = ipo_data.get("actions") or ""
+        date = ipo_data.get("date") or "N/A"
+        shares = ipo_data.get("shares") or "N/A"
+
+        prompt = f"""You are an expert Indian equity analyst. Analyse this IPO and give a concise verdict.
+
+IPO Details:
+- Company: {company}
+- Symbol: {symbol}
+- Exchange: {exchange}
+- Listing Date: {date}
+- Price Range: {price_range}
+- Issue Size: {market_cap}
+- Total Shares: {shares}
+- Issue Type: {actions}
+
+Respond ONLY with valid JSON in this exact structure:
+{{
+  "verdict": "Subscribe / Avoid / Neutral",
+  "verdictColor": "green / red / yellow",
+  "summary": "2-3 sentence plain English overview of this IPO",
+  "keyStrengths": ["strength 1", "strength 2", "strength 3"],
+  "keyRisks": ["risk 1", "risk 2", "risk 3"],
+  "valuation": "Brief comment on whether the IPO pricing looks fair, expensive, or cheap based on the price range",
+  "listingOutlook": "Short-term listing gain expectation — bullish / neutral / cautious",
+  "whoShouldApply": "Type of investor this suits — long-term / listing gain / avoid",
+  "quickTake": "One punchy sentence that sums up the entire IPO for a busy investor"
+}}"""
+
+        if self._gemini and settings.gemini_api_key:
+            try:
+                import re as _re
+                raw = await self._gemini.chat(symbol, prompt, {})
+                raw_str = raw[0] if isinstance(raw, tuple) else str(raw)
+                match = _re.search(r"\{.*\}", raw_str, flags=_re.DOTALL)
+                if match:
+                    parsed = json.loads(match.group(0))
+                    required = ["verdict", "summary", "keyStrengths", "keyRisks", "listingOutlook", "quickTake"]
+                    if all(k in parsed for k in required):
+                        return parsed
+            except Exception:
+                pass
+
+        # Fallback
+        return {
+            "verdict": "Neutral",
+            "verdictColor": "yellow",
+            "summary": f"{company} is coming to market at {price_range}. Investors should review the DRHP for business fundamentals before subscribing.",
+            "keyStrengths": [
+                "Accessing public capital markets for growth",
+                "Exchange listing improves liquidity and price discovery",
+                "Brand visibility increases post-listing",
+            ],
+            "keyRisks": [
+                "Market conditions may affect listing performance",
+                "Post-IPO lock-in expiry could cause price volatility",
+                "Limited trading history as a listed entity",
+            ],
+            "valuation": f"Price range {price_range} needs to be evaluated against sector peers and growth prospects before drawing conclusions.",
+            "listingOutlook": "neutral",
+            "whoShouldApply": "Investors with medium-to-long term horizon who have reviewed the business fundamentals",
+            "quickTake": f"Approach {company}'s IPO with caution — do your own research before subscribing.",
+        }

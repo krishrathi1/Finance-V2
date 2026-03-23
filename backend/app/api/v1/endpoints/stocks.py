@@ -553,27 +553,54 @@ async def get_screener_sectors() -> dict:
     return {"sectors": INDIAN_SECTORS, "cached": False}
 
 
+@router.get("/ipo/{symbol}/ai-analysis")
+async def get_ipo_ai_analysis(symbol: str) -> dict:
+    cache_key = f"ipo_ai:{symbol.upper()}"
+    cached = await redis_cache.get_json(cache_key)
+    if cached:
+        return {"symbol": symbol.upper(), "cached": True, **cached}
+
+    # Fetch IPO context from calendar
+    from app.services.providers import MarketDataProviders as _Providers
+    _providers = _Providers()
+    today = datetime.now(IST).date()
+    from_date = (today - timedelta(days=180)).isoformat()
+    to_date = (today + timedelta(days=180)).isoformat()
+    ipo_list = await _providers.get_ipo_calendar(from_date=from_date, to_date=to_date)
+    ipo_data = next((i for i in ipo_list if str(i.get("symbol", "")).upper() == symbol.upper()), {})
+    company = ipo_data.get("company") or symbol
+
+    try:
+        analysis = await asyncio.wait_for(
+            ai_adapter.generate_ipo_analysis(symbol=symbol, company=company, ipo_data=ipo_data),
+            timeout=15,
+        )
+    except Exception:
+        analysis = await ai_adapter.generate_ipo_analysis(symbol=symbol, company=company, ipo_data=ipo_data)
+
+    await redis_cache.set_json(cache_key, analysis, ttl_seconds=3600)
+    return {"symbol": symbol.upper(), "cached": False, **analysis}
+
+
 @router.get("/ipo")
 async def get_ipo_data(type: str = Query("upcoming")) -> dict:
     from app.services.providers import MarketDataProviders
     providers = MarketDataProviders()
     today = datetime.now(IST).date()
+    cache_key = f"ipo:{type}:{today.isoformat()}"
 
-    if type == "recent":
-        from_date = (today - timedelta(days=90)).isoformat()
-        to_date = today.isoformat()
-    else:
-        from_date = today.isoformat()
-        to_date = (today + timedelta(days=90)).isoformat()
-
-    cache_key = f"ipo:{type}:{from_date}"
     cached = await redis_cache.get_json(cache_key)
     if cached:
         return {"type": type, "data": cached, "cached": True}
 
     try:
-        data = await providers.get_ipo_calendar(from_date=from_date, to_date=to_date)
-        await redis_cache.set_json(cache_key, data, ttl_seconds=3600)
+        if type == "recent":
+            data = await providers.get_ipo_recent()
+        else:
+            from_date = today.isoformat()
+            to_date = (today + timedelta(days=90)).isoformat()
+            data = await providers.get_ipo_calendar(from_date=from_date, to_date=to_date)
+        await redis_cache.set_json(cache_key, data, ttl_seconds=1800)
         return {"type": type, "data": data, "cached": False}
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"IPO data unavailable: {str(exc)}")
