@@ -315,13 +315,14 @@ export async function fetchIndexHeatmap(indexName: string, options: { force?: bo
   }
 }
 
-export async function fetchSwotAnalysis(symbol: string): Promise<{
+export async function fetchSwotAnalysis(symbol: string, options: { refresh?: boolean } = {}): Promise<{
   strengths: string[];
   weaknesses: string[];
   opportunities: string[];
   threats: string[];
   bullCase: string;
   bearCase: string;
+  generatedAt?: number;
 }> {
   const fallback = {
     strengths: ["Strong brand presence in the sector", "Consistent revenue growth track record", "Healthy balance sheet with low debt"],
@@ -333,11 +334,8 @@ export async function fetchSwotAnalysis(symbol: string): Promise<{
   };
 
   try {
-    const res = await fetchWithTimeout(
-      getApiUrl(`/${symbol}/swot`),
-      { cache: "no-store" },
-      12_000
-    );
+    const url = getApiUrl(`/${symbol}/swot`) + (options.refresh ? "?refresh=true" : "");
+    const res = await fetchWithTimeout(url, { cache: "no-store" }, 20_000);
     if (!res.ok) throw new Error(`SWOT request failed: ${res.status}`);
     const payload = await res.json();
     return {
@@ -347,6 +345,7 @@ export async function fetchSwotAnalysis(symbol: string): Promise<{
       threats: Array.isArray(payload.threats) ? payload.threats : fallback.threats,
       bullCase: typeof payload.bullCase === "string" ? payload.bullCase : fallback.bullCase,
       bearCase: typeof payload.bearCase === "string" ? payload.bearCase : fallback.bearCase,
+      generatedAt: typeof payload.generatedAt === "number" ? payload.generatedAt : undefined,
     };
   } catch {
     return fallback;

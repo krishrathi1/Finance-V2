@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AlertTriangle, CheckCircle2, Lightbulb, ShieldAlert, TrendingDown, TrendingUp, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Lightbulb, RefreshCw, ShieldAlert, TrendingDown, TrendingUp, XCircle } from "lucide-react";
 
 import { Card } from "@/components/ui/card";
 import { fetchSwotAnalysis } from "@/lib/api";
@@ -13,7 +13,16 @@ type SwotData = {
   threats: string[];
   bullCase: string;
   bearCase: string;
+  generatedAt?: number;
 };
+
+function timeAgo(ts: number): string {
+  const diff = Math.floor((Date.now() / 1000) - ts);
+  if (diff < 60) return "just now";
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  return `${Math.floor(diff / 86400)}d ago`;
+}
 
 /* ─── Shimmer placeholder ─── */
 function ShimmerBlock({ lines = 3 }: { lines?: number }) {
@@ -114,42 +123,51 @@ function SwotQuadrant({ quadrant, items }: { quadrant: QuadrantKey; items: strin
 export function SwotAnalysis({ symbol }: { symbol: string }) {
   const [data, setData] = useState<SwotData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [regenerating, setRegenerating] = useState(false);
   const [error, setError] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setError(false);
+  const load = (refresh = false) => {
+    if (refresh) setRegenerating(true);
+    else { setLoading(true); setError(false); }
 
-    fetchSwotAnalysis(symbol)
+    fetchSwotAnalysis(symbol, { refresh })
       .then((result) => {
-        if (!cancelled) {
-          setData(result);
-          setLoading(false);
-        }
+        setData(result);
       })
       .catch(() => {
-        if (!cancelled) {
-          setError(true);
-          setLoading(false);
-        }
+        if (!refresh) setError(true);
+      })
+      .finally(() => {
+        setLoading(false);
+        setRegenerating(false);
       });
+  };
 
-    return () => {
-      cancelled = true;
-    };
-  }, [symbol]);
+  useEffect(() => { load(false); }, [symbol]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <Card className="p-4">
-      <div className="flex items-center gap-2">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-500/10">
-          <ShieldAlert className="h-4 w-4 text-indigo-500" />
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-500/10">
+            <ShieldAlert className="h-4 w-4 text-indigo-500" />
+          </div>
+          <div>
+            <h3 className="text-lg font-semibold">SWOT Analysis</h3>
+            <p className="text-xs text-muted">
+              AI-generated · {data?.generatedAt ? timeAgo(data.generatedAt) : "live"}
+            </p>
+          </div>
         </div>
-        <div>
-          <h3 className="text-lg font-semibold">SWOT Analysis</h3>
-          <p className="text-xs text-muted">Strengths, Weaknesses, Opportunities & Threats</p>
-        </div>
+        <button
+          onClick={() => load(true)}
+          disabled={loading || regenerating}
+          title="Regenerate with latest market data"
+          className="flex items-center gap-1.5 rounded-xl border border-border/60 bg-bg/50 px-3 py-1.5 text-xs font-medium text-muted transition hover:border-accent/40 hover:text-accent disabled:opacity-40"
+        >
+          <RefreshCw className={`h-3.5 w-3.5 ${regenerating ? "animate-spin" : ""}`} />
+          {regenerating ? "Regenerating…" : "Regenerate"}
+        </button>
       </div>
 
       {/* Loading state */}

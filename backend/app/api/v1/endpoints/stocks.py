@@ -763,13 +763,16 @@ async def earnings_tldr(symbol: str) -> dict:
 
 
 @router.get("/{symbol}/swot")
-async def get_swot_analysis(symbol: str) -> dict:
+async def get_swot_analysis(symbol: str, refresh: bool = False) -> dict:
+    import time as _time
     cache_key = f"swot:{symbol.upper()}"
-    cached = await redis_cache.get_json(cache_key)
-    if cached:
-        return {"symbol": symbol.upper(), "cached": True, **cached}
 
-    # Fetch dashboard context for AI analysis
+    if not refresh:
+        cached = await redis_cache.get_json(cache_key)
+        if cached:
+            return {"symbol": symbol.upper(), "cached": True, **cached}
+
+    # Fetch fresh dashboard context for AI analysis
     context: dict = {"symbol": symbol.upper()}
     try:
         context = await asyncio.wait_for(dashboard_service.get_dashboard(symbol=symbol), timeout=20)
@@ -782,7 +785,7 @@ async def get_swot_analysis(symbol: str) -> dict:
         swot = ai_adapter._fallback_swot(symbol=symbol, context=context)
 
     source = "gemini" if bool(str(settings.gemini_api_key or "").strip()) else "fallback"
-    result = {**swot, "source": source}
+    result = {**swot, "source": source, "generatedAt": int(_time.time())}
     await redis_cache.set_json(cache_key, result, ttl_seconds=60 * 60)
     return {"symbol": symbol.upper(), "cached": False, **result}
 
