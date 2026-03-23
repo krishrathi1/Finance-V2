@@ -351,13 +351,11 @@ function ComparePageContent() {
             </Link>{" "}
             / Compare
           </p>
-          <h1 className="mt-1 font-[var(--font-space)] text-2xl font-bold sm:text-3xl">
-            <span className="bg-gradient-to-r from-accent to-amber-400 bg-clip-text text-transparent">
-              Stock Comparison
-            </span>
+          <h1 className="mt-1 font-[var(--font-space)] text-2xl font-bold tracking-tight sm:text-3xl">
+            Side-by-Side Analysis
           </h1>
           <p className="mt-1 text-xs text-muted sm:text-sm">
-            Compare two stocks side-by-side across all key metrics
+            Compare price, valuation, profitability, and Smart Scores across two NSE/BSE stocks.
           </p>
         </div>
         <Link

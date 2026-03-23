@@ -228,28 +228,26 @@ export default function ScreenerPage() {
   return (
     <div className="stagger-fade space-y-5 py-4 sm:space-y-6 sm:py-6">
       {/* Header */}
-      <ViewportMotionSection className="gradient-border relative overflow-hidden rounded-2xl p-5 sm:rounded-[28px] sm:p-8">
-        <div className="hero-orb hero-orb-1" />
-        <div className="hero-orb hero-orb-2" />
-        <div className="relative z-10">
+      <div className="flex flex-col gap-1 border-b border-border/40 pb-5 sm:flex-row sm:items-end sm:justify-between">
+        <div>
           <div className="flex items-center gap-2">
-            <span className="pulse-dot h-2 w-2 rounded-full bg-accent" />
-            <p className="text-[10px] uppercase tracking-[0.3em] text-accent sm:text-xs">
-              Stock Screener
-            </p>
+            <SlidersHorizontal className="h-4 w-4 text-accent" />
+            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted">Fundamental Screener</p>
           </div>
-          <h1 className="mt-3 font-[var(--font-space)] text-2xl font-bold leading-tight sm:mt-4 sm:text-3xl md:text-4xl">
-            Find Your Next{" "}
-            <span className="bg-gradient-to-r from-accent via-amber-500 to-orange-400 bg-clip-text text-transparent">
-              Investment
-            </span>
+          <h1 className="mt-1.5 font-[var(--font-space)] text-2xl font-bold tracking-tight sm:text-3xl">
+            Stock Screener
           </h1>
-          <p className="mt-2 max-w-2xl text-xs text-muted sm:mt-3 sm:text-sm">
-            Screen stocks across NSE and BSE using fundamental filters &mdash; market cap, PE ratio,
-            dividend yield, sector, and more.
+          <p className="mt-1 text-sm text-muted">
+            NSE &amp; BSE &mdash; filter by cap, sector, PE, dividend, and more.
           </p>
         </div>
-      </ViewportMotionSection>
+        <div className="flex items-center gap-2 text-[11px] text-muted">
+          <span className="pulse-dot h-1.5 w-1.5 rounded-full bg-success" />
+          <span>Live data</span>
+          <span className="text-border/60">·</span>
+          <span>FMP</span>
+        </div>
+      </div>
 
       {/* AI Natural Language Screener */}
       <section className="rounded-2xl border border-accent/30 bg-gradient-to-r from-accent/5 via-purple-500/5 to-transparent p-4 sm:p-6">

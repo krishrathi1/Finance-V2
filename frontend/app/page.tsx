@@ -224,13 +224,11 @@ export default function HomePage() {
 
       <section>
         <div className="mb-5 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="h-5 w-0.5 rounded-full bg-gradient-to-b from-accent to-amber-400" />
-            <div>
-              <h2 className="font-[var(--font-space)] text-base font-bold sm:text-lg">Research Shortcuts</h2>
-              <p className="text-xs text-muted">Start from the exact workflow you need instead of navigating menus.</p>
-            </div>
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-muted">Quick Access</p>
+            <h2 className="mt-1 font-[var(--font-space)] text-base font-bold sm:text-lg">Research Shortcuts</h2>
           </div>
+          <span className="hidden rounded-full border border-border/50 bg-panel/60 px-3 py-1 text-[11px] font-medium text-muted sm:block">4 modules</span>
         </div>
 
         <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(240px,1fr))]">
@@ -288,22 +286,30 @@ export default function HomePage() {
       </section>
 
       <section>
-        <div className="mb-4 flex items-center gap-3">
-          <div className="h-5 w-0.5 rounded-full bg-gradient-to-b from-accent to-amber-400" />
-          <div>
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-border/50 bg-panel/70">
+              <BarChart3 className="h-4 w-4 text-accent" />
+            </div>
             <h2 className="font-[var(--font-space)] text-base font-bold sm:text-lg">Index Heatmap</h2>
-            <p className="text-xs text-muted">
-              All constituents by intraday move with one-click access to the stock dashboard.
-            </p>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="pulse-dot h-1.5 w-1.5 rounded-full bg-success" />
+            <span className="text-[11px] font-medium text-success">Live</span>
           </div>
         </div>
         <MarketHeatmap />
       </section>
 
       <section>
-        <div className="mb-4 flex items-center gap-3">
-          <div className="h-5 w-0.5 rounded-full bg-gradient-to-b from-blue-500 to-cyan-400" />
-          <h2 className="font-[var(--font-space)] text-base font-bold sm:text-lg">Today&apos;s Market News</h2>
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div>
+            <h2 className="font-[var(--font-space)] text-base font-bold sm:text-lg">Market News</h2>
+            <p className="mt-0.5 text-[11px] text-muted">Curated from NSE, BSE and financial publications</p>
+          </div>
+          <time className="hidden text-[11px] tabular-nums text-muted sm:block">
+            {new Date().toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" })}
+          </time>
         </div>
         <MarketNews />
       </section>

@@ -548,13 +548,11 @@ export default function PortfolioPage() {
           <p className="text-sm text-muted">
             <Link href="/" className="hover:text-text">Home</Link> / Portfolio
           </p>
-          <h1 className="mt-1 font-[var(--font-space)] text-2xl font-bold sm:text-3xl">
-            <span className="bg-gradient-to-r from-accent to-amber-400 bg-clip-text text-transparent">
-              My Portfolio
-            </span>
+          <h1 className="mt-1 font-[var(--font-space)] text-2xl font-bold tracking-tight sm:text-3xl">
+            My Portfolio
           </h1>
           <p className="mt-1 text-xs text-muted sm:text-sm">
-            Track holdings, monitor P&amp;L, and analyse your allocation — stored locally
+            Holdings, P&amp;L, and allocation — stored in your browser
           </p>
         </div>
         <button

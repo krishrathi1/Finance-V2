@@ -3,16 +3,27 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { Menu, X } from "lucide-react";
+import {
+  BarChart2,
+  Bell,
+  CalendarRange,
+  GitCompareArrows,
+  Heart,
+  Home,
+  Menu,
+  SlidersHorizontal,
+  Wallet,
+  X,
+} from "lucide-react";
 
 const LINKS = [
-  { href: "/", label: "Home" },
-  { href: "/screener", label: "Screener" },
-  { href: "/watchlist", label: "Watchlist" },
-  { href: "/portfolio", label: "Portfolio" },
-  { href: "/compare", label: "Compare" },
-  { href: "/ipo", label: "IPO" },
-  { href: "/alerts", label: "Alerts" },
+  { href: "/", label: "Home", icon: Home },
+  { href: "/screener", label: "Screener", icon: SlidersHorizontal },
+  { href: "/watchlist", label: "Watchlist", icon: Heart },
+  { href: "/portfolio", label: "Portfolio", icon: Wallet },
+  { href: "/compare", label: "Compare", icon: GitCompareArrows },
+  { href: "/ipo", label: "IPO", icon: CalendarRange },
+  { href: "/alerts", label: "Alerts", icon: Bell },
 ] as const;
 
 export function NavLinks() {
@@ -30,16 +41,18 @@ export function NavLinks() {
       <nav className="hidden items-center gap-0.5 sm:flex">
         {LINKS.map((link) => {
           const active = isActive(link.href);
+          const Icon = link.icon;
           return (
             <Link
               key={link.href}
               href={link.href}
-              className={`relative rounded-lg px-3 py-1.5 text-sm font-medium transition-all active:scale-[0.97] ${
+              className={`relative flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium transition-all active:scale-[0.97] ${
                 active
                   ? "nav-active"
                   : "text-muted hover:bg-panel/70 hover:text-text"
               }`}
             >
+              <Icon className={`h-3.5 w-3.5 ${active ? "text-accent" : ""}`} />
               {link.label}
             </Link>
           );
@@ -62,17 +75,19 @@ export function NavLinks() {
             <nav className="mx-auto flex max-w-[1640px] flex-col gap-0.5 px-3 py-3">
               {LINKS.map((link) => {
                 const active = isActive(link.href);
+                const Icon = link.icon;
                 return (
                   <Link
                     key={link.href}
                     href={link.href}
                     onClick={() => setOpen(false)}
-                    className={`rounded-xl px-4 py-2.5 text-sm font-medium transition-all active:scale-[0.98] ${
+                    className={`flex items-center gap-2.5 rounded-xl px-4 py-2.5 text-sm font-medium transition-all active:scale-[0.98] ${
                       active
                         ? "nav-active"
                         : "text-muted hover:bg-panel/60 hover:text-text"
                     }`}
                   >
+                    <Icon className={`h-4 w-4 ${active ? "text-accent" : ""}`} />
                     {link.label}
                   </Link>
                 );

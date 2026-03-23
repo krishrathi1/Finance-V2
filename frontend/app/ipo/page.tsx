@@ -4,6 +4,7 @@ import {
   ArrowRight,
   Building2,
   CalendarDays,
+  CalendarRange,
   ChevronRight,
   CircleDollarSign,
   Layers,
@@ -190,21 +191,35 @@ export default function IpoPage() {
 
   return (
     <div className="stagger-fade space-y-6 py-4 sm:space-y-8 sm:py-8">
+      {/* Header */}
+      <div className="flex flex-col gap-4 border-b border-border/40 pb-5 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <div className="flex items-center gap-2">
+            <CalendarRange className="h-4 w-4 text-accent" />
+            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted">Equity Events</p>
+          </div>
+          <h1 className="mt-1.5 font-[var(--font-space)] text-2xl font-bold tracking-tight sm:text-3xl">IPO Calendar</h1>
+          <p className="mt-1 text-sm text-muted">Scheduled listings and recent issues on NSE &amp; BSE.</p>
+        </div>
+      </div>
+
       {/* Tabs */}
-      <div className="flex gap-2 rounded-2xl border border-border/50 bg-panel/40 p-1 backdrop-blur-sm w-fit">
-        {(["upcoming", "recent"] as Tab[]).map((t) => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={`rounded-xl px-4 py-2 text-sm font-medium transition ${
-              tab === t
-                ? "bg-accent/15 text-accent shadow-sm"
-                : "text-muted hover:text-text"
-            }`}
-          >
-            {t === "upcoming" ? "Upcoming IPOs" : "Recent IPOs (Listed)"}
-          </button>
-        ))}
+      <div className="border-b border-border/30">
+        <div className="flex gap-6">
+          {(["upcoming", "recent"] as Tab[]).map((t) => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className={`pb-0.5 text-sm font-medium transition border-b-2 ${
+                tab === t
+                  ? "border-accent text-accent font-semibold bg-transparent"
+                  : "text-muted hover:text-text border-transparent"
+              }`}
+            >
+              {t === "upcoming" ? "Upcoming IPOs" : "Recent IPOs (Listed)"}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Error */}

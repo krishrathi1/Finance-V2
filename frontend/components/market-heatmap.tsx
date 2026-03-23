@@ -143,20 +143,20 @@ export function MarketHeatmap() {
               onFocus={() => setActiveSymbol(row.symbol)}
               onBlur={() => setActiveSymbol(null)}
               className={cn(
-                "group flex min-h-[88px] flex-col justify-between rounded-xl border p-[var(--panel-padding)] transition duration-200 active:scale-[0.98] sm:min-h-[100px] sm:rounded-2xl",
+                "group flex min-h-[88px] flex-col justify-between overflow-hidden rounded-xl border p-3 transition duration-200 active:scale-[0.98] sm:min-h-[96px] sm:rounded-2xl",
                 tileStyle(row.changePercent)
                 ,
                 activeSymbol && activeSymbol !== row.symbol && "opacity-45",
                 activeSymbol === row.symbol && "-translate-y-1 shadow-xl ring-2 ring-white/20"
               )}
             >
-              <div className="flex items-start justify-between gap-1 sm:gap-2">
-                <p className="density-copy text-xs font-bold tracking-wide sm:text-sm">{row.symbol}</p>
-                <p className="density-value text-lg font-black leading-none sm:text-2xl">{formatSigned(row.changePercent)}%</p>
+              <div className="flex items-start justify-between gap-1">
+                <p className="min-w-0 truncate text-[11px] font-bold tracking-wide sm:text-xs">{row.symbol}</p>
+                <p className="shrink-0 text-sm font-black leading-none sm:text-base">{formatSigned(row.changePercent)}%</p>
               </div>
-              <div className="flex items-end justify-between gap-1 sm:gap-2">
-                <p className="density-copy text-[11px] font-semibold sm:text-sm">Rs {row.cmp.toLocaleString("en-IN", { maximumFractionDigits: 2 })}</p>
-                <p className="density-copy text-[10px] font-semibold opacity-90 sm:text-xs">{formatSigned(row.change)}</p>
+              <div className="flex items-end justify-between gap-1">
+                <p className="min-w-0 truncate text-[10px] font-semibold sm:text-[11px]">₹{row.cmp.toLocaleString("en-IN", { maximumFractionDigits: 2 })}</p>
+                <p className="shrink-0 text-[10px] font-semibold opacity-90">{formatSigned(row.change)}</p>
               </div>
             </Link>
           ))}
