@@ -370,8 +370,8 @@ function ComparePageContent() {
       </div>
 
       {/* Search Inputs */}
-      <Card className="relative z-40 overflow-visible">
-        <CardContent className="py-5">
+      <Card className="relative z-40" style={{ overflow: "visible" }}>
+        <CardContent className="py-5" style={{ overflow: "visible" }}>
           <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
             <SymbolInput
               label="Stock A"
