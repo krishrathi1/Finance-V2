@@ -323,13 +323,13 @@ function IpoModal({ ipo, tab, onClose }: ModalProps) {
               </Link>
             )}
             <a
-              href={`https://www.chittorgarh.com/search/${encodeURIComponent(ipo.company || symbol || "")}`}
+              href={`https://www.google.com/search?q=${encodeURIComponent((ipo.company || symbol || "") + " Chittorgarh IPO details")}`}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1.5 rounded-xl border border-border/50 bg-bg/50 px-3 py-2 text-xs font-medium text-muted transition hover:border-accent/30 hover:text-accent"
             >
               <ArrowUpRight className="h-3.5 w-3.5" />
-              IPO Details
+              IPO Details (External)
             </a>
             <a
               href={`https://www.sebi.gov.in/`}
