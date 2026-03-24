@@ -5,6 +5,7 @@ import {
   ArrowDownRight,
   ArrowUpRight,
   BarChart3,
+  Bell,
   CheckCircle,
   Edit2,
   Minus,
@@ -12,6 +13,7 @@ import {
   Search,
   ShieldAlert,
   Sparkles,
+  Target,
   Trash2,
   TrendingDown,
   TrendingUp,
@@ -25,7 +27,8 @@ import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PortfolioDoctor } from "@/components/sections/portfolio-doctor";
-import { fetchTickerTape, fetchPortfolioRiskAssessment, searchStocks } from "@/lib/api";
+import { fetchAIScreenerResults, fetchTickerTape, fetchPortfolioRiskAssessment, searchStocks } from "@/lib/api";
+import { addAlert, getAlertsForSymbol, removeAlert } from "@/lib/alerts";
 import {
   addHolding,
   enrichHoldings,
@@ -35,6 +38,7 @@ import {
   updateHolding,
 } from "@/lib/portfolio";
 import type { Holding, HoldingWithValue } from "@/lib/portfolio";
+import type { ScreenerResult } from "@/lib/types";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -42,6 +46,153 @@ import type { Holding, HoldingWithValue } from "@/lib/portfolio";
 
 function fmt(n: number) {
   return n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function PortfolioSuggestionCard() {
+  const [budget, setBudget] = useState("10000");
+  const [goal, setGoal] = useState("steady compounder");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [suggestion, setSuggestion] = useState<ScreenerResult | null>(null);
+
+  const handleSuggest = useCallback(async () => {
+    const numericBudget = parseFloat(budget);
+    if (!numericBudget || numericBudget <= 0) {
+      setError("Enter a valid budget to get a suggestion.");
+      return;
+    }
+    setLoading(true);
+    setError("");
+    try {
+      const query = `Suggest one Indian stock for a ${goal} investor with a budget of Rs ${numericBudget}. Prefer liquid businesses with understandable fundamentals.`;
+      const { results } = await fetchAIScreenerResults(query);
+      if (!results.length) {
+        setSuggestion(null);
+        setError("No suggestion found right now. Try a different budget or goal.");
+        return;
+      }
+      setSuggestion(results[0]);
+    } catch {
+      setSuggestion(null);
+      setError("AI stock suggestion is unavailable right now.");
+    } finally {
+      setLoading(false);
+    }
+  }, [budget, goal]);
+
+  const estimatedShares = suggestion?.price ? Math.floor(parseFloat(budget || "0") / suggestion.price) : 0;
+
+  return (
+    <Card className="border-accent/20 bg-gradient-to-r from-accent/8 via-amber-500/5 to-transparent">
+      <CardContent className="space-y-4 p-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-accent" />
+              <p className="text-sm font-semibold">AI Stock Suggestion</p>
+              <span className="rounded-full bg-accent/10 px-2 py-0.5 text-[10px] font-medium text-accent">
+                Beginner Mode
+              </span>
+            </div>
+            <p className="mt-1 text-xs text-muted">
+              Not sure what to buy first? Start with your budget and goal, then use this as a shortlist starter.
+            </p>
+          </div>
+          <button
+            onClick={handleSuggest}
+            disabled={loading}
+            className="flex shrink-0 items-center gap-2 rounded-xl bg-gradient-to-r from-accent to-amber-500 px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:-translate-y-0.5 disabled:opacity-50"
+          >
+            {loading ? (
+              <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+            ) : (
+              <Sparkles className="h-3.5 w-3.5" />
+            )}
+            {loading ? "Finding match..." : "Suggest a stock"}
+          </button>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-[1fr_1fr]">
+          <div>
+            <p className="mb-1 text-xs font-medium text-muted">Budget (Rs)</p>
+            <input
+              type="number"
+              min="100"
+              step="100"
+              value={budget}
+              onChange={(e) => setBudget(e.target.value)}
+              className="w-full rounded-xl border border-border/60 bg-bg/60 px-3 py-2 text-sm outline-none focus:border-accent/50 focus:ring-1 focus:ring-accent/30"
+            />
+          </div>
+          <div>
+            <p className="mb-1 text-xs font-medium text-muted">Goal</p>
+            <div className="grid grid-cols-3 gap-2">
+              {["steady compounder", "lower risk", "higher growth"].map((item) => (
+                <button
+                  key={item}
+                  onClick={() => setGoal(item)}
+                  className={`rounded-xl border px-2 py-2 text-[11px] font-semibold capitalize transition ${
+                    goal === item
+                      ? "border-accent/40 bg-accent/10 text-accent"
+                      : "border-border/50 bg-panel/50 text-muted hover:border-accent/30 hover:text-text"
+                  }`}
+                >
+                  {item}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {error ? <p className="text-xs text-danger">{error}</p> : null}
+
+        {suggestion ? (
+          <div className="rounded-2xl border border-border/50 bg-bg/35 p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wider text-muted">Suggested first look</p>
+                <p className="mt-1 text-lg font-bold">{suggestion.symbol}</p>
+                <p className="text-sm text-muted">{suggestion.companyName}</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <span className="rounded-lg bg-accent/10 px-2 py-1 text-[11px] font-medium text-accent">
+                  {suggestion.exchange || "NSE"}
+                </span>
+                {suggestion.sector ? (
+                  <span className="rounded-lg bg-bg px-2 py-1 text-[11px] text-muted">
+                    {suggestion.sector}
+                  </span>
+                ) : null}
+              </div>
+            </div>
+            <div className="mt-4 grid gap-3 sm:grid-cols-3">
+              <div className="rounded-xl border border-border/40 bg-panel/50 px-3 py-2">
+                <p className="text-[10px] uppercase tracking-wider text-muted">Current Price</p>
+                <p className="mt-1 text-sm font-semibold">{fmtINR(suggestion.price)}</p>
+              </div>
+              <div className="rounded-xl border border-border/40 bg-panel/50 px-3 py-2">
+                <p className="text-[10px] uppercase tracking-wider text-muted">Approx Shares</p>
+                <p className="mt-1 text-sm font-semibold">{estimatedShares > 0 ? estimatedShares : "<1 share"}</p>
+              </div>
+              <div className="rounded-xl border border-border/40 bg-panel/50 px-3 py-2">
+                <p className="text-[10px] uppercase tracking-wider text-muted">Why it fits</p>
+                <p className="mt-1 text-sm font-semibold capitalize">{goal}</p>
+              </div>
+            </div>
+            <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-muted">
+              <span>This is a shortlist starter, not an automatic buy.</span>
+              <Link
+                href={`/stocks/${suggestion.symbol}?exchange=${encodeURIComponent(suggestion.exchange || "NSE")}`}
+                className="font-semibold text-accent hover:text-accent/80"
+              >
+                Open full analysis
+              </Link>
+            </div>
+          </div>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
 }
 
 function fmtINR(n: number) {
@@ -52,6 +203,20 @@ function fmtINR(n: number) {
 
 function today() {
   return new Date().toISOString().slice(0, 10);
+}
+
+function syncPortfolioTargetAlert(symbol: string, targetPrice: number | undefined, referencePrice: number) {
+  const taggedAlerts = getAlertsForSymbol(symbol).filter((alert) =>
+    alert.note.startsWith("Portfolio target")
+  );
+  taggedAlerts.forEach((alert) => removeAlert(alert.id));
+  if (!targetPrice || targetPrice <= 0) return;
+  addAlert(
+    symbol,
+    targetPrice,
+    targetPrice >= referencePrice ? "above" : "below",
+    "Portfolio target alert"
+  );
 }
 
 const PIE_COLORS = [
@@ -78,6 +243,7 @@ function HoldingModal({ editing, onClose, onSave }: ModalProps) {
   const [buyPrice, setBuyPrice] = useState(editing?.buyPrice ? String(editing.buyPrice) : "");
   const [buyDate, setBuyDate] = useState(editing?.buyDate ?? today());
   const [notes, setNotes] = useState(editing?.notes ?? "");
+  const [targetPrice, setTargetPrice] = useState(editing?.targetPrice ? String(editing.targetPrice) : "");
   const [error, setError] = useState("");
 
   // Symbol autocomplete state
@@ -120,9 +286,11 @@ function HoldingModal({ editing, onClose, onSave }: ModalProps) {
     const sym = symbol.trim().toUpperCase();
     const qty = parseFloat(quantity);
     const price = parseFloat(buyPrice);
+    const target = targetPrice.trim() ? parseFloat(targetPrice) : undefined;
     if (!sym) return setError("Symbol is required");
     if (!qty || qty <= 0) return setError("Enter a valid quantity");
     if (!price || price <= 0) return setError("Enter a valid buy price");
+    if (targetPrice.trim() && (!target || target <= 0)) return setError("Enter a valid target price");
     setError("");
 
     if (editing) {
@@ -133,13 +301,15 @@ function HoldingModal({ editing, onClose, onSave }: ModalProps) {
         buyPrice: price,
         buyDate,
         notes: notes.trim() || undefined,
+        targetPrice: target,
       });
     } else {
-      addHolding(sym, companyName.trim() || sym, qty, price, buyDate, notes.trim() || undefined);
+      addHolding(sym, companyName.trim() || sym, qty, price, buyDate, notes.trim() || undefined, target);
     }
+    syncPortfolioTargetAlert(sym, target, price);
     onSave();
     onClose();
-  }, [symbol, companyName, quantity, buyPrice, buyDate, notes, editing, onSave, onClose]);
+  }, [symbol, companyName, quantity, buyPrice, targetPrice, buyDate, notes, editing, onSave, onClose]);
 
   return createPortal(
     <div
@@ -251,6 +421,25 @@ function HoldingModal({ editing, onClose, onSave }: ModalProps) {
             />
           </div>
 
+          <div>
+            <p className="mb-1 text-xs font-medium text-muted">Target Price (optional)</p>
+            <div className="rounded-xl border border-border/60 bg-bg/60 px-3 py-2">
+              <div className="mb-1 flex items-center gap-2 text-[11px] text-muted">
+                <Bell className="h-3 w-3" />
+                Save a target and auto-create an alert when price reaches it.
+              </div>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={targetPrice}
+                onChange={(e) => setTargetPrice(e.target.value)}
+                placeholder="e.g. 3000"
+                className="w-full bg-transparent text-sm outline-none"
+              />
+            </div>
+          </div>
+
           {error && <p className="text-xs text-danger">{error}</p>}
 
           <button
@@ -353,6 +542,20 @@ function HoldingRow({
         </div>
         <p className="truncate text-[11px] text-muted">{h.companyName}</p>
         {h.notes && <p className="truncate text-[10px] italic text-muted/70">{h.notes}</p>}
+        {h.targetPrice ? (
+          <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px]">
+            <span className="rounded-md bg-accent/10 px-1.5 py-0.5 font-medium text-accent">
+              Target {fmtINR(h.targetPrice)}
+            </span>
+            {h.currentPrice !== null ? (
+              <span className="text-muted">
+                {h.targetPrice >= h.currentPrice
+                  ? `${(((h.targetPrice - h.currentPrice) / h.currentPrice) * 100).toFixed(1)}% upside`
+                  : `${(((h.currentPrice - h.targetPrice) / h.currentPrice) * 100).toFixed(1)}% below current`}
+              </span>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
       {/* Mobile: key info */}
@@ -396,12 +599,14 @@ function HoldingRow({
       <div className="hidden sm:block">
         <p className="text-xs text-muted">P&L</p>
         {h.pnl !== null ? (
-          <p className={`text-sm font-semibold ${isPos ? "text-success" : "text-danger"}`}>
+          <div className="space-y-0.5">
+            <p className={`text-sm font-semibold ${isPos ? "text-success" : "text-danger"}`}>
             {isPos ? "+" : ""}₹{fmt(h.pnl)}
-            <span className="ml-1 text-xs opacity-80">
-              ({isPos ? "+" : ""}{h.pnlPercent?.toFixed(1)}%)
-            </span>
-          </p>
+            </p>
+            <p className={`text-xs font-semibold ${isPos ? "text-success" : "text-danger"}`}>
+              {isPos ? "+" : ""}{h.pnlPercent?.toFixed(1)}%
+            </p>
+          </div>
         ) : (
           <p className="text-sm text-muted">—</p>
         )}
@@ -531,17 +736,21 @@ export default function PortfolioPage() {
 
   useEffect(() => { setMounted(true); }, []);
 
-  const loadPortfolio = useCallback(async () => {
+  const loadPortfolio = useCallback(async (options: { force?: boolean; keepLoading?: boolean } = {}) => {
+    const { force = false, keepLoading = true } = options;
     const raw = getHoldings();
     if (raw.length === 0) {
       setHoldings([]);
       setLoading(false);
       return;
     }
+    if (keepLoading) {
+      setLoading(true);
+    }
     const symbols = [...new Set(raw.map((h) => h.symbol))];
     let priceMap: Record<string, number> = {};
     try {
-      const tickers = await fetchTickerTape(symbols);
+      const tickers = await fetchTickerTape(symbols, { force });
       for (const t of tickers) priceMap[t.symbol.toUpperCase()] = t.cmp;
     } catch {
       // prices stay null
@@ -550,14 +759,49 @@ export default function PortfolioPage() {
     setLoading(false);
   }, []);
 
-  useEffect(() => { loadPortfolio(); }, [loadPortfolio]);
+  useEffect(() => {
+    loadPortfolio();
+  }, [loadPortfolio]);
+
+  useEffect(() => {
+    if (holdings.length === 0) return;
+
+    const refresh = () => {
+      void loadPortfolio({ force: true, keepLoading: false });
+    };
+
+    const intervalId = window.setInterval(refresh, 20_000);
+    const handleFocus = () => refresh();
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        refresh();
+      }
+    };
+
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [holdings.length, loadPortfolio]);
 
   const summary = useMemo(() => portfolioSummary(holdings), [holdings]);
 
   const handleRemove = useCallback((id: string) => {
+    const removed = holdings.find((holding) => holding.id === id);
     removeHolding(id);
     setHoldings((prev) => prev.filter((h) => h.id !== id));
-  }, []);
+    if (!removed) return;
+    const remainingForSymbol = holdings.filter((holding) => holding.id !== id && holding.symbol === removed.symbol);
+    if (!remainingForSymbol.length) {
+      getAlertsForSymbol(removed.symbol)
+        .filter((alert) => alert.note.startsWith("Portfolio target"))
+        .forEach((alert) => removeAlert(alert.id));
+    }
+  }, [holdings]);
 
   const handleAIRisk = useCallback(async () => {
     if (holdings.length === 0) return;
@@ -671,16 +915,20 @@ export default function PortfolioPage() {
             <SummaryCard
               label="Total P&L"
               value={(isGain ? "+" : "") + fmtINR(summary.totalPnl)}
+              sub={`${isGain ? "+" : ""}${summary.totalPnlPercent.toFixed(2)}% overall`}
               isPositive={isGain}
               icon={isGain ? TrendingUp : TrendingDown}
             />
             <SummaryCard
               label="Return"
               value={`${isGain ? "+" : ""}${summary.totalPnlPercent.toFixed(2)}%`}
+              sub={`${isGain ? "+" : ""}${fmtINR(summary.totalPnl)} in rupees`}
               isPositive={isGain}
               icon={isGain ? ArrowUpRight : ArrowDownRight}
             />
           </div>
+
+          <PortfolioSuggestionCard />
 
           {/* AI Portfolio Risk */}
           <div className="rounded-2xl border border-accent/25 bg-gradient-to-r from-accent/5 via-purple-500/5 to-transparent p-4">
@@ -691,19 +939,33 @@ export default function PortfolioPage() {
                   <p className="text-sm font-semibold">AI Portfolio Risk Analysis</p>
                   <span className="rounded-full bg-accent/10 px-2 py-0.5 text-[10px] font-medium text-accent">Powered by Gemini</span>
                 </div>
-                <p className="mt-1 text-xs text-muted">Get AI insights on concentration, correlation, and diversification of your portfolio.</p>
+                <p className="mt-1 text-xs text-muted">
+                  Get a plain-English view of concentration, correlation, and diversification so you know where your portfolio is strong or exposed.
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2 text-[11px]">
+                  <span className="rounded-lg border border-border/40 bg-bg/45 px-2 py-1 text-muted">
+                    What it means: how risky your current basket is
+                  </span>
+                  <span className="rounded-lg border border-border/40 bg-bg/45 px-2 py-1 text-muted">
+                    What to do: reduce concentration and spot weak positions
+                  </span>
+                  <span className="rounded-lg border border-border/40 bg-bg/45 px-2 py-1 text-muted">
+                    <Target className="mr-1 inline h-3 w-3 text-accent" />
+                    Target alerts are saved per holding
+                  </span>
+                </div>
               </div>
               <button
                 onClick={handleAIRisk}
                 disabled={riskLoading || holdings.length === 0}
-                className="flex shrink-0 items-center gap-2 rounded-xl bg-gradient-to-r from-accent to-purple-500 px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:-translate-y-0.5 disabled:opacity-50 disabled:translate-y-0"
+                className="flex shrink-0 items-center gap-2 rounded-xl bg-gradient-to-r from-accent to-purple-500 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 disabled:opacity-50 disabled:translate-y-0"
               >
                 {riskLoading ? (
                   <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
                 ) : (
                   <ShieldAlert className="h-3.5 w-3.5" />
                 )}
-                {riskLoading ? "Analysing…" : "Analyse Portfolio"}
+                {riskLoading ? "Analysing..." : "Check Portfolio Risk"}
               </button>
             </div>
 

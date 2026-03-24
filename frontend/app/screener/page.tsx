@@ -21,9 +21,75 @@ import {
   Percent,
   Activity,
   Star,
+  HelpCircle,
+  Target,
+  ShieldCheck,
+  Banknote,
 } from "lucide-react";
 import { fetchScreenerResults, fetchAIScreenerResults } from "@/lib/api";
 import type { ScreenerFilters, ScreenerResult } from "@/lib/types";
+
+// ── Tooltip component ──────────────────────────────────────
+function Tooltip({ text, children }: { text: string; children?: React.ReactNode }) {
+  const [show, setShow] = useState(false);
+  return (
+    <span className="relative inline-flex items-center gap-1">
+      {children}
+      <span
+        onMouseEnter={() => setShow(true)}
+        onMouseLeave={() => setShow(false)}
+        className="cursor-help"
+      >
+        <HelpCircle className="h-3 w-3 text-muted/50 hover:text-accent transition-colors" />
+      </span>
+      {show && (
+        <span className="absolute bottom-full left-1/2 z-50 mb-1.5 w-52 -translate-x-1/2 rounded-lg border border-border/60 bg-panel px-3 py-2 text-[11px] leading-relaxed text-text shadow-xl">
+          {text}
+        </span>
+      )}
+    </span>
+  );
+}
+
+// ── Color coding helpers ───────────────────────────────────
+function peColor(pe: number | null | undefined): string {
+  if (pe === null || pe === undefined) return "text-muted";
+  if (pe <= 0) return "text-muted";
+  if (pe < 15) return "text-success font-semibold"; // cheap
+  if (pe < 30) return "text-text"; // fair
+  if (pe < 50) return "text-amber-400"; // slightly expensive
+  return "text-danger"; // very expensive
+}
+function roeColor(roe: number | null | undefined): string {
+  if (roe === null || roe === undefined) return "text-muted";
+  if (roe >= 20) return "text-success font-semibold";
+  if (roe >= 12) return "text-text";
+  if (roe >= 5) return "text-amber-400";
+  return "text-danger";
+}
+function divColor(div: number | null | undefined): string {
+  if (div === null || div === undefined) return "text-muted";
+  if (div >= 3) return "text-success font-semibold";
+  if (div >= 1) return "text-text";
+  return "text-muted";
+}
+
+// ── Match-reason helper ────────────────────────────────────
+function getMatchReasons(stock: ScreenerResult, filters: ScreenerFilters): string[] {
+  const reasons: string[] = [];
+  if (filters.sector && stock.sector) reasons.push(`Sector: ${stock.sector}`);
+  if (filters.market_cap_min > 0 || filters.market_cap_max > 0) {
+    reasons.push(`Market Cap filter matched`);
+  }
+  if (filters.pe_min > 0 || filters.pe_max > 0) {
+    if (stock.pe != null) reasons.push(`PE ${stock.pe.toFixed(1)} within range`);
+  }
+  if (filters.dividend_min > 0) {
+    if (stock.dividendYield != null) reasons.push(`Div Yield ${stock.dividendYield.toFixed(1)}% ≥ ${filters.dividend_min}%`);
+  }
+  if (reasons.length === 0) reasons.push(`Matched ${filters.exchange || "NSE"} exchange filter`);
+  return reasons;
+}
 
 const SECTORS = [
   "Technology",
@@ -45,6 +111,15 @@ const MARKET_CAP_PRESETS = [
   { label: "Largecap", subtitle: ">20K Cr", min: 2_400_000_000, max: 0 },
 ] as const;
 
+// Goal-based quick screens (for beginners)
+const GOAL_SCREENS = [
+  { icon: Banknote, label: "I want income", query: "High dividend yield NSE stocks above 2%", color: "text-success" },
+  { icon: TrendingUp, label: "I want growth", query: "Undervalued mid cap stocks with PE under 25 and high ROE", color: "text-accent" },
+  { icon: ShieldCheck, label: "I want safety", query: "Debt-free large cap stocks with strong fundamentals", color: "text-sky-400" },
+  { icon: Target, label: "I want value", query: "Stocks trading near 52 week low with low PE", color: "text-amber-400" },
+];
+
+// Expert preset screens
 const PRESET_SCREENS = [
   { label: "🔥 High Dividend", query: "High dividend yield stocks above 3%" },
   { label: "📈 Low PE Growth", query: "Undervalued stocks with PE under 20 and positive ROE" },
@@ -318,25 +393,34 @@ export default function ScreenerPage() {
         </div>
       </div>
 
-      {/* ── Pre-built Screens chips ── */}
-      <div className="flex shrink-0 items-center gap-2 overflow-x-auto border-b border-border/30 bg-panel/40 px-4 py-2 scrollbar-hide">
-        <Star className="h-3.5 w-3.5 shrink-0 text-accent/70" />
-        <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wider text-muted">
-          Quick Screens
-        </span>
-        <div className="h-3 w-px bg-border/40" />
-        {PRESET_SCREENS.map((screen) => (
-          <button
-            key={screen.label}
-            onClick={() => {
-              setAiQuery(screen.query);
-              handleAISearch(screen.query);
-            }}
-            className="shrink-0 rounded-full border border-border/50 bg-bg/50 px-3 py-1 text-[11px] font-medium text-muted transition hover:border-accent/40 hover:bg-accent/5 hover:text-accent"
-          >
-            {screen.label}
-          </button>
-        ))}
+      {/* ── Goal-based + Expert Screens Bar ── */}
+      <div className="flex shrink-0 flex-col border-b border-border/30">
+        {/* Goal screens row */}
+        <div className="flex items-center gap-2 overflow-x-auto bg-bg/60 px-4 py-2 scrollbar-hide">
+          <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wider text-muted">I want…</span>
+          <div className="h-3 w-px bg-border/40" />
+          {GOAL_SCREENS.map((gs) => (
+            <button
+              key={gs.label}
+              onClick={() => { setAiQuery(gs.query); handleAISearch(gs.query); }}
+              className="group shrink-0 flex items-center gap-1.5 rounded-full border border-border/50 bg-panel/60 px-3 py-1 text-[11px] font-semibold text-muted transition hover:border-accent/40 hover:bg-accent/5 hover:text-text"
+            >
+              <gs.icon className={`h-3 w-3 ${gs.color}`} />
+              {gs.label}
+            </button>
+          ))}
+          <div className="h-3 w-px bg-border/40 mx-1" />
+          <Star className="h-3 w-3 shrink-0 text-accent/50" />
+          {PRESET_SCREENS.map((screen) => (
+            <button
+              key={screen.label}
+              onClick={() => { setAiQuery(screen.query); handleAISearch(screen.query); }}
+              className="shrink-0 rounded-full border border-border/40 bg-bg/50 px-3 py-1 text-[11px] text-muted transition hover:border-accent/30 hover:text-accent"
+            >
+              {screen.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* ── Main Body: Sidebar + Results ── */}
@@ -643,27 +727,31 @@ export default function ScreenerPage() {
                     </th>
                     {(
                       [
-                        { key: "companyName", label: "Name", align: "left" },
-                        { key: "marketCap", label: "Market Cap", align: "right" },
-                        { key: "price", label: "Close Price", align: "right" },
-                        { key: "pe", label: "PE Ratio", align: "right" },
-                        { key: "changePercent", label: "1D Return", align: "right" },
-                        { key: "roe", label: "ROE %", align: "right" },
-                        { key: "dividendYield", label: "Div Yield %", align: "right" },
-                        { key: "sector", label: "Sector", align: "left" },
-                      ] as { key: SortKey; label: string; align: string }[]
-                    ).map(({ key, label, align }) => (
+                        { key: "companyName", label: "Name", align: "left", tip: "" },
+                        { key: "marketCap", label: "Market Cap", align: "right", tip: "Total market value of the company. Largecap >20K Cr, Midcap 5K–20K, Smallcap <5K Cr." },
+                        { key: "price", label: "Close Price", align: "right", tip: "Last traded price of the stock in INR." },
+                        { key: "pe", label: "PE Ratio", align: "right", tip: "Price-to-Earnings ratio. Lower = cheaper stock. Green (<15), Normal (15–30), Expensive (>50)." },
+                        { key: "changePercent", label: "1D Return", align: "right", tip: "Today's price change in %. Green = up, Red = down." },
+                        { key: "roe", label: "ROE %", align: "right", tip: "Return on Equity. How much profit the company makes on shareholders' money. ≥20% is excellent." },
+                        { key: "dividendYield", label: "Div Yield %", align: "right", tip: "Annual dividend paid as % of current price. ≥3% is high. Great for income investors." },
+                        { key: "sector", label: "Sector", align: "left", tip: "" },
+                      ] as { key: SortKey; label: string; align: string; tip: string }[]
+                    ).map(({ key, label, align, tip }) => (
                       <th
                         key={key}
                         onClick={() => handleSort(key)}
                         className={`cursor-pointer whitespace-nowrap px-4 py-3 text-[10px] font-semibold uppercase tracking-wider text-muted transition hover:text-text ${
                           align === "right" ? "text-right" : ""
                         } ${
-                          key === "sector" ? "hidden lg:table-cell" : 
+                          key === "sector" ? "hidden lg:table-cell" :
                           key === "roe" || key === "dividendYield" ? "hidden md:table-cell" : ""
                         }`}
                       >
-                        {label}
+                        {tip ? (
+                          <Tooltip text={tip}>
+                            <span>{label}</span>
+                          </Tooltip>
+                        ) : label}
                         {sortKey === key ? (
                           sortDir === "asc" ? (
                             <ArrowUp className="ml-1 inline h-3 w-3 text-accent" />
@@ -681,8 +769,9 @@ export default function ScreenerPage() {
                   {sortedResults.map((stock, idx) => (
                     <tr
                       key={stock.symbol}
+                      title={`✓ ${getMatchReasons(stock, filters).join(" · ")}`}
                       onClick={() => router.push(buildStockHref(stock.symbol, stock.exchange))}
-                      className="cursor-pointer border-b border-border/20 transition-colors hover:bg-accent/5"
+                      className="group cursor-pointer border-b border-border/20 transition-colors hover:bg-accent/5"
                     >
                       <td className="px-4 py-3 text-[11px] text-muted tabular-nums">{idx + 1}</td>
                       <td className="px-4 py-3">
@@ -700,7 +789,7 @@ export default function ScreenerPage() {
                       <td className="px-4 py-3 text-right font-[var(--font-space)] text-sm font-semibold tabular-nums text-text">
                         ₹{formatNumber(stock.price)}
                       </td>
-                      <td className="px-4 py-3 text-right text-sm tabular-nums text-muted">
+                      <td className={`px-4 py-3 text-right text-sm tabular-nums ${peColor(stock.pe)}`}>
                         {formatNumber(stock.pe)}
                       </td>
                       <td className="px-4 py-3 text-right">
@@ -715,11 +804,11 @@ export default function ScreenerPage() {
                           {formatNumber(stock.changePercent)}%
                         </span>
                       </td>
-                      <td className="hidden px-4 py-3 text-right text-sm tabular-nums text-muted md:table-cell">
-                        {stock.roe ? `${formatNumber(stock.roe)}%` : "-"}
+                      <td className={`hidden px-4 py-3 text-right text-sm tabular-nums md:table-cell ${roeColor(stock.roe)}`}>
+                        {stock.roe != null ? `${formatNumber(stock.roe)}%` : "-"}
                       </td>
-                      <td className="hidden px-4 py-3 text-right text-sm tabular-nums text-muted md:table-cell">
-                        {stock.dividendYield ? `${formatNumber(stock.dividendYield)}%` : "-"}
+                      <td className={`hidden px-4 py-3 text-right text-sm tabular-nums md:table-cell ${divColor(stock.dividendYield)}`}>
+                        {stock.dividendYield != null ? `${formatNumber(stock.dividendYield)}%` : "-"}
                       </td>
                       <td className="hidden px-4 py-3 lg:table-cell">
                         {stock.sector ? (

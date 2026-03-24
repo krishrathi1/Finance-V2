@@ -12,6 +12,7 @@ import {
   ChevronRight,
   CircleDollarSign,
   ExternalLink,
+  Info,
   Layers,
   Loader2,
   RefreshCw,
@@ -61,6 +62,34 @@ function daysUntil(dateStr: string): number | null {
   } catch { return null; }
 }
 
+function getIpoRiskProfile(ipo: IpoItem, tab: Tab) {
+  let score = 0;
+
+  if (!ipo.marketCap || ipo.marketCap < 5e9) score += 1;
+  if (!ipo.priceRange) score += 0.5;
+  if (tab === "recent" && Math.abs(ipo.changePercent ?? 0) >= 10) score += 1;
+  if (tab === "recent" && Math.abs(ipo.changePercent ?? 0) >= 20) score += 1;
+  if (tab === "upcoming" && ipo.status !== "Active") score += 0.5;
+  if ((ipo.shares ?? 0) >= 1e7) score -= 0.5;
+
+  if (score >= 2.5) {
+    return {
+      label: "High Risk",
+      className: "border-danger/30 bg-danger/10 text-danger",
+    };
+  }
+  if (score >= 1) {
+    return {
+      label: "Medium Risk",
+      className: "border-amber-500/30 bg-amber-500/10 text-amber-400",
+    };
+  }
+  return {
+    label: "Low Risk",
+    className: "border-success/30 bg-success/10 text-success",
+  };
+}
+
 const VERDICT_STYLES: Record<string, { bg: string; text: string; border: string; icon: React.ElementType }> = {
   Subscribe: { bg: "bg-success/10", text: "text-success", border: "border-success/30", icon: CheckCircle2 },
   Avoid:     { bg: "bg-danger/10",  text: "text-danger",  border: "border-danger/30",  icon: XCircle },
@@ -84,6 +113,7 @@ function IpoModal({ ipo, tab, onClose }: ModalProps) {
   const [aiError, setAiError] = useState(false);
   const overlayRef = useRef<HTMLDivElement>(null);
   const days = daysUntil(ipo.date);
+  const riskProfile = getIpoRiskProfile(ipo, tab);
 
   useEffect(() => {
     const down = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
@@ -137,6 +167,9 @@ function IpoModal({ ipo, tab, onClose }: ModalProps) {
                     {ipo.exchange}
                   </span>
                 )}
+                <span className={`rounded-md border px-1.5 py-0.5 text-[10px] font-semibold ${riskProfile.className}`}>
+                  {riskProfile.label}
+                </span>
                 {ipo.actions && (
                   <span className="rounded-md bg-accent/10 px-1.5 py-0.5 text-[10px] font-medium text-accent">
                     {ipo.actions}
@@ -208,6 +241,33 @@ function IpoModal({ ipo, tab, onClose }: ModalProps) {
             </div>
           )}
 
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div
+              title="Grey Market Premium is the unofficial premium traders quote before listing. It hints at expected listing gain, but it is not guaranteed."
+              className="rounded-2xl border border-border/40 bg-bg/40 px-4 py-3"
+            >
+              <div className="flex items-center gap-2">
+                <Info className="h-4 w-4 text-accent" />
+                <p className="text-xs font-semibold text-text">What is GMP?</p>
+              </div>
+              <p className="mt-1 text-xs leading-5 text-muted">
+                Grey Market Premium = unofficial expected listing gain. Useful as a sentiment check, not as a guarantee.
+              </p>
+            </div>
+            <div
+              title="Subscription rate shows how many times investors applied for the shares on offer. Higher demand can support listing sentiment, but valuation still matters."
+              className="rounded-2xl border border-border/40 bg-bg/40 px-4 py-3"
+            >
+              <div className="flex items-center gap-2">
+                <Info className="h-4 w-4 text-accent" />
+                <p className="text-xs font-semibold text-text">What is Subscription Rate?</p>
+              </div>
+              <p className="mt-1 text-xs leading-5 text-muted">
+                Subscription rate = demand divided by shares offered. Higher demand can be positive, but price and quality still matter.
+              </p>
+            </div>
+          </div>
+
           {/* Recent — live price info */}
           {tab === "recent" && ipo.currentPrice && (
             <div className="grid grid-cols-3 gap-3">
@@ -265,7 +325,7 @@ function IpoModal({ ipo, tab, onClose }: ModalProps) {
 
           {/* ── AI Analysis ── */}
           <div className="rounded-2xl border border-accent/25 bg-gradient-to-br from-accent/6 via-purple-500/4 to-transparent p-4">
-            <div className="flex items-center justify-between gap-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-2">
                 <Sparkles className="h-4 w-4 text-accent" />
                 <p className="text-sm font-semibold">AI IPO Analysis</p>
@@ -277,11 +337,11 @@ function IpoModal({ ipo, tab, onClose }: ModalProps) {
                 <button
                   onClick={handleAI}
                   disabled={aiLoading}
-                  className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-accent to-amber-500 px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:-translate-y-0.5 disabled:opacity-50"
+                  className="flex items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-accent to-amber-500 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 disabled:opacity-50"
                 >
                   {aiLoading
-                    ? <><Loader2 className="h-3.5 w-3.5 animate-spin" />Analysing…</>
-                    : <><Sparkles className="h-3.5 w-3.5" />Get AI Verdict</>}
+                    ? <><Loader2 className="h-4 w-4 animate-spin" />Analysing...</>
+                    : <><Sparkles className="h-4 w-4" />Run AI IPO Analysis</>}
                 </button>
               )}
               {analysis && (
@@ -404,6 +464,7 @@ function IpoCard({ ipo, tab, onClick }: { ipo: IpoItem; tab: Tab; onClick: () =>
   const symbol = ipo.symbol?.replace(/\.(NS|BO)$/i, "");
   const days = tab === "upcoming" ? daysUntil(ipo.date) : null;
   const initials = (ipo.company || symbol || "?").slice(0, 2).toUpperCase();
+  const riskProfile = getIpoRiskProfile(ipo, tab);
 
   return (
     <button
@@ -432,6 +493,9 @@ function IpoCard({ ipo, tab, onClick }: { ipo: IpoItem; tab: Tab; onClick: () =>
               {ipo.exchange}
             </span>
           )}
+          <span className={`rounded-lg border px-2 py-0.5 text-[10px] font-semibold ${riskProfile.className}`}>
+            {riskProfile.label}
+          </span>
           {days !== null && days >= 0 && days <= 7 && (
             <span className="rounded-lg bg-accent/10 px-2 py-0.5 text-[10px] font-semibold text-accent">
               {days === 0 ? "Today" : `${days}d left`}
@@ -478,10 +542,10 @@ function IpoCard({ ipo, tab, onClick }: { ipo: IpoItem; tab: Tab; onClick: () =>
       <div className="mt-auto flex items-center justify-between border-t border-border/30 pt-3">
         <div className="flex items-center gap-1.5">
           <Sparkles className="h-3.5 w-3.5 text-accent/70" />
-          <span className="text-[11px] font-medium text-muted">AI verdict available</span>
+          <span className="text-[11px] font-medium text-muted">AI verdict + risk view available</span>
         </div>
-        <div className="flex items-center gap-1 text-xs font-semibold text-accent transition group-hover:translate-x-0.5">
-          View Details
+        <div className="flex items-center gap-1 rounded-xl bg-accent/10 px-3 py-1.5 text-xs font-semibold text-accent transition group-hover:translate-x-0.5 group-hover:bg-accent/15">
+          View AI Analysis
           <ChevronRight className="h-3.5 w-3.5" />
         </div>
       </div>
@@ -525,7 +589,7 @@ export default function IpoPage() {
     else setLoading(true);
     setError(null);
     try {
-      const rows = await fetchIpoData(t);
+      const rows = await fetchIpoData(t, { force });
       setData(rows);
     } catch {
       setError("Unable to load IPO data. Please try again.");
@@ -537,6 +601,29 @@ export default function IpoPage() {
   }, []);
 
   useEffect(() => { load(tab); }, [tab, load]);
+
+  useEffect(() => {
+    const refresh = () => {
+      void load(tab, true);
+    };
+
+    const intervalId = window.setInterval(refresh, 30_000);
+    const handleFocus = () => refresh();
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        refresh();
+      }
+    };
+
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [tab, load]);
 
   const stats = useMemo(() => ({
     total: data.length,

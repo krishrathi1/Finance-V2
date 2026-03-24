@@ -8,6 +8,7 @@ export type Holding = {
   buyPrice: number;
   buyDate: string; // ISO date "YYYY-MM-DD"
   notes?: string;
+  targetPrice?: number;
 };
 
 export type HoldingWithValue = Holding & {
@@ -42,7 +43,8 @@ export function addHolding(
   quantity: number,
   buyPrice: number,
   buyDate: string,
-  notes?: string
+  notes?: string,
+  targetPrice?: number
 ): Holding {
   const holding: Holding = {
     id: `${symbol.toUpperCase()}_${Date.now()}`,
@@ -52,6 +54,7 @@ export function addHolding(
     buyPrice,
     buyDate,
     notes,
+    targetPrice,
   };
   const holdings = getHoldings();
   holdings.push(holding);

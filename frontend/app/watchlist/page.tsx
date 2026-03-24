@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
+  Bell,
   Heart,
   List,
   Plus,
@@ -14,15 +15,18 @@ import {
   X,
 } from "lucide-react";
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { PriceAlertButton } from "@/components/price-alert-button";
 import { WatchlistAnalysisButton } from "@/components/watchlist-analysis-button";
 import { fetchTickerTape } from "@/lib/api";
 import {
-  getWatchlist,
-  getWatchlists,
-  removeFromWatchlist,
   createWatchlist,
   deleteWatchlist,
+  getWatchlist,
+  getWatchlistNotes,
+  getWatchlists,
+  removeFromWatchlist,
+  setWatchlistNote,
 } from "@/lib/watchlist";
 
 type TickerRow = {
@@ -32,28 +36,34 @@ type TickerRow = {
   changePercent: number;
 };
 
+function formatPrice(value: number | null) {
+  if (value === null || Number.isNaN(value)) return "---";
+  return `\u20B9${value.toLocaleString("en-IN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
 export default function WatchlistPage() {
   const router = useRouter();
   const [lists, setLists] = useState<string[]>([]);
   const [activeList, setActiveList] = useState("My Watchlist");
   const [symbols, setSymbols] = useState<string[]>([]);
   const [tickerData, setTickerData] = useState<TickerRow[]>([]);
+  const [notesBySymbol, setNotesBySymbol] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [showNewList, setShowNewList] = useState(false);
   const [newListName, setNewListName] = useState("");
 
-  // Load watchlists on mount
   useEffect(() => {
     setLists(getWatchlists());
   }, []);
 
-  // Load symbols when active list changes
   useEffect(() => {
-    const syms = getWatchlist(activeList);
-    setSymbols(syms);
+    setSymbols(getWatchlist(activeList));
+    setNotesBySymbol(getWatchlistNotes(activeList));
   }, [activeList]);
 
-  // Fetch ticker data
   useEffect(() => {
     if (symbols.length === 0) {
       setTickerData([]);
@@ -84,6 +94,11 @@ export default function WatchlistPage() {
       removeFromWatchlist(symbol, activeList);
       setSymbols((prev) => prev.filter((s) => s !== symbol));
       setTickerData((prev) => prev.filter((r) => r.symbol !== symbol));
+      setNotesBySymbol((prev) => {
+        const next = { ...prev };
+        delete next[symbol.toUpperCase()];
+        return next;
+      });
     },
     [activeList]
   );
@@ -111,11 +126,16 @@ export default function WatchlistPage() {
     [activeList]
   );
 
-  // Merge ticker data with symbols (some symbols may not return data)
+  const handleNoteChange = useCallback(
+    (symbol: string, note: string) => {
+      setNotesBySymbol((prev) => ({ ...prev, [symbol.toUpperCase()]: note }));
+      setWatchlistNote(symbol, note, activeList);
+    },
+    [activeList]
+  );
+
   const rows = symbols.map((sym) => {
-    const data = tickerData.find(
-      (r) => r.symbol.toUpperCase() === sym.toUpperCase()
-    );
+    const data = tickerData.find((r) => r.symbol.toUpperCase() === sym.toUpperCase());
     return {
       symbol: sym,
       cmp: data?.cmp ?? null,
@@ -126,7 +146,6 @@ export default function WatchlistPage() {
 
   return (
     <div className="stagger-fade space-y-6 py-4 sm:space-y-8 sm:py-8">
-      {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-sm text-muted">
@@ -141,10 +160,17 @@ export default function WatchlistPage() {
             </span>
           </h1>
           <p className="mt-1 text-xs text-muted sm:text-sm">
-            Track your favorite stocks in one place
+            Track your favorite stocks, set alerts, and keep your own notes.
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <Link
+            href="/alerts"
+            className="flex items-center gap-1.5 rounded-xl border border-accent/30 bg-accent/10 px-3 py-2 text-xs font-semibold text-accent transition hover:bg-accent/15 sm:text-sm"
+          >
+            <Bell className="h-3.5 w-3.5" />
+            Price Alerts
+          </Link>
           <Link
             href="/compare"
             className="flex items-center gap-1.5 rounded-xl border border-border/60 bg-panel/80 px-3 py-2 text-xs font-medium text-muted backdrop-blur-sm transition hover:border-accent/40 hover:text-accent sm:text-sm"
@@ -155,7 +181,24 @@ export default function WatchlistPage() {
         </div>
       </div>
 
-      {/* List Tabs */}
+      <Card className="border-accent/20 bg-gradient-to-r from-accent/8 via-amber-500/5 to-transparent">
+        <CardContent className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-text">Instant alerts and notes for every watchlist stock</p>
+            <p className="mt-1 text-xs text-muted">
+              Use the bell icon for target-price notifications and save quick notes like buy level, target, or why you added the stock.
+            </p>
+          </div>
+          <Link
+            href="/alerts"
+            className="flex shrink-0 items-center gap-2 rounded-xl bg-gradient-to-r from-accent to-amber-500 px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+          >
+            <Bell className="h-3.5 w-3.5" />
+            Manage Alerts
+          </Link>
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-wrap items-center gap-2">
@@ -238,21 +281,17 @@ export default function WatchlistPage() {
         </CardHeader>
 
         <CardContent>
-          {/* Loading State */}
           {loading && symbols.length > 0 && (
             <div className="space-y-3">
-              {Array.from({ length: Math.min(symbols.length, 5) }).map(
-                (_, i) => (
-                  <div
-                    key={i}
-                    className="shimmer h-16 rounded-xl border border-border/40"
-                  />
-                )
-              )}
+              {Array.from({ length: Math.min(symbols.length, 5) }).map((_, i) => (
+                <div
+                  key={i}
+                  className="shimmer h-16 rounded-xl border border-border/40"
+                />
+              ))}
             </div>
           )}
 
-          {/* Empty State */}
           {!loading && symbols.length === 0 && (
             <div className="flex flex-col items-center justify-center py-16 text-center">
               <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-accent/10">
@@ -263,7 +302,7 @@ export default function WatchlistPage() {
               </h3>
               <p className="mt-1 max-w-sm text-sm text-muted">
                 Browse stocks and tap the heart icon to add them here. You can
-                track prices, changes, and quickly navigate to detailed analysis.
+                track prices, changes, alerts, notes, and quickly navigate to detailed analysis.
               </p>
               <Link
                 href="/"
@@ -275,49 +314,53 @@ export default function WatchlistPage() {
             </div>
           )}
 
-          {/* Stock List */}
           {!loading && rows.length > 0 && (
             <div className="space-y-2">
-              {/* Table Header - hidden on mobile */}
-              <div className="hidden grid-cols-[1fr_auto_auto_auto_auto_auto] items-center gap-4 px-4 pb-1 text-[11px] font-medium uppercase tracking-wider text-muted sm:grid">
+              <div className="hidden grid-cols-[1fr_auto_auto_auto_auto_auto_auto] items-center gap-4 px-4 pb-1 text-[11px] font-medium uppercase tracking-wider text-muted sm:grid">
                 <span>Symbol</span>
                 <span className="w-24 text-right">Price</span>
                 <span className="w-24 text-right">Change</span>
                 <span className="w-20 text-right">Change %</span>
+                <span className="w-16 text-right">Alert</span>
                 <span className="w-24 text-right">AI View</span>
                 <span className="w-10" />
               </div>
 
               {rows.map((row) => {
                 const isPositive = (row.change ?? 0) >= 0;
+                const note = notesBySymbol[row.symbol.toUpperCase()] ?? "";
+
                 return (
                   <div
                     key={row.symbol}
-                    className="glow-card group grid grid-cols-[1fr_auto] items-center gap-3 rounded-xl border border-border/50 bg-panel/60 px-4 py-3 backdrop-blur-sm transition sm:grid-cols-[1fr_auto_auto_auto_auto_auto] sm:gap-4"
+                    className="glow-card group grid grid-cols-[1fr_auto] items-center gap-3 rounded-xl border border-border/50 bg-panel/60 px-4 py-3 backdrop-blur-sm transition sm:grid-cols-[1fr_auto_auto_auto_auto_auto_auto] sm:gap-4"
                   >
-                    {/* Symbol */}
-                    <button
-                      onClick={() =>
-                        router.push(`/stocks/${row.symbol}`)
-                      }
-                      className="flex items-center gap-3 text-left"
-                    >
-                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent/10 text-xs font-bold text-accent">
-                        {row.symbol.slice(0, 2)}
-                      </span>
-                      <div>
-                        <p className="text-sm font-semibold transition group-hover:text-accent">
-                          {row.symbol}
-                        </p>
-                        <p className="text-[10px] text-muted sm:hidden">
-                          {row.cmp !== null
-                            ? `₹${row.cmp.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                            : "---"}
-                        </p>
+                    <div className="min-w-0 space-y-2">
+                      <button
+                        onClick={() => router.push(`/stocks/${row.symbol}`)}
+                        className="flex items-center gap-3 text-left"
+                      >
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent/10 text-xs font-bold text-accent">
+                          {row.symbol.slice(0, 2)}
+                        </span>
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold transition group-hover:text-accent">
+                            {row.symbol}
+                          </p>
+                          <p className="text-[10px] text-muted sm:hidden">{formatPrice(row.cmp)}</p>
+                        </div>
+                      </button>
+                      <div className="rounded-lg border border-border/40 bg-bg/35 px-2.5 py-1.5">
+                        <input
+                          type="text"
+                          value={note}
+                          onChange={(e) => handleNoteChange(row.symbol, e.target.value)}
+                          placeholder="Add note: bought at 1400, target 1700"
+                          className="w-full bg-transparent text-[11px] text-muted outline-none placeholder:text-muted/70"
+                        />
                       </div>
-                    </button>
+                    </div>
 
-                    {/* Mobile: Change badge + remove */}
                     <div className="flex items-center gap-2 sm:hidden">
                       {row.changePercent !== null && (
                         <span
@@ -336,6 +379,7 @@ export default function WatchlistPage() {
                           {row.changePercent.toFixed(2)}%
                         </span>
                       )}
+                      <PriceAlertButton symbol={row.symbol} currentPrice={row.cmp ?? 0} />
                       <WatchlistAnalysisButton symbol={row.symbol} compactLabel />
                       <button
                         onClick={() => handleRemove(row.symbol)}
@@ -345,25 +389,18 @@ export default function WatchlistPage() {
                       </button>
                     </div>
 
-                    {/* Desktop: Price */}
                     <span className="hidden w-24 text-right text-sm font-medium sm:block">
-                      {row.cmp !== null
-                        ? `₹${row.cmp.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                        : "---"}
+                      {formatPrice(row.cmp)}
                     </span>
 
-                    {/* Desktop: Change */}
                     <span
                       className={`hidden w-24 text-right text-sm font-medium sm:block ${
                         isPositive ? "text-success" : "text-danger"
                       }`}
                     >
-                      {row.change !== null
-                        ? `${isPositive ? "+" : ""}${row.change.toFixed(2)}`
-                        : "---"}
+                      {row.change !== null ? `${isPositive ? "+" : ""}${row.change.toFixed(2)}` : "---"}
                     </span>
 
-                    {/* Desktop: Change % */}
                     <span className="hidden w-20 sm:flex sm:justify-end">
                       {row.changePercent !== null ? (
                         <span
@@ -386,12 +423,14 @@ export default function WatchlistPage() {
                       )}
                     </span>
 
-                    {/* Desktop: AI Analysis */}
+                    <span className="hidden w-16 sm:flex sm:justify-end">
+                      <PriceAlertButton symbol={row.symbol} currentPrice={row.cmp ?? 0} />
+                    </span>
+
                     <span className="hidden w-24 sm:flex sm:justify-end">
                       <WatchlistAnalysisButton symbol={row.symbol} compactLabel />
                     </span>
 
-                    {/* Desktop: Remove */}
                     <span className="hidden w-10 sm:flex sm:justify-end">
                       <button
                         onClick={() => handleRemove(row.symbol)}

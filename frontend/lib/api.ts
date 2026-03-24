@@ -465,13 +465,17 @@ export async function fetchIpoAiAnalysis(symbol: string): Promise<IpoAiAnalysis>
   }
 }
 
-export async function fetchIpoData(type: "upcoming" | "recent" = "upcoming"): Promise<IpoItem[]> {
+export async function fetchIpoData(
+  type: "upcoming" | "recent" = "upcoming",
+  options: { force?: boolean } = {}
+): Promise<IpoItem[]> {
+  const force = Boolean(options.force);
   const key = `ipo:${type}`;
-  const fresh = getFreshCache<IpoItem[]>(key, 60_000 * 10);
+  const fresh = force ? null : getFreshCache<IpoItem[]>(key, 60_000 * 10);
   if (fresh) return fresh;
   try {
     const res = await fetchWithTimeout(
-      getApiUrl(`/ipo?type=${type}`),
+      getApiUrl(`/ipo?type=${type}${force ? "&refresh=true" : ""}`),
       { cache: "no-store" },
       10_000
     );

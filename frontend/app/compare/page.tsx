@@ -176,19 +176,37 @@ function CompRow({
       <span className="text-xs text-muted sm:text-sm">{label}</span>
       <span
         className={`text-right font-medium ${
-          win === "a" ? "text-success" : "text-text"
+          win === "a" ? "text-success" : win === "b" ? "text-danger" : "text-text"
         }`}
       >
         {valA}
-        {win === "a" && <span className="ml-1 text-[10px] text-success">&#9650;</span>}
+        {win === "a" && (
+          <span className="ml-1 rounded bg-success/10 px-1 py-0.5 text-[9px] font-semibold text-success">
+            Better
+          </span>
+        )}
+        {win === "b" && (
+          <span className="ml-1 rounded bg-danger/10 px-1 py-0.5 text-[9px] font-semibold text-danger">
+            Weaker
+          </span>
+        )}
       </span>
       <span
         className={`text-right font-medium ${
-          win === "b" ? "text-success" : "text-text"
+          win === "b" ? "text-success" : win === "a" ? "text-danger" : "text-text"
         }`}
       >
         {valB}
-        {win === "b" && <span className="ml-1 text-[10px] text-success">&#9650;</span>}
+        {win === "b" && (
+          <span className="ml-1 rounded bg-success/10 px-1 py-0.5 text-[9px] font-semibold text-success">
+            Better
+          </span>
+        )}
+        {win === "a" && (
+          <span className="ml-1 rounded bg-danger/10 px-1 py-0.5 text-[9px] font-semibold text-danger">
+            Weaker
+          </span>
+        )}
       </span>
     </div>
   );
@@ -338,7 +356,39 @@ function ComparePageContent() {
     }
   }, [symbolA, symbolB]);
 
-  const hasData = dataA && dataB;
+  const hasData = Boolean(dataA && dataB);
+  const quickVerdict = dataA && dataB
+    ? (() => {
+        const upsideA =
+          dataA.price.cmp && dataA.price.aiTarget
+            ? ((dataA.price.aiTarget - dataA.price.cmp) / dataA.price.cmp) * 100
+            : 0;
+        const upsideB =
+          dataB.price.cmp && dataB.price.aiTarget
+            ? ((dataB.price.aiTarget - dataB.price.cmp) / dataB.price.cmp) * 100
+            : 0;
+        const scoreA =
+          dataA.smartScore.score * 2 +
+          (5 - dataA.riskScore.score) * 1.5 +
+          upsideA / 10 +
+          ((dataA.metrics.roe ?? 0) - (dataA.metrics.pe ?? 0) / 10);
+        const scoreB =
+          dataB.smartScore.score * 2 +
+          (5 - dataB.riskScore.score) * 1.5 +
+          upsideB / 10 +
+          ((dataB.metrics.roe ?? 0) - (dataB.metrics.pe ?? 0) / 10);
+        const winner = scoreA >= scoreB ? dataA : dataB;
+        const loser = scoreA >= scoreB ? dataB : dataA;
+        return {
+          winner,
+          loser,
+          reason:
+            scoreA >= scoreB
+              ? `${dataA.symbol} looks stronger on quality/risk balance right now.`
+              : `${dataB.symbol} looks stronger on quality/risk balance right now.`,
+        };
+      })()
+    : null;
 
   return (
     <div className="stagger-fade space-y-6 py-4 sm:space-y-8 sm:py-8">
@@ -416,8 +466,36 @@ function ComparePageContent() {
       )}
 
       {/* Results */}
-      {hasData && !loading && (
+      {dataA && dataB && !loading && (
         <div className="space-y-4">
+          {quickVerdict ? (
+            <Card className="border-accent/25 bg-gradient-to-r from-accent/8 via-emerald-500/5 to-transparent">
+              <CardContent className="flex flex-col gap-3 py-4 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="h-4 w-4 text-accent" />
+                    <p className="text-sm font-semibold">Quick Winner</p>
+                    <span className="rounded-full bg-success/10 px-2 py-0.5 text-[10px] font-semibold text-success">
+                      {quickVerdict.winner.symbol}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-sm font-medium text-text">{quickVerdict.reason}</p>
+                  <p className="mt-1 text-xs text-muted">
+                    If you want the simpler pick today, start with {quickVerdict.winner.symbol}. {quickVerdict.loser.symbol} is the weaker option on this snapshot.
+                  </p>
+                </div>
+                <button
+                  onClick={handleAIAnalysis}
+                  disabled={analysisLoading}
+                  className="flex shrink-0 items-center gap-2 rounded-xl border border-accent/30 bg-accent/10 px-4 py-2 text-xs font-semibold text-accent transition hover:bg-accent/15 disabled:opacity-50"
+                >
+                  {analysisLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                  Ask AI: Which One Should I Pick?
+                </button>
+              </CardContent>
+            </Card>
+          ) : null}
+
           <Card className="border-accent/20 bg-gradient-to-r from-accent/6 via-amber-500/5 to-transparent">
             <CardContent className="flex flex-col gap-3 py-4 sm:flex-row sm:items-start sm:justify-between">
               <div>
@@ -440,7 +518,7 @@ function ComparePageContent() {
                 className="flex shrink-0 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-accent to-amber-500 px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md disabled:opacity-50 disabled:hover:translate-y-0"
               >
                 {analysisLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                {analysisLoading ? "Analyzing..." : "AI Analysis"}
+                {analysisLoading ? "Analyzing..." : "Ask AI: Which One Should I Pick?"}
               </button>
             </CardContent>
             {analysis ? (

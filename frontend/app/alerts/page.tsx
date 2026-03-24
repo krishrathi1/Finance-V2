@@ -18,17 +18,21 @@ export default function AlertsPage() {
   const [rows, setRows] = useState<AlertRow[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const loadAlerts = useCallback(async () => {
+  const loadAlerts = useCallback(async (options: { force?: boolean; keepLoading?: boolean } = {}) => {
+    const { force = false, keepLoading = true } = options;
     const alerts = getAlerts();
     if (alerts.length === 0) {
       setRows([]);
       setLoading(false);
       return;
     }
+    if (keepLoading) {
+      setLoading(true);
+    }
     const symbols = [...new Set(alerts.map((a) => a.symbol))];
     let priceMap: Record<string, number> = {};
     try {
-      const tickers = await fetchTickerTape(symbols);
+      const tickers = await fetchTickerTape(symbols, { force });
       for (const t of tickers) {
         priceMap[t.symbol.toUpperCase()] = t.cmp;
       }
@@ -51,6 +55,31 @@ export default function AlertsPage() {
   useEffect(() => {
     loadAlerts();
   }, [loadAlerts]);
+
+  useEffect(() => {
+    if (rows.length === 0) return;
+
+    const refresh = () => {
+      void loadAlerts({ force: true, keepLoading: false });
+    };
+
+    const intervalId = window.setInterval(refresh, 20_000);
+    const handleFocus = () => refresh();
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        refresh();
+      }
+    };
+
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [rows.length, loadAlerts]);
 
   const handleRemove = useCallback(
     (id: string) => {
