@@ -384,7 +384,7 @@ function HoldingRow({
         <p className="text-sm font-medium">{h.quantity.toLocaleString("en-IN")}</p>
       </div>
       <div className="hidden sm:block">
-        <p className="text-xs text-muted">Avg Cost</p>
+        <p className="text-xs text-muted">Buy Cost</p>
         <p className="text-sm font-medium">₹{fmt(h.buyPrice)}</p>
       </div>
       <div className="hidden sm:block">
@@ -769,7 +769,7 @@ export default function PortfolioPage() {
               <div className="hidden grid-cols-[2fr_1fr_1fr_1fr_1fr_auto] items-center gap-3 px-4 text-[11px] font-medium uppercase tracking-wider text-muted sm:grid">
                 <span>Stock</span>
                 <span>Qty</span>
-                <span>Avg Cost</span>
+                <span>Buy Cost</span>
                 <span>Current</span>
                 <span>P&L</span>
                 <span className="w-16" />
