@@ -6,20 +6,22 @@ import {
   Search,
   SlidersHorizontal,
   ChevronDown,
-  ChevronUp,
   RotateCcw,
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
   TrendingUp,
   Filter,
-  BarChart3,
   X,
   Sparkles,
   Send,
+  Zap,
+  BarChart2,
+  DollarSign,
+  Percent,
+  Activity,
+  Star,
 } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
-import { ViewportMotionSection } from "@/components/viewport-motion-section";
 import { fetchScreenerResults, fetchAIScreenerResults } from "@/lib/api";
 import type { ScreenerFilters, ScreenerResult } from "@/lib/types";
 
@@ -37,14 +39,19 @@ const SECTORS = [
   "Real Estate",
 ];
 
-// FMP returns marketCap in USD. Approx conversions at ₹84/USD:
-// 500 Cr ≈ $60M | 5000 Cr ≈ $600M | 20000 Cr ≈ $2.4B
 const MARKET_CAP_PRESETS = [
-  { label: "Micro", subtitle: "<500Cr", min: 0, max: 60_000_000 },
-  { label: "Small", subtitle: "500-5K Cr", min: 60_000_000, max: 600_000_000 },
-  { label: "Mid", subtitle: "5K-20K Cr", min: 600_000_000, max: 2_400_000_000 },
-  { label: "Large", subtitle: ">20K Cr", min: 2_400_000_000, max: 0 },
+  { label: "Smallcap", subtitle: "<5K Cr", min: 0, max: 600_000_000 },
+  { label: "Midcap", subtitle: "5K-20K Cr", min: 600_000_000, max: 2_400_000_000 },
+  { label: "Largecap", subtitle: ">20K Cr", min: 2_400_000_000, max: 0 },
 ] as const;
+
+const PRESET_SCREENS = [
+  { label: "🔥 High Dividend", query: "High dividend yield stocks above 3%" },
+  { label: "📈 Low PE Growth", query: "Undervalued stocks with PE under 20 and positive ROE" },
+  { label: "💎 Debt Free", query: "Debt-free large cap IT stocks" },
+  { label: "🚀 Small Cap Pharma", query: "Small cap pharma companies with strong fundamentals" },
+  { label: "🏦 Banking Leaders", query: "Top private banking stocks with high ROE" },
+];
 
 type SortKey = keyof Pick<
   ScreenerResult,
@@ -66,7 +73,6 @@ const DEFAULT_FILTERS: ScreenerFilters = {
   limit: 100,
 };
 
-// FMP returns marketCap in USD; convert to INR Cr for display (₹84/USD approx)
 function formatMarketCap(usd: number): string {
   if (!usd) return "-";
   const crore = Math.round((usd * 84) / 1e7);
@@ -75,25 +81,41 @@ function formatMarketCap(usd: number): string {
   return `₹${crore} Cr`;
 }
 
-function formatVolume(value: number): string {
-  if (!value) return "-";
-  if (value >= 10000000) return `${(value / 10000000).toFixed(2)} Cr`;
-  if (value >= 100000) return `${(value / 100000).toFixed(2)} L`;
-  if (value >= 1000) return `${(value / 1000).toFixed(1)}K`;
-  return String(value);
-}
-
 function formatNumber(value: number | null | undefined, decimals = 2): string {
   if (value === null || value === undefined || isNaN(value)) return "-";
   return value.toFixed(decimals);
 }
 
-const AI_SUGGESTIONS = [
-  "Debt-free large cap IT stocks with PE under 30",
-  "High dividend yield Finance stocks above 3%",
-  "Small cap pharma companies with strong growth",
-  "Undervalued mid cap stocks with low PE",
-];
+function FilterSection({
+  icon: Icon,
+  title,
+  children,
+  defaultOpen = true,
+}: {
+  icon: React.ElementType;
+  title: string;
+  children: React.ReactNode;
+  defaultOpen?: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="border-b border-border/30 last:border-0">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between px-4 py-3 text-left transition hover:bg-accent/5"
+      >
+        <div className="flex items-center gap-2">
+          <Icon className="h-3.5 w-3.5 text-accent" />
+          <span className="text-xs font-semibold text-text">{title}</span>
+        </div>
+        <ChevronDown
+          className={`h-3.5 w-3.5 text-muted transition-transform ${open ? "rotate-180" : ""}`}
+        />
+      </button>
+      {open && <div className="px-4 pb-4">{children}</div>}
+    </div>
+  );
+}
 
 export default function ScreenerPage() {
   const router = useRouter();
@@ -102,12 +124,10 @@ export default function ScreenerPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
-  const [filtersOpen, setFiltersOpen] = useState(true);
   const [sortKey, setSortKey] = useState<SortKey>("marketCap");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [activeCapPreset, setActiveCapPreset] = useState<number | null>(null);
 
-  // AI Screener state
   const [aiQuery, setAiQuery] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
@@ -119,6 +139,8 @@ export default function ScreenerPage() {
     setLoading(true);
     setError(null);
     setHasSearched(true);
+    setAiMode(false);
+    setAiParsedFilters(null);
     try {
       const data = await fetchScreenerResults(filters);
       setResults(data);
@@ -130,24 +152,27 @@ export default function ScreenerPage() {
     }
   }, [filters]);
 
-  const handleAISearch = useCallback(async (query?: string) => {
-    const q = (query ?? aiQuery).trim();
-    if (!q) return;
-    setAiLoading(true);
-    setAiError(null);
-    setAiMode(true);
-    setHasSearched(true);
-    try {
-      const { results: aiResults, parsedFilters } = await fetchAIScreenerResults(q);
-      setResults(aiResults);
-      setAiParsedFilters(parsedFilters);
-    } catch {
-      setAiError("AI screener unavailable. Try using manual filters below.");
-      setAiMode(false);
-    } finally {
-      setAiLoading(false);
-    }
-  }, [aiQuery]);
+  const handleAISearch = useCallback(
+    async (query?: string) => {
+      const q = (query ?? aiQuery).trim();
+      if (!q) return;
+      setAiLoading(true);
+      setAiError(null);
+      setAiMode(true);
+      setHasSearched(true);
+      try {
+        const { results: aiResults, parsedFilters } = await fetchAIScreenerResults(q);
+        setResults(aiResults);
+        setAiParsedFilters(parsedFilters);
+      } catch {
+        setAiError("AI screener unavailable. Try using manual filters.");
+        setAiMode(false);
+      } finally {
+        setAiLoading(false);
+      }
+    },
+    [aiQuery]
+  );
 
   const resetFilters = () => {
     setFilters({ ...DEFAULT_FILTERS });
@@ -200,15 +225,13 @@ export default function ScreenerPage() {
     }
   };
 
-  // Auto-search on mount with default filters
   useEffect(() => {
     applyFilters();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const SortIcon = ({ col }: { col: SortKey }) => {
-    if (sortKey !== col)
-      return <ArrowUpDown className="ml-1 inline h-3 w-3 text-muted/50" />;
+    if (sortKey !== col) return <ArrowUpDown className="ml-1 inline h-3 w-3 text-muted/40" />;
     return sortDir === "asc" ? (
       <ArrowUp className="ml-1 inline h-3 w-3 text-accent" />
     ) : (
@@ -226,452 +249,427 @@ export default function ScreenerPage() {
   ].filter(Boolean).length;
 
   return (
-    <div className="stagger-fade space-y-5 py-4 sm:space-y-6 sm:py-6">
-      {/* Header */}
-      <div className="flex flex-col gap-1 border-b border-border/40 pb-5 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <div className="flex items-center gap-2">
-            <SlidersHorizontal className="h-4 w-4 text-accent" />
-            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted">Fundamental Screener</p>
-          </div>
-          <h1 className="mt-1.5 font-[var(--font-space)] text-2xl font-bold tracking-tight sm:text-3xl">
+    <div className="flex h-[calc(100vh-4rem)] flex-col overflow-hidden">
+      {/* ── Top Bar ── */}
+      <div className="flex shrink-0 items-center justify-between border-b border-border/40 bg-panel/80 px-4 py-2.5 backdrop-blur-xl">
+        <div className="flex items-center gap-3">
+          <SlidersHorizontal className="h-4 w-4 text-accent" />
+          <h1 className="font-[var(--font-space)] text-base font-bold tracking-tight">
             Stock Screener
           </h1>
-          <p className="mt-1 text-sm text-muted">
-            NSE &amp; BSE &mdash; filter by cap, sector, PE, dividend, and more.
-          </p>
+          <span className="hidden rounded-full border border-border/50 bg-bg/50 px-2 py-0.5 text-[10px] text-muted sm:inline">
+            NSE · BSE
+          </span>
         </div>
-        <div className="flex items-center gap-2 text-[11px] text-muted">
-          <span className="pulse-dot h-1.5 w-1.5 rounded-full bg-success" />
-          <span>Live data</span>
-          <span className="text-border/60">·</span>
-          <span>FMP</span>
+
+        <div className="flex items-center gap-2">
+          {/* AI Search Bar */}
+          <div className="relative hidden sm:flex items-center gap-2">
+            <div className="relative">
+              <Sparkles className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-accent" />
+              <input
+                ref={aiInputRef}
+                type="text"
+                value={aiQuery}
+                onChange={(e) => setAiQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleAISearch();
+                }}
+                placeholder="AI Search: describe stocks in plain English…"
+                className="w-80 rounded-lg border border-accent/30 bg-bg/60 py-1.5 pl-8 pr-3 text-xs outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20"
+              />
+            </div>
+            <button
+              onClick={() => handleAISearch()}
+              disabled={!aiQuery.trim() || aiLoading}
+              className="flex items-center gap-1 rounded-lg bg-gradient-to-r from-accent to-purple-500 px-3 py-1.5 text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+            >
+              {aiLoading ? (
+                <span className="h-3 w-3 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+              ) : (
+                <Send className="h-3 w-3" />
+              )}
+              Search
+            </button>
+          </div>
+
+          <div className="flex items-center gap-1.5 text-[10px] text-muted">
+            <span className="pulse-dot h-1.5 w-1.5 rounded-full bg-success" />
+            Live
+          </div>
+
+          {activeFilterCount > 0 && (
+            <button
+              onClick={resetFilters}
+              className="flex items-center gap-1 rounded-lg border border-border/50 px-2.5 py-1.5 text-[11px] text-muted transition hover:border-danger/40 hover:text-danger"
+            >
+              <RotateCcw className="h-3 w-3" />
+              Reset{" "}
+              <span className="ml-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-accent text-[9px] font-bold text-white">
+                {activeFilterCount}
+              </span>
+            </button>
+          )}
         </div>
       </div>
 
-      {/* AI Natural Language Screener */}
-      <section className="rounded-2xl border border-accent/30 bg-gradient-to-r from-accent/5 via-purple-500/5 to-transparent p-4 sm:p-6">
-        <div className="mb-3 flex items-center gap-2">
-          <Sparkles className="h-4 w-4 text-accent" />
-          <p className="text-sm font-semibold text-accent">AI-Powered Screener</p>
-          <span className="rounded-full bg-accent/10 px-2 py-0.5 text-[10px] font-medium text-accent">NEW</span>
-        </div>
-        <p className="mb-3 text-xs text-muted">
-          Describe stocks in plain English — our AI converts it to filters automatically.
-        </p>
-        <div className="flex gap-2">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
-            <input
-              ref={aiInputRef}
-              type="text"
-              value={aiQuery}
-              onChange={(e) => setAiQuery(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") handleAISearch(); }}
-              placeholder="e.g. Large cap IT stocks with PE under 30 and positive dividends"
-              className="w-full rounded-xl border border-border/60 bg-bg/60 py-2.5 pl-9 pr-4 text-sm outline-none focus:border-accent/50 focus:ring-1 focus:ring-accent/30"
-            />
-          </div>
+      {/* ── Pre-built Screens chips ── */}
+      <div className="flex shrink-0 items-center gap-2 overflow-x-auto border-b border-border/30 bg-panel/40 px-4 py-2 scrollbar-hide">
+        <Star className="h-3.5 w-3.5 shrink-0 text-accent/70" />
+        <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wider text-muted">
+          Quick Screens
+        </span>
+        <div className="h-3 w-px bg-border/40" />
+        {PRESET_SCREENS.map((screen) => (
           <button
-            onClick={() => handleAISearch()}
-            disabled={!aiQuery.trim() || aiLoading}
-            className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-accent to-purple-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 disabled:opacity-50 disabled:translate-y-0"
+            key={screen.label}
+            onClick={() => {
+              setAiQuery(screen.query);
+              handleAISearch(screen.query);
+            }}
+            className="shrink-0 rounded-full border border-border/50 bg-bg/50 px-3 py-1 text-[11px] font-medium text-muted transition hover:border-accent/40 hover:bg-accent/5 hover:text-accent"
           >
-            {aiLoading ? (
-              <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-            ) : (
-              <Send className="h-4 w-4" />
-            )}
-            <span className="hidden sm:inline">Search</span>
+            {screen.label}
           </button>
-        </div>
+        ))}
+      </div>
 
-        {/* Quick suggestions */}
-        <div className="mt-2 flex flex-wrap gap-1.5">
-          {AI_SUGGESTIONS.map((s) => (
-            <button
-              key={s}
-              onClick={() => { setAiQuery(s); handleAISearch(s); }}
-              className="rounded-lg border border-border/50 bg-bg/50 px-2.5 py-1 text-[11px] text-muted transition hover:border-accent/40 hover:text-accent"
-            >
-              {s}
-            </button>
-          ))}
-        </div>
-
-        {/* Parsed filters badge */}
-        {aiMode && aiParsedFilters && Object.keys(aiParsedFilters).length > 0 && (
-          <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px]">
-            <span className="text-muted">Applied filters:</span>
-            {Object.entries(aiParsedFilters).map(([k, v]) => (
-              <span key={k} className="rounded-md bg-accent/10 px-2 py-0.5 font-medium text-accent">
-                {k}: {String(v)}
-              </span>
-            ))}
-          </div>
-        )}
-        {aiError && <p className="mt-2 text-xs text-danger">{aiError}</p>}
-      </section>
-
-      {/* Filters + Results */}
-      <div className="space-y-4">
-        {/* Filter Toggle (mobile) + Header */}
-        <div className="flex items-center justify-between">
-          <button
-            onClick={() => setFiltersOpen((v) => !v)}
-            className="flex items-center gap-2 rounded-xl border border-border/60 bg-panel/80 px-4 py-2 text-sm font-medium text-text backdrop-blur-sm transition hover:border-accent/30"
-          >
-            <SlidersHorizontal className="h-4 w-4 text-accent" />
-            <span>Filters</span>
+      {/* ── Main Body: Sidebar + Results ── */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* ── Left Sidebar ── */}
+        <aside className="hidden w-64 shrink-0 flex-col overflow-y-auto border-r border-border/40 bg-panel/60 backdrop-blur-sm lg:flex">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-border/30">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted">
+              Filters
+            </span>
             {activeFilterCount > 0 && (
-              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-accent text-[10px] font-bold text-white">
-                {activeFilterCount}
-              </span>
-            )}
-            {filtersOpen ? (
-              <ChevronUp className="h-4 w-4 text-muted" />
-            ) : (
-              <ChevronDown className="h-4 w-4 text-muted" />
-            )}
-          </button>
-
-          {hasSearched && !loading && (
-            <p className="text-xs text-muted sm:text-sm">
-              <span className="font-semibold text-text">{results.length}</span> stocks found
-            </p>
-          )}
-        </div>
-
-        {/* Filters Panel */}
-        {filtersOpen && (
-          <Card className="glow-card overflow-hidden">
-            <CardContent className="pt-4">
-              <div className="grid gap-4 sm:gap-5 md:grid-cols-2 lg:grid-cols-3">
-                {/* Exchange Toggle */}
-                <div className="space-y-2">
-                  <label className="flex items-center gap-1.5 text-xs font-medium text-muted">
-                    <BarChart3 className="h-3.5 w-3.5" />
-                    Exchange
-                  </label>
-                  <div className="inline-flex rounded-xl border border-border/40 bg-bg/60 p-1 backdrop-blur-sm">
-                    {["NSE", "BSE"].map((ex) => (
-                      <button
-                        key={ex}
-                        onClick={() => updateFilter("exchange", ex)}
-                        className={`rounded-lg px-4 py-1.5 text-xs font-medium transition sm:text-sm ${
-                          filters.exchange === ex
-                            ? "bg-panel text-text shadow-sm"
-                            : "text-muted hover:text-text"
-                        }`}
-                      >
-                        {ex}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Sector Dropdown */}
-                <div className="space-y-2">
-                  <label className="flex items-center gap-1.5 text-xs font-medium text-muted">
-                    <Filter className="h-3.5 w-3.5" />
-                    Sector
-                  </label>
-                  <div className="relative">
-                    <select
-                      value={filters.sector}
-                      onChange={(e) => updateFilter("sector", e.target.value)}
-                      className="w-full appearance-none rounded-xl border border-border/60 bg-panel/80 px-3 py-2 pr-8 text-xs text-text backdrop-blur-sm outline-none transition focus:border-accent/40 sm:text-sm"
-                    >
-                      <option value="">All Sectors</option>
-                      {SECTORS.map((s) => (
-                        <option key={s} value={s}>
-                          {s}
-                        </option>
-                      ))}
-                    </select>
-                    <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
-                  </div>
-                </div>
-
-                {/* Market Cap Presets */}
-                <div className="space-y-2 md:col-span-2 lg:col-span-1">
-                  <label className="flex items-center gap-1.5 text-xs font-medium text-muted">
-                    <TrendingUp className="h-3.5 w-3.5" />
-                    Market Cap
-                  </label>
-                  <div className="flex flex-wrap gap-2">
-                    {MARKET_CAP_PRESETS.map((preset, i) => (
-                      <button
-                        key={preset.label}
-                        onClick={() => handleCapPreset(i)}
-                        className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition ${
-                          activeCapPreset === i
-                            ? "border-accent/50 bg-accent/10 text-accent"
-                            : "border-border/50 bg-bg/50 text-muted hover:border-accent/30 hover:text-text"
-                        }`}
-                      >
-                        {preset.label}
-                        <span className="ml-1 text-[10px] opacity-70">{preset.subtitle}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* PE Ratio Range */}
-                <div className="space-y-2">
-                  <label className="text-xs font-medium text-muted">PE Ratio Range</label>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="number"
-                      placeholder="Min"
-                      value={filters.pe_min || ""}
-                      onChange={(e) => updateFilter("pe_min", Number(e.target.value) || 0)}
-                      className="w-full rounded-xl border border-border/60 bg-panel/80 px-3 py-2 text-xs text-text backdrop-blur-sm outline-none transition placeholder:text-muted/50 focus:border-accent/40 sm:text-sm"
-                    />
-                    <span className="text-xs text-muted">to</span>
-                    <input
-                      type="number"
-                      placeholder="Max"
-                      value={filters.pe_max || ""}
-                      onChange={(e) => updateFilter("pe_max", Number(e.target.value) || 0)}
-                      className="w-full rounded-xl border border-border/60 bg-panel/80 px-3 py-2 text-xs text-text backdrop-blur-sm outline-none transition placeholder:text-muted/50 focus:border-accent/40 sm:text-sm"
-                    />
-                  </div>
-                </div>
-
-                {/* Price Range */}
-                <div className="space-y-2">
-                  <label className="text-xs font-medium text-muted">Price Range (INR)</label>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="number"
-                      placeholder="Min"
-                      value={filters.price_min || ""}
-                      onChange={(e) => updateFilter("price_min", Number(e.target.value) || 0)}
-                      className="w-full rounded-xl border border-border/60 bg-panel/80 px-3 py-2 text-xs text-text backdrop-blur-sm outline-none transition placeholder:text-muted/50 focus:border-accent/40 sm:text-sm"
-                    />
-                    <span className="text-xs text-muted">to</span>
-                    <input
-                      type="number"
-                      placeholder="Max"
-                      value={filters.price_max || ""}
-                      onChange={(e) => updateFilter("price_max", Number(e.target.value) || 0)}
-                      className="w-full rounded-xl border border-border/60 bg-panel/80 px-3 py-2 text-xs text-text backdrop-blur-sm outline-none transition placeholder:text-muted/50 focus:border-accent/40 sm:text-sm"
-                    />
-                  </div>
-                </div>
-
-                {/* Dividend + Volume */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-2">
-                    <label className="text-xs font-medium text-muted">Min Div. Yield %</label>
-                    <input
-                      type="number"
-                      step="0.1"
-                      placeholder="0"
-                      value={filters.dividend_min || ""}
-                      onChange={(e) => updateFilter("dividend_min", Number(e.target.value) || 0)}
-                      className="w-full rounded-xl border border-border/60 bg-panel/80 px-3 py-2 text-xs text-text backdrop-blur-sm outline-none transition placeholder:text-muted/50 focus:border-accent/40 sm:text-sm"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-xs font-medium text-muted">Min Volume</label>
-                    <input
-                      type="number"
-                      placeholder="0"
-                      value={filters.volume_min || ""}
-                      onChange={(e) => updateFilter("volume_min", Number(e.target.value) || 0)}
-                      className="w-full rounded-xl border border-border/60 bg-panel/80 px-3 py-2 text-xs text-text backdrop-blur-sm outline-none transition placeholder:text-muted/50 focus:border-accent/40 sm:text-sm"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="mt-5 flex flex-wrap items-center gap-3">
-                <button
-                  onClick={applyFilters}
-                  disabled={loading}
-                  className="group relative overflow-hidden rounded-xl bg-gradient-to-r from-accent to-amber-500 px-6 py-2.5 text-sm font-semibold text-white shadow-lg shadow-accent/20 transition hover:shadow-accent/30 disabled:opacity-60"
-                >
-                  <span className="relative z-10 flex items-center gap-2">
-                    <Search className="h-4 w-4" />
-                    {loading ? "Screening..." : "Apply Filters"}
-                  </span>
-                  <span className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/20 to-transparent transition-transform duration-500 group-hover:translate-x-full" />
-                </button>
-
-                <button
-                  onClick={resetFilters}
-                  className="flex items-center gap-1.5 rounded-xl border border-border/60 bg-panel/60 px-4 py-2.5 text-sm font-medium text-muted transition hover:border-danger/30 hover:text-danger"
-                >
-                  <RotateCcw className="h-3.5 w-3.5" />
-                  Reset
-                </button>
-
-                {/* Active filter chips */}
-                {filters.sector && (
-                  <span className="flex items-center gap-1 rounded-full border border-accent/30 bg-accent/10 px-2.5 py-1 text-[10px] font-medium text-accent sm:text-xs">
-                    {filters.sector}
-                    <button
-                      onClick={() => updateFilter("sector", "")}
-                      className="ml-0.5 rounded-full p-0.5 transition hover:bg-accent/20"
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  </span>
-                )}
-                {activeCapPreset !== null && (
-                  <span className="flex items-center gap-1 rounded-full border border-accent/30 bg-accent/10 px-2.5 py-1 text-[10px] font-medium text-accent sm:text-xs">
-                    {MARKET_CAP_PRESETS[activeCapPreset].label} Cap
-                    <button
-                      onClick={() => handleCapPreset(activeCapPreset)}
-                      className="ml-0.5 rounded-full p-0.5 transition hover:bg-accent/20"
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  </span>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Results Table */}
-        <Card className="overflow-hidden">
-          {/* Loading Shimmer */}
-          {loading && (
-            <div className="space-y-0">
-              {/* Shimmer Header */}
-              <div className="border-b border-border/40 px-4 py-3">
-                <div className="shimmer h-4 w-48 rounded-lg" />
-              </div>
-              {/* Shimmer Rows */}
-              {Array.from({ length: 8 }).map((_, i) => (
-                <div
-                  key={i}
-                  className="flex items-center gap-4 border-b border-border/20 px-4 py-3.5"
-                >
-                  <div className="shimmer h-4 w-16 rounded" />
-                  <div className="shimmer h-4 w-32 rounded" />
-                  <div className="shimmer ml-auto h-4 w-16 rounded" />
-                  <div className="shimmer h-4 w-12 rounded" />
-                  <div className="shimmer h-4 w-20 rounded" />
-                  <div className="shimmer hidden h-4 w-12 rounded sm:block" />
-                  <div className="shimmer hidden h-4 w-12 rounded md:block" />
-                  <div className="shimmer hidden h-4 w-12 rounded lg:block" />
-                  <div className="shimmer hidden h-4 w-24 rounded lg:block" />
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Error State */}
-          {!loading && error && (
-            <div className="flex flex-col items-center justify-center px-4 py-16 text-center">
-              <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl border border-danger/30 bg-danger/10">
-                <X className="h-6 w-6 text-danger" />
-              </div>
-              <p className="text-sm font-medium text-text">Something went wrong</p>
-              <p className="mt-1 text-xs text-muted">{error}</p>
-              <button
-                onClick={applyFilters}
-                className="mt-4 rounded-xl bg-accent/10 px-4 py-2 text-xs font-medium text-accent transition hover:bg-accent/20"
-              >
-                Try Again
-              </button>
-            </div>
-          )}
-
-          {/* Empty State */}
-          {!loading && !error && hasSearched && results.length === 0 && (
-            <div className="flex flex-col items-center justify-center px-4 py-16 text-center">
-              <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl border border-border/40 bg-panel/60">
-                <Search className="h-6 w-6 text-muted" />
-              </div>
-              <p className="text-sm font-medium text-text">No stocks match your filters</p>
-              <p className="mt-1 max-w-xs text-xs text-muted">
-                Try broadening your criteria &mdash; reduce restrictions on market cap, PE ratio, or
-                sector to see more results.
-              </p>
               <button
                 onClick={resetFilters}
-                className="mt-4 rounded-xl bg-accent/10 px-4 py-2 text-xs font-medium text-accent transition hover:bg-accent/20"
+                className="text-[10px] text-muted transition hover:text-danger"
               >
-                Reset All Filters
+                Reset all
               </button>
-            </div>
-          )}
+            )}
+          </div>
 
-          {/* Results Table */}
-          {!loading && !error && results.length > 0 && (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[800px] text-left">
-                <thead>
-                  <tr className="border-b border-border/40 bg-bg/40">
-                    <th
-                      onClick={() => handleSort("symbol")}
-                      className="cursor-pointer whitespace-nowrap px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted transition hover:text-text"
+          {/* Exchange */}
+          <FilterSection icon={Activity} title="Exchange">
+            <div className="flex gap-1.5">
+              {["NSE", "BSE"].map((ex) => (
+                <button
+                  key={ex}
+                  onClick={() => updateFilter("exchange", ex)}
+                  className={`flex-1 rounded-lg border py-1.5 text-xs font-semibold transition ${
+                    filters.exchange === ex
+                      ? "border-accent/50 bg-accent/10 text-accent"
+                      : "border-border/50 bg-bg/50 text-muted hover:border-accent/30"
+                  }`}
+                >
+                  {ex}
+                </button>
+              ))}
+            </div>
+          </FilterSection>
+
+          {/* Sector */}
+          <FilterSection icon={Filter} title="Sector">
+            <div className="relative">
+              <select
+                value={filters.sector}
+                onChange={(e) => updateFilter("sector", e.target.value)}
+                className="w-full appearance-none rounded-lg border border-border/50 bg-bg/60 px-3 py-1.5 text-xs text-text outline-none focus:border-accent/40"
+              >
+                <option value="">All Sectors</option>
+                {SECTORS.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-3 w-3 -translate-y-1/2 text-muted" />
+            </div>
+          </FilterSection>
+
+          {/* Market Cap */}
+          <FilterSection icon={TrendingUp} title="Market Cap">
+            <div className="space-y-2">
+              <div className="flex gap-1.5">
+                {MARKET_CAP_PRESETS.map((preset, i) => (
+                  <button
+                    key={preset.label}
+                    onClick={() => handleCapPreset(i)}
+                    className={`flex-1 rounded-lg border py-1 text-[10px] font-semibold transition ${
+                      activeCapPreset === i
+                        ? "border-accent/50 bg-accent/10 text-accent"
+                        : "border-border/50 bg-bg/50 text-muted hover:border-accent/30"
+                    }`}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+              <div className="flex items-center gap-1.5 text-[10px] text-muted">
+                <span>{activeCapPreset !== null ? MARKET_CAP_PRESETS[activeCapPreset].subtitle : "Any"}</span>
+              </div>
+            </div>
+          </FilterSection>
+
+          {/* PE Ratio */}
+          <FilterSection icon={BarChart2} title="PE Ratio" defaultOpen={false}>
+            <div className="flex items-center gap-1.5">
+              <input
+                type="number"
+                placeholder="Min"
+                value={filters.pe_min || ""}
+                onChange={(e) => updateFilter("pe_min", Number(e.target.value) || 0)}
+                className="w-full rounded-lg border border-border/50 bg-bg/60 px-2 py-1.5 text-xs text-text outline-none focus:border-accent/40"
+              />
+              <span className="shrink-0 text-[10px] text-muted">to</span>
+              <input
+                type="number"
+                placeholder="Max"
+                value={filters.pe_max || ""}
+                onChange={(e) => updateFilter("pe_max", Number(e.target.value) || 0)}
+                className="w-full rounded-lg border border-border/50 bg-bg/60 px-2 py-1.5 text-xs text-text outline-none focus:border-accent/40"
+              />
+            </div>
+          </FilterSection>
+
+          {/* Price Range */}
+          <FilterSection icon={DollarSign} title="Price (₹)" defaultOpen={false}>
+            <div className="flex items-center gap-1.5">
+              <input
+                type="number"
+                placeholder="Min"
+                value={filters.price_min || ""}
+                onChange={(e) => updateFilter("price_min", Number(e.target.value) || 0)}
+                className="w-full rounded-lg border border-border/50 bg-bg/60 px-2 py-1.5 text-xs text-text outline-none focus:border-accent/40"
+              />
+              <span className="shrink-0 text-[10px] text-muted">to</span>
+              <input
+                type="number"
+                placeholder="Max"
+                value={filters.price_max || ""}
+                onChange={(e) => updateFilter("price_max", Number(e.target.value) || 0)}
+                className="w-full rounded-lg border border-border/50 bg-bg/60 px-2 py-1.5 text-xs text-text outline-none focus:border-accent/40"
+              />
+            </div>
+          </FilterSection>
+
+          {/* Dividend */}
+          <FilterSection icon={Percent} title="Min Div. Yield %" defaultOpen={false}>
+            <input
+              type="number"
+              step="0.1"
+              placeholder="e.g. 2.5"
+              value={filters.dividend_min || ""}
+              onChange={(e) => updateFilter("dividend_min", Number(e.target.value) || 0)}
+              className="w-full rounded-lg border border-border/50 bg-bg/60 px-2 py-1.5 text-xs text-text outline-none focus:border-accent/40"
+            />
+          </FilterSection>
+
+          {/* Volume */}
+          <FilterSection icon={Zap} title="Min Volume" defaultOpen={false}>
+            <input
+              type="number"
+              placeholder="e.g. 100000"
+              value={filters.volume_min || ""}
+              onChange={(e) => updateFilter("volume_min", Number(e.target.value) || 0)}
+              className="w-full rounded-lg border border-border/50 bg-bg/60 px-2 py-1.5 text-xs text-text outline-none focus:border-accent/40"
+            />
+          </FilterSection>
+
+          {/* Apply Button */}
+          <div className="sticky bottom-0 border-t border-border/40 bg-panel/90 p-4 backdrop-blur-sm">
+            <button
+              onClick={applyFilters}
+              disabled={loading}
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-accent to-amber-500 py-2.5 text-sm font-semibold text-white shadow-md transition hover:opacity-90 disabled:opacity-60"
+            >
+              <Search className="h-4 w-4" />
+              {loading ? "Screening…" : "Apply Filters"}
+            </button>
+          </div>
+        </aside>
+
+        {/* ── Mobile Filters Row (compact horizontal) ── */}
+        <div className="lg:hidden border-b border-border/30 bg-panel/40 px-3 py-2 flex items-center gap-2 overflow-x-auto shrink-0 scrollbar-hide">
+          <select
+            value={filters.exchange}
+            onChange={(e) => updateFilter("exchange", e.target.value)}
+            className="shrink-0 rounded-lg border border-border/50 bg-bg px-2 py-1 text-[11px] text-text outline-none"
+          >
+            <option value="NSE">NSE</option>
+            <option value="BSE">BSE</option>
+          </select>
+          <select
+            value={filters.sector}
+            onChange={(e) => updateFilter("sector", e.target.value)}
+            className="shrink-0 rounded-lg border border-border/50 bg-bg px-2 py-1 text-[11px] text-text outline-none"
+          >
+            <option value="">All Sectors</option>
+            {SECTORS.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
+          {MARKET_CAP_PRESETS.map((preset, i) => (
+            <button
+              key={preset.label}
+              onClick={() => handleCapPreset(i)}
+              className={`shrink-0 rounded-lg border px-2 py-1 text-[11px] font-medium transition ${
+                activeCapPreset === i
+                  ? "border-accent/50 bg-accent/10 text-accent"
+                  : "border-border/50 bg-bg/50 text-muted"
+              }`}
+            >
+              {preset.label}
+            </button>
+          ))}
+          <button
+            onClick={applyFilters}
+            disabled={loading}
+            className="shrink-0 rounded-lg bg-accent px-3 py-1 text-[11px] font-semibold text-white"
+          >
+            {loading ? "…" : "Apply"}
+          </button>
+        </div>
+
+        {/* ── Results Panel ── */}
+        <main className="flex flex-1 flex-col overflow-hidden">
+          {/* Results Header */}
+          <div className="flex shrink-0 items-center justify-between border-b border-border/30 bg-panel/40 px-4 py-2">
+            <div className="flex items-center gap-3">
+              {hasSearched && !loading && (
+                <p className="text-xs text-muted">
+                  Showing{" "}
+                  <span className="font-semibold text-text">1 - {results.length}</span> of{" "}
+                  <span className="font-semibold text-text">{results.length}</span> results
+                </p>
+              )}
+              {loading && <p className="text-xs text-muted">Fetching results…</p>}
+            </div>
+
+            {/* AI parsed filters display */}
+            {aiMode && aiParsedFilters && Object.keys(aiParsedFilters).length > 0 && (
+              <div className="flex flex-wrap items-center gap-1.5">
+                <Sparkles className="h-3 w-3 text-accent" />
+                {Object.entries(aiParsedFilters)
+                  .filter(([, v]) => v && v !== 0 && v !== "")
+                  .slice(0, 4)
+                  .map(([k, v]) => (
+                    <span
+                      key={k}
+                      className="rounded-md bg-accent/10 px-2 py-0.5 text-[10px] font-medium text-accent"
                     >
-                      Symbol
-                      <SortIcon col="symbol" />
+                      {k}: {String(v)}
+                    </span>
+                  ))}
+              </div>
+            )}
+          </div>
+
+          {/* Table Content */}
+          <div className="flex-1 overflow-auto">
+            {/* Loading shimmer */}
+            {loading && (
+              <div>
+                <div className="border-b border-border/30 bg-bg/40 px-4 py-3 flex gap-4">
+                  {[160, 80, 80, 80, 80, 80, 80, 80].map((w, i) => (
+                    <div key={i} className="shimmer h-3 rounded" style={{ width: w }} />
+                  ))}
+                </div>
+                {Array.from({ length: 12 }).map((_, i) => (
+                  <div
+                    key={i}
+                    className="flex items-center gap-4 border-b border-border/20 px-4 py-3.5"
+                  >
+                    {[120, 180, 70, 60, 90, 60, 60, 70].map((w, j) => (
+                      <div key={j} className="shimmer h-3.5 rounded" style={{ width: w }} />
+                    ))}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Error state */}
+            {!loading && error && (
+              <div className="flex flex-col items-center justify-center py-24 text-center">
+                <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl border border-danger/30 bg-danger/10">
+                  <X className="h-6 w-6 text-danger" />
+                </div>
+                <p className="text-sm font-medium">{error}</p>
+                <button
+                  onClick={applyFilters}
+                  className="mt-4 rounded-xl bg-accent/10 px-4 py-2 text-xs font-medium text-accent transition hover:bg-accent/20"
+                >
+                  Try Again
+                </button>
+              </div>
+            )}
+
+            {/* Empty state */}
+            {!loading && !error && hasSearched && results.length === 0 && (
+              <div className="flex flex-col items-center justify-center py-24 text-center">
+                <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl border border-border/40 bg-panel/60">
+                  <Search className="h-6 w-6 text-muted" />
+                </div>
+                <p className="text-sm font-medium">No stocks match your filters</p>
+                <p className="mt-1 max-w-xs text-xs text-muted">
+                  Try relaxing your criteria — reduce restrictions on market cap, PE, or sector.
+                </p>
+                <button
+                  onClick={resetFilters}
+                  className="mt-4 rounded-xl bg-accent/10 px-4 py-2 text-xs font-medium text-accent transition hover:bg-accent/20"
+                >
+                  Reset All Filters
+                </button>
+              </div>
+            )}
+
+            {/* Results Table */}
+            {!loading && !error && results.length > 0 && (
+              <table className="w-full min-w-[780px] text-left">
+                <thead className="sticky top-0 z-10">
+                  <tr className="border-b border-border/40 bg-bg/95 backdrop-blur-sm">
+                    <th className="px-4 py-3 text-[10px] font-semibold uppercase tracking-wider text-muted w-8">
+                      #
                     </th>
-                    <th
-                      onClick={() => handleSort("companyName")}
-                      className="cursor-pointer whitespace-nowrap px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted transition hover:text-text"
-                    >
-                      Company
-                      <SortIcon col="companyName" />
-                    </th>
-                    <th
-                      onClick={() => handleSort("price")}
-                      className="cursor-pointer whitespace-nowrap px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-wider text-muted transition hover:text-text"
-                    >
-                      Price
-                      <SortIcon col="price" />
-                    </th>
-                    <th
-                      onClick={() => handleSort("changePercent")}
-                      className="cursor-pointer whitespace-nowrap px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-wider text-muted transition hover:text-text"
-                    >
-                      Change%
-                      <SortIcon col="changePercent" />
-                    </th>
-                    <th
-                      onClick={() => handleSort("marketCap")}
-                      className="cursor-pointer whitespace-nowrap px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-wider text-muted transition hover:text-text"
-                    >
-                      Market Cap
-                      <SortIcon col="marketCap" />
-                    </th>
-                    <th
-                      onClick={() => handleSort("pe")}
-                      className="hidden cursor-pointer whitespace-nowrap px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-wider text-muted transition hover:text-text sm:table-cell"
-                    >
-                      PE
-                      <SortIcon col="pe" />
-                    </th>
-                    <th
-                      onClick={() => handleSort("roe")}
-                      className="hidden cursor-pointer whitespace-nowrap px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-wider text-muted transition hover:text-text md:table-cell"
-                    >
-                      ROE%
-                      <SortIcon col="roe" />
-                    </th>
-                    <th
-                      onClick={() => handleSort("dividendYield")}
-                      className="hidden cursor-pointer whitespace-nowrap px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-wider text-muted transition hover:text-text md:table-cell"
-                    >
-                      Div Yield%
-                      <SortIcon col="dividendYield" />
-                    </th>
-                    <th
-                      onClick={() => handleSort("sector")}
-                      className="hidden cursor-pointer whitespace-nowrap px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted transition hover:text-text lg:table-cell"
-                    >
-                      Sector
-                      <SortIcon col="sector" />
-                    </th>
+                    {(
+                      [
+                        { key: "companyName", label: "Name", align: "left" },
+                        { key: "marketCap", label: "Market Cap", align: "right" },
+                        { key: "price", label: "Close Price", align: "right" },
+                        { key: "pe", label: "PE Ratio", align: "right" },
+                        { key: "changePercent", label: "1D Return", align: "right" },
+                        { key: "roe", label: "ROE %", align: "right" },
+                        { key: "dividendYield", label: "Div Yield %", align: "right" },
+                        { key: "sector", label: "Sector", align: "left" },
+                      ] as { key: SortKey; label: string; align: string }[]
+                    ).map(({ key, label, align }) => (
+                      <th
+                        key={key}
+                        onClick={() => handleSort(key)}
+                        className={`cursor-pointer whitespace-nowrap px-4 py-3 text-[10px] font-semibold uppercase tracking-wider text-muted transition hover:text-text ${
+                          align === "right" ? "text-right" : ""
+                        } ${
+                          key === "sector" ? "hidden lg:table-cell" : 
+                          key === "roe" || key === "dividendYield" ? "hidden md:table-cell" : ""
+                        }`}
+                      >
+                        {label}
+                        {sortKey === key ? (
+                          sortDir === "asc" ? (
+                            <ArrowUp className="ml-1 inline h-3 w-3 text-accent" />
+                          ) : (
+                            <ArrowDown className="ml-1 inline h-3 w-3 text-accent" />
+                          )
+                        ) : (
+                          <ArrowUpDown className="ml-1 inline h-3 w-3 text-muted/40" />
+                        )}
+                      </th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
@@ -679,24 +677,27 @@ export default function ScreenerPage() {
                     <tr
                       key={stock.symbol}
                       onClick={() => router.push(`/stocks/${stock.symbol}`)}
-                      className={`cursor-pointer border-b border-border/20 transition hover:bg-accent/5 ${
-                        idx % 2 === 0 ? "bg-transparent" : "bg-panel/20"
-                      }`}
+                      className="cursor-pointer border-b border-border/20 transition-colors hover:bg-accent/5"
                     >
-                      <td className="whitespace-nowrap px-4 py-3">
-                        <span className="font-[var(--font-space)] text-sm font-semibold text-accent">
-                          {stock.symbol}
-                        </span>
+                      <td className="px-4 py-3 text-[11px] text-muted tabular-nums">{idx + 1}</td>
+                      <td className="px-4 py-3">
+                        <div>
+                          <p className="text-sm font-semibold text-text">{stock.companyName}</p>
+                          <p className="text-[11px] text-muted">{stock.symbol}</p>
+                        </div>
                       </td>
-                      <td className="max-w-[200px] truncate px-4 py-3 text-sm text-text">
-                        {stock.companyName}
+                      <td className="px-4 py-3 text-right text-sm font-medium tabular-nums text-muted">
+                        {formatMarketCap(stock.marketCap)}
                       </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-right font-[var(--font-space)] text-sm font-medium tabular-nums text-text">
-                        {formatNumber(stock.price)}
+                      <td className="px-4 py-3 text-right font-[var(--font-space)] text-sm font-semibold tabular-nums text-text">
+                        ₹{formatNumber(stock.price)}
                       </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-right">
+                      <td className="px-4 py-3 text-right text-sm tabular-nums text-muted">
+                        {formatNumber(stock.pe)}
+                      </td>
+                      <td className="px-4 py-3 text-right">
                         <span
-                          className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-xs font-semibold tabular-nums ${
+                          className={`inline-block rounded px-1.5 py-0.5 text-xs font-semibold tabular-nums ${
                             stock.changePercent >= 0
                               ? "bg-success/10 text-success"
                               : "bg-danger/10 text-danger"
@@ -706,52 +707,39 @@ export default function ScreenerPage() {
                           {formatNumber(stock.changePercent)}%
                         </span>
                       </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-right text-sm tabular-nums text-muted">
-                        {formatMarketCap(stock.marketCap)}
+                      <td className="hidden px-4 py-3 text-right text-sm tabular-nums text-muted md:table-cell">
+                        {stock.roe ? `${formatNumber(stock.roe)}%` : "-"}
                       </td>
-                      <td className="hidden whitespace-nowrap px-4 py-3 text-right text-sm tabular-nums text-muted sm:table-cell">
-                        {formatNumber(stock.pe)}
+                      <td className="hidden px-4 py-3 text-right text-sm tabular-nums text-muted md:table-cell">
+                        {stock.dividendYield ? `${formatNumber(stock.dividendYield)}%` : "-"}
                       </td>
-                      <td className="hidden whitespace-nowrap px-4 py-3 text-right text-sm tabular-nums text-muted md:table-cell">
-                        {formatNumber(stock.roe)}
-                      </td>
-                      <td className="hidden whitespace-nowrap px-4 py-3 text-right text-sm tabular-nums text-muted md:table-cell">
-                        {formatNumber(stock.dividendYield)}
-                      </td>
-                      <td className="hidden whitespace-nowrap px-4 py-3 lg:table-cell">
-                        <span className="rounded-full border border-border/50 bg-bg/50 px-2 py-0.5 text-[10px] font-medium text-muted">
-                          {stock.sector || "-"}
-                        </span>
+                      <td className="hidden px-4 py-3 lg:table-cell">
+                        {stock.sector ? (
+                          <span className="rounded-full border border-border/50 bg-bg/60 px-2 py-0.5 text-[10px] font-medium text-muted">
+                            {stock.sector}
+                          </span>
+                        ) : (
+                          <span className="text-[11px] text-muted/40">-</span>
+                        )}
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-            </div>
-          )}
+            )}
+          </div>
 
-          {/* Results Footer */}
-          {!loading && !error && results.length > 0 && (
-            <div className="border-t border-border/40 px-4 py-3">
-              <p className="text-[10px] text-muted sm:text-xs">
-                Showing {results.length} result{results.length !== 1 ? "s" : ""} &middot; Sorted by{" "}
-                <span className="font-medium text-text">
-                  {sortKey === "changePercent"
-                    ? "Change%"
-                    : sortKey === "companyName"
-                    ? "Company"
-                    : sortKey === "marketCap"
-                    ? "Market Cap"
-                    : sortKey === "dividendYield"
-                    ? "Div Yield"
-                    : sortKey.toUpperCase()}
-                </span>{" "}
-                ({sortDir === "asc" ? "ascending" : "descending"}) &middot; Click any row to view
-                detailed analysis
+          {/* Footer */}
+          {!loading && results.length > 0 && (
+            <div className="shrink-0 border-t border-border/30 bg-panel/40 px-4 py-2">
+              <p className="text-[10px] text-muted">
+                {results.length} results · Sorted by{" "}
+                <span className="text-text">{sortKey}</span> ({sortDir}) · Click any row to open
+                stock analysis
               </p>
             </div>
           )}
-        </Card>
+        </main>
       </div>
     </div>
   );
