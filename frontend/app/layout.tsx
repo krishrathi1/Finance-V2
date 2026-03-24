@@ -4,6 +4,7 @@ import { Manrope, Space_Grotesk } from "next/font/google";
 
 import { DisplaySettingsProvider } from "@/components/display-settings-provider";
 import { DisplaySettingsToggle } from "@/components/display-settings-toggle";
+import { MarketStatusBadge } from "@/components/market-status-badge";
 import { ModeToggle } from "@/components/mode-toggle";
 import { NavLinks } from "@/components/nav-links";
 import { MarketTicker } from "@/components/market-ticker";
@@ -108,9 +109,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                     <p className="mt-3 max-w-[210px] text-xs leading-5 text-muted">
                       AI-powered equity research for NSE &amp; BSE — Smart Scores, risk analysis &amp; live market data.
                     </p>
-                    <div className="mt-3 flex items-center gap-1.5">
-                      <span className="pulse-dot h-1.5 w-1.5 rounded-full bg-success" />
-                      <span className="text-[10px] font-medium text-success">Live Market Data</span>
+                    <div className="mt-3">
+                      <MarketStatusBadge />
                     </div>
                   </div>
 
