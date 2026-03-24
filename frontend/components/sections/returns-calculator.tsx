@@ -141,9 +141,12 @@ export function ReturnsCalculator({
               <p className="mt-2 text-[15px] font-semibold text-emerald-500">{formatCurrency(bullFuture)}</p>
             </div>
           </div>
-          <div className="mt-4 h-40 w-full">
+          <div className="mt-4 h-40 w-full -ml-1 sm:ml-0">
             <ResponsiveContainer>
-              <AreaChart data={simulation.series}>
+              <AreaChart
+                data={simulation.series}
+                margin={{ top: 6, right: 6, bottom: 0, left: -18 }}
+              >
                 <defs>
                   <linearGradient id="roiBandFill" x1="0" x2="0" y1="0" y2="1">
                     <stop offset="0%" stopColor="#58d68d" stopOpacity={0.22} />
@@ -151,13 +154,21 @@ export function ReturnsCalculator({
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="4 4" stroke="rgba(130, 148, 179, 0.18)" />
-                <XAxis dataKey="yearLabel" tick={{ fill: "currentColor", fontSize: 10 }} axisLine={false} tickLine={false} />
+                <XAxis
+                  dataKey="yearLabel"
+                  tick={{ fill: "currentColor", fontSize: 10 }}
+                  axisLine={false}
+                  tickLine={false}
+                  tickMargin={8}
+                  padding={{ left: 0, right: 0 }}
+                />
                 <YAxis
                   tick={{ fill: "currentColor", fontSize: 10 }}
                   axisLine={false}
                   tickLine={false}
                   tickFormatter={(value) => formatCurrency(Number(value))}
-                  width={90}
+                  tickMargin={4}
+                  width={72}
                 />
                 <Tooltip
                   formatter={(value: number | string | undefined, name: string | undefined) => [formatCurrency(Number(value ?? 0)), name ?? "Value"]}
