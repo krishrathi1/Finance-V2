@@ -9,6 +9,7 @@ import {
   Edit2,
   Minus,
   Plus,
+  Search,
   ShieldAlert,
   Sparkles,
   Trash2,
@@ -24,7 +25,7 @@ import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PortfolioDoctor } from "@/components/sections/portfolio-doctor";
-import { fetchTickerTape, fetchPortfolioRiskAssessment } from "@/lib/api";
+import { fetchTickerTape, fetchPortfolioRiskAssessment, searchStocks } from "@/lib/api";
 import {
   addHolding,
   enrichHoldings,
@@ -68,6 +69,8 @@ type ModalProps = {
   onSave: () => void;
 };
 
+type SearchResult = { symbol: string; name: string; exchange: string };
+
 function HoldingModal({ editing, onClose, onSave }: ModalProps) {
   const [symbol, setSymbol] = useState(editing?.symbol ?? "");
   const [companyName, setCompanyName] = useState(editing?.companyName ?? "");
@@ -76,11 +79,42 @@ function HoldingModal({ editing, onClose, onSave }: ModalProps) {
   const [buyDate, setBuyDate] = useState(editing?.buyDate ?? today());
   const [notes, setNotes] = useState(editing?.notes ?? "");
   const [error, setError] = useState("");
-  const symbolRef = useRef<HTMLInputElement>(null);
+
+  // Symbol autocomplete state
+  const [query, setQuery] = useState(editing?.symbol ?? "");
+  const [results, setResults] = useState<SearchResult[]>([]);
+  const [open, setOpen] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    setTimeout(() => symbolRef.current?.focus(), 50);
+    function handleClickOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  function handleSymbolSearch(q: string) {
+    setQuery(q);
+    setSymbol(q.toUpperCase());
+    if (timerRef.current) clearTimeout(timerRef.current);
+    if (q.trim().length < 1) { setResults([]); setOpen(false); return; }
+    timerRef.current = setTimeout(async () => {
+      const res = await searchStocks(q);
+      setResults(res);
+      setOpen(res.length > 0);
+    }, 250);
+  }
+
+  function selectResult(item: SearchResult) {
+    setQuery(item.symbol);
+    setSymbol(item.symbol);
+    setCompanyName(item.name);
+    setOpen(false);
+  }
 
   const handleSave = useCallback(() => {
     const sym = symbol.trim().toUpperCase();
@@ -124,27 +158,49 @@ function HoldingModal({ editing, onClose, onSave }: ModalProps) {
         </div>
 
         <div className="space-y-3">
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <p className="mb-1 text-xs font-medium text-muted">Symbol *</p>
+          {/* Symbol search with autocomplete */}
+          <div ref={containerRef} className={`relative ${open ? "z-[80]" : "z-0"}`}>
+            <p className="mb-1 text-xs font-medium text-muted">Company Name *</p>
+            <div className="flex items-center rounded-xl border border-border/60 bg-bg/60 px-3 focus-within:border-accent/50 focus-within:ring-1 focus-within:ring-accent/30">
+              <Search className="mr-2 h-3.5 w-3.5 shrink-0 text-muted" />
               <input
-                ref={symbolRef}
-                value={symbol}
-                onChange={(e) => setSymbol(e.target.value.toUpperCase())}
-                placeholder="e.g. RELIANCE"
-                className="w-full rounded-xl border border-border/60 bg-bg/60 px-3 py-2 text-sm uppercase outline-none focus:border-accent/50 focus:ring-1 focus:ring-accent/30"
+                value={query}
+                onChange={(e) => handleSymbolSearch(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && query.trim()) {
+                    setSymbol(query.toUpperCase());
+                    setOpen(false);
+                  }
+                }}
+                onFocus={() => { if (results.length > 0) setOpen(true); }}
+                placeholder="Search company or symbol…"
+                className="h-9 w-full bg-transparent text-sm uppercase outline-none"
               />
             </div>
-            <div>
-              <p className="mb-1 text-xs font-medium text-muted">Company Name</p>
-              <input
-                value={companyName}
-                onChange={(e) => setCompanyName(e.target.value)}
-                placeholder="Optional"
-                className="w-full rounded-xl border border-border/60 bg-bg/60 px-3 py-2 text-sm outline-none focus:border-accent/50 focus:ring-1 focus:ring-accent/30"
-              />
-            </div>
+            {open && results.length > 0 && (
+              <div className="absolute left-0 right-0 top-full z-[90] mt-1 max-h-52 overflow-y-auto rounded-xl border border-border/60 bg-panel/95 p-1 shadow-2xl backdrop-blur-xl">
+                {results.map((item) => (
+                  <button
+                    key={item.symbol}
+                    onMouseDown={(e) => { e.preventDefault(); selectResult(item); }}
+                    className="flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left transition hover:bg-accent/8"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <span className="flex h-6 w-6 items-center justify-center rounded-md bg-accent/10 text-[10px] font-bold text-accent">
+                        {item.symbol.slice(0, 2)}
+                      </span>
+                      <div>
+                        <p className="text-xs font-semibold">{item.symbol}</p>
+                        <p className="text-[10px] text-muted">{item.name}</p>
+                      </div>
+                    </div>
+                    <span className="rounded-md bg-bg px-1.5 py-0.5 text-[10px] text-muted">{item.exchange}</span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
+
 
           <div className="grid grid-cols-2 gap-3">
             <div>
