@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { AnimatePresence, motion } from "framer-motion";
 import { Maximize2, X } from "lucide-react";
@@ -158,7 +158,10 @@ export function PriceSidebar({ data }: { data: DashboardData }) {
         </div>
 
         <div className="mt-4 rounded-xl border border-border/70 p-3">
-          <p className="text-sm font-semibold">Investor Sentiment</p>
+          <div className="flex items-start justify-between gap-2">
+            <p className="text-sm font-semibold">News Sentiment</p>
+            <p className="text-[10px] text-muted/60 mt-0.5">From recent news</p>
+          </div>
           {bullish === null || bearish === null ? (
             <p className="mt-2 text-xs text-muted">Live sentiment data is unavailable right now.</p>
           ) : (
@@ -168,9 +171,10 @@ export function PriceSidebar({ data }: { data: DashboardData }) {
                 <div className="bg-danger" style={{ width: `${bearish}%` }} />
               </div>
               <div className="mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs">
-                <p className="text-success">{bullish}% Bullish</p>
-                <p className="text-danger">{bearish}% Bearish</p>
+                <p className="text-success">{bullish}% Positive</p>
+                <p className="text-danger">{bearish}% Negative</p>
               </div>
+              <p className="mt-1.5 text-[10px] text-muted/50">Derived from news tone · Not a trader poll</p>
             </>
           )}
         </div>

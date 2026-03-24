@@ -65,30 +65,45 @@ function daysUntil(dateStr: string): number | null {
 
 function getIpoRiskProfile(ipo: IpoItem, tab: Tab) {
   let score = 0;
+  const reasons: string[] = [];
 
-  if (!ipo.marketCap || ipo.marketCap < 5e9) score += 1;
-  if (!ipo.priceRange) score += 0.5;
-  if (tab === "recent" && Math.abs(ipo.changePercent ?? 0) >= 10) score += 1;
-  if (tab === "recent" && Math.abs(ipo.changePercent ?? 0) >= 20) score += 1;
-  if (tab === "upcoming" && ipo.status !== "Active") score += 0.5;
-  if ((ipo.shares ?? 0) >= 1e7) score -= 0.5;
+  const capCr = ipo.marketCap ? Math.round((ipo.marketCap * 84) / 1e7) : 0;
+  if (!ipo.marketCap || ipo.marketCap < 5e9) {
+    score += 1;
+    reasons.push(`Small issue size (~₹${capCr > 0 ? capCr + " Cr" : "unknown"}) — smaller IPOs carry more risk`);
+  }
+  if (!ipo.priceRange) {
+    score += 0.5;
+    reasons.push("Price band not yet disclosed");
+  }
+  if (tab === "recent" && Math.abs(ipo.changePercent ?? 0) >= 10) {
+    score += 1;
+    reasons.push(`High listing volatility (${(ipo.changePercent ?? 0).toFixed(1)}% change)`);
+  }
+  if (tab === "recent" && Math.abs(ipo.changePercent ?? 0) >= 20) {
+    score += 1;
+    reasons.push("Extreme listing swing (>20%)");
+  }
+  if (tab === "upcoming" && ipo.status !== "Active") {
+    score += 0.5;
+    reasons.push("Subscription not yet open");
+  }
+  if ((ipo.shares ?? 0) >= 1e7) {
+    score -= 0.5;
+    reasons.push("Large float — better liquidity (reduces risk)");
+  }
+
+  if (reasons.length === 0) reasons.push("No major risk flags detected from available data");
+
+  const tooltip = `Est. risk based on: ${reasons.join(" · ")}. Not a SEBI rating. Run AI Analysis for deeper due diligence.`;
 
   if (score >= 2.5) {
-    return {
-      label: "High Risk",
-      className: "border-danger/30 bg-danger/10 text-danger",
-    };
+    return { label: "High Risk", className: "border-danger/30 bg-danger/10 text-danger", tooltip };
   }
   if (score >= 1) {
-    return {
-      label: "Medium Risk",
-      className: "border-amber-500/30 bg-amber-500/10 text-amber-400",
-    };
+    return { label: "Medium Risk", className: "border-amber-500/30 bg-amber-500/10 text-amber-400", tooltip };
   }
-  return {
-    label: "Low Risk",
-    className: "border-success/30 bg-success/10 text-success",
-  };
+  return { label: "Low Risk", className: "border-success/30 bg-success/10 text-success", tooltip };
 }
 
 const VERDICT_STYLES: Record<string, { bg: string; text: string; border: string; icon: React.ElementType }> = {
@@ -168,8 +183,11 @@ function IpoModal({ ipo, tab, onClose }: ModalProps) {
                     {ipo.exchange}
                   </span>
                 )}
-                <span className={`rounded-md border px-1.5 py-0.5 text-[10px] font-semibold ${riskProfile.className}`}>
-                  {riskProfile.label}
+                <span
+                  title={riskProfile.tooltip}
+                  className={`rounded-md border px-1.5 py-0.5 text-[10px] font-semibold cursor-help ${riskProfile.className}`}
+                >
+                  Est. {riskProfile.label}
                 </span>
                 {ipo.actions && (
                   <span className="rounded-md bg-accent/10 px-1.5 py-0.5 text-[10px] font-medium text-accent">
@@ -494,8 +512,11 @@ function IpoCard({ ipo, tab, onClick }: { ipo: IpoItem; tab: Tab; onClick: () =>
               {ipo.exchange}
             </span>
           )}
-          <span className={`rounded-lg border px-2 py-0.5 text-[10px] font-semibold ${riskProfile.className}`}>
-            {riskProfile.label}
+          <span
+            title={riskProfile.tooltip}
+            className={`rounded-lg border px-2 py-0.5 text-[10px] font-semibold cursor-help ${riskProfile.className}`}
+          >
+            Est. {riskProfile.label}
           </span>
           {days !== null && days >= 0 && days <= 7 && (
             <span className="rounded-lg bg-accent/10 px-2 py-0.5 text-[10px] font-semibold text-accent">

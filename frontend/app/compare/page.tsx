@@ -478,10 +478,13 @@ function ComparePageContent() {
                     <span className="rounded-full bg-success/10 px-2 py-0.5 text-[10px] font-semibold text-success">
                       {quickVerdict.winner.symbol}
                     </span>
+                    <span className="rounded-full border border-border/50 bg-bg/60 px-1.5 py-0.5 text-[9px] text-muted">
+                      Algorithmic estimate
+                    </span>
                   </div>
                   <p className="mt-1 text-sm font-medium text-text">{quickVerdict.reason}</p>
                   <p className="mt-1 text-xs text-muted">
-                    If you want the simpler pick today, start with {quickVerdict.winner.symbol}. {quickVerdict.loser.symbol} is the weaker option on this snapshot.
+                    Based on SmartScore, RiskScore, ROE, and AI target gap. Ask AI below for a fuller analysis.
                   </p>
                 </div>
                 <button

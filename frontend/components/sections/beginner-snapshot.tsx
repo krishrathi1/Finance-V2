@@ -131,17 +131,18 @@ export function BeginnerSnapshot({
             </div>
             <p className={`mt-2 text-xl font-semibold ${targetTone}`}>{targetGap >= 0 ? "+" : ""}{targetGap.toFixed(2)}%</p>
             <p className="mt-1 text-sm text-muted">
-              Current {formatCurrency(currentPrice)} vs target {formatCurrency(aiTarget)}
+              Current {formatCurrency(currentPrice)} vs analyst target {formatCurrency(aiTarget)}
             </p>
+            <p className="mt-1 text-[10px] text-muted/50">Source: FMP analyst consensus</p>
           </div>
           <div className="rounded-2xl border border-border/60 bg-bg/35 p-3.5">
             <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted">
               <Target className="h-3.5 w-3.5" />
-              Estimate reliability
+              ML Signal Reliability
             </div>
             <p className={`mt-2 text-xl font-semibold ${reliability.tone}`}>{reliability.label}</p>
             <p className="mt-1 text-sm text-muted">
-              Based on the current ML confidence signal already used in your score.
+              Walk-forward ML model trained on this stock’s own price history.
             </p>
           </div>
         </div>
