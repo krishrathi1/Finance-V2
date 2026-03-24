@@ -174,7 +174,7 @@ function HoldingModal({ editing, onClose, onSave }: ModalProps) {
                 }}
                 onFocus={() => { if (results.length > 0) setOpen(true); }}
                 placeholder="Search company or symbol…"
-                className="h-9 w-full bg-transparent text-sm uppercase outline-none"
+                className="h-9 w-full bg-transparent text-sm uppercase outline-none focus:outline-none focus:ring-0 border-0 border-transparent focus:border-transparent"
               />
             </div>
             {open && results.length > 0 && (
