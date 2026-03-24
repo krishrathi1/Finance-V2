@@ -33,9 +33,9 @@ async def _refresh_market_news_cache(today: str, cache_key: str, stale_key: str)
         return
 
 
-async def _refresh_dashboard_cache(symbol: str, timeframe: str, cache_key: str, stale_key: str) -> None:
+async def _refresh_dashboard_cache(symbol: str, timeframe: str, cache_key: str, stale_key: str, exchange: str = "NSE") -> None:
     try:
-        data = await asyncio.wait_for(dashboard_service.get_dashboard(symbol=symbol, timeframe=timeframe), timeout=55)
+        data = await asyncio.wait_for(dashboard_service.get_dashboard(symbol=symbol, timeframe=timeframe, exchange=exchange), timeout=55)
         data = await _enrich_score_explanations(symbol=symbol, data=data, allow_gemini=True)
         await redis_cache.set_json(cache_key, data, ttl_seconds=settings.cache_ttl_seconds)
         await redis_cache.set_json(stale_key, data, ttl_seconds=60 * 60 * 24 * 7)
@@ -492,7 +492,7 @@ async def stock_screener(
 ) -> dict:
     param_str = f"{exchange}:{sector}:{industry}:{market_cap_min}:{market_cap_max}:{pe_min}:{pe_max}:{price_min}:{price_max}:{dividend_min}:{volume_min}:{limit}"
     param_hash = hashlib.md5(param_str.encode()).hexdigest()
-    cache_key = f"screener:v3:{param_hash}"
+    cache_key = f"screener:v4:{param_hash}"
 
     cached = await redis_cache.get_json(cache_key)
     if cached and cached.get("results"):
@@ -822,32 +822,34 @@ async def get_stock_dashboard(
     symbol: str,
     timeframe: str = Query("5Y"),
     refresh: bool = Query(False),
+    exchange: str = Query("NSE"),
 ) -> dict:
-    cache_key = f"dashboard:{symbol.upper()}:{timeframe}"
-    stale_key = f"dashboard:last:{symbol.upper()}:{timeframe}"
+    normalized_exchange = str(exchange or "NSE").strip().upper()
+    cache_key = f"dashboard:{symbol.upper()}:{timeframe}:{normalized_exchange}"
+    stale_key = f"dashboard:last:{symbol.upper()}:{timeframe}:{normalized_exchange}"
     cached = await redis_cache.get_json(cache_key) if not refresh else None
     if cached:
         cached = await _enrich_score_explanations(symbol=symbol, data=cached, allow_gemini=False)
         if _dashboard_needs_ai_refresh(cached):
-            asyncio.create_task(_refresh_dashboard_cache(symbol=symbol, timeframe=timeframe, cache_key=cache_key, stale_key=stale_key))
+            asyncio.create_task(_refresh_dashboard_cache(symbol=symbol, timeframe=timeframe, cache_key=cache_key, stale_key=stale_key, exchange=normalized_exchange))
         await redis_cache.set_json(cache_key, cached, ttl_seconds=settings.cache_ttl_seconds)
         await redis_cache.set_json(stale_key, cached, ttl_seconds=60 * 60 * 24 * 7)
         return {"cached": True, "data": cached}
 
     try:
-        data = await asyncio.wait_for(dashboard_service.get_dashboard(symbol=symbol, timeframe=timeframe), timeout=12)
+        data = await asyncio.wait_for(dashboard_service.get_dashboard(symbol=symbol, timeframe=timeframe, exchange=normalized_exchange), timeout=12)
         data = await _enrich_score_explanations(symbol=symbol, data=data, allow_gemini=False)
         await redis_cache.set_json(cache_key, data, ttl_seconds=settings.cache_ttl_seconds)
         await redis_cache.set_json(stale_key, data, ttl_seconds=60 * 60 * 24 * 7)
         if bool(str(settings.gemini_api_key or "").strip()):
-            asyncio.create_task(_refresh_dashboard_cache(symbol=symbol, timeframe=timeframe, cache_key=cache_key, stale_key=stale_key))
+            asyncio.create_task(_refresh_dashboard_cache(symbol=symbol, timeframe=timeframe, cache_key=cache_key, stale_key=stale_key, exchange=normalized_exchange))
         return {"cached": False, "data": data}
     except Exception as exc:
         stale = await redis_cache.get_json(stale_key)
         if stale:
-            asyncio.create_task(_refresh_dashboard_cache(symbol=symbol, timeframe=timeframe, cache_key=cache_key, stale_key=stale_key))
+            asyncio.create_task(_refresh_dashboard_cache(symbol=symbol, timeframe=timeframe, cache_key=cache_key, stale_key=stale_key, exchange=normalized_exchange))
             return {"cached": True, "stale": True, "data": stale}
-        asyncio.create_task(_refresh_dashboard_cache(symbol=symbol, timeframe=timeframe, cache_key=cache_key, stale_key=stale_key))
+        asyncio.create_task(_refresh_dashboard_cache(symbol=symbol, timeframe=timeframe, cache_key=cache_key, stale_key=stale_key, exchange=normalized_exchange))
         fallback = get_sample_dashboard(symbol=symbol)
         fallback["timeframe"] = timeframe
         fallback = await _enrich_score_explanations(symbol=symbol, data=fallback, allow_gemini=False)

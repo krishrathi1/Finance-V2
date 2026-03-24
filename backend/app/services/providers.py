@@ -773,6 +773,7 @@ class MarketDataProviders:
 
             result = {
                 "symbol": key,
+                "exchange": "BSE" if str(ticker).upper().endswith(".BO") else "NSE",
                 "companyName": company_name or key,
                 "price": last_price,
                 "change": change,
@@ -2918,7 +2919,7 @@ class MarketDataProviders:
 
     async def get_yahoo_quote(self, symbol: str) -> dict[str, Any] | None:
         key = symbol.upper()
-        if not key.endswith(".NS") and not key.endswith(".BO"):
+        if not key.startswith("^") and not key.endswith(".NS") and not key.endswith(".BO"):
             key = f"{key}.NS"
         try:
             payload = await self._get(
@@ -3519,9 +3520,12 @@ class MarketDataProviders:
                 sym = str(item.get("symbol") or "").replace(".NS", "").replace(".BO", "")
                 if not sym:
                     continue
+                raw_exchange = str(item.get("exchangeShortName") or item.get("exchange") or exchange or "").strip().upper()
+                normalized_exchange = "BSE" if "BSE" in raw_exchange or raw_exchange.endswith(".BO") else "NSE"
                 results.append({
                     "symbol": sym,
                     "companyName": str(item.get("companyName") or item.get("name") or ""),
+                    "exchange": normalized_exchange,
                     "marketCap": float(item.get("marketCap") or 0),
                     "price": float(item.get("price") or 0),
                     "change": float(item.get("change") or 0),

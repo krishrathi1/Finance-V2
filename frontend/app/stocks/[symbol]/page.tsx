@@ -38,6 +38,7 @@ const AIChat = dynamic(() => import("@/components/sections/ai-chat").then((m) =>
 
 type Props = {
   params: { symbol: string };
+  searchParams?: { exchange?: string };
 };
 
 type BrokerageResearch = NonNullable<DashboardData["brokerageResearch"]>;
@@ -204,15 +205,16 @@ function normalizeDashboardData(raw: DashboardData | Record<string, unknown>, sy
   };
 }
 
-export default async function StockDetailsPage({ params }: Props) {
+export default async function StockDetailsPage({ params, searchParams }: Props) {
   const symbol = params.symbol.toUpperCase();
+  const exchange = String(searchParams?.exchange || "NSE").trim().toUpperCase() || "NSE";
   if (!symbol) notFound();
 
   let data;
   let refreshWarning = "";
   let shouldAutoRefresh = false;
   try {
-    const envelope = await fetchDashboardEnvelope(symbol);
+    const envelope = await fetchDashboardEnvelope(symbol, { exchange });
     data = normalizeDashboardData(envelope.data, symbol);
     refreshWarning = envelope.warning || "";
     shouldAutoRefresh = Boolean(envelope.fallback || envelope.stale);

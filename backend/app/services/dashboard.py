@@ -50,29 +50,58 @@ class StockDashboardService:
                     cleaned_input.append(symbol)
             cleaned_input = cleaned_input[:40]
 
-            live_quotes = await asyncio.gather(*(self.providers.get_nse_quote(symbol) for symbol in cleaned_input))
-            live_rows: list[dict[str, Any]] = []
-            for symbol, quote in zip(cleaned_input, live_quotes):
+            async def fetch_symbol_row(symbol: str) -> dict[str, Any] | None:
+                canonical = self._canonical_index_name(symbol)
+                if canonical == "BSE SENSEX":
+                    yahoo_quote = await self.providers.get_yahoo_quote("^BSESN")
+                    if yahoo_quote:
+                        cmp_value = self._num(yahoo_quote.get("regularMarketPrice"))
+                        change = self._num(yahoo_quote.get("regularMarketChange"))
+                        change_pct = self._num(yahoo_quote.get("regularMarketChangePercent"))
+                        if cmp_value is not None:
+                            return {
+                                "symbol": canonical,
+                                "cmp": round(cmp_value, 2),
+                                "change": round(change or 0, 2),
+                                "changePercent": round(change_pct or 0, 2),
+                            }
+
+                if canonical != symbol and canonical in {"NIFTY 50", "NIFTY BANK", "NIFTY FINANCIAL SERVICES", "NIFTY MIDCAP 100"}:
+                    index_quote = await self.providers.get_nse_index_quote(canonical)
+                    if index_quote and index_quote.get("cmp") is not None:
+                        return {
+                            "symbol": canonical,
+                            "cmp": round(self._num(index_quote.get("cmp")) or 0, 2),
+                            "change": round(self._num(index_quote.get("change")) or 0, 2),
+                            "changePercent": round(self._num(index_quote.get("changePercent")) or 0, 2),
+                        }
+
+                quote = await self.providers.get_nse_quote(symbol)
                 if not quote:
-                    continue
+                    return None
                 cmp_value = self._num(quote.get("cmp"))
                 change = self._num(quote.get("change"))
                 change_pct = self._num(quote.get("changePercent"))
                 if cmp_value is None:
-                    continue
+                    return None
                 if change is None and change_pct is not None:
                     change = cmp_value * (change_pct / 100)
                 if change_pct is None and change is not None and (cmp_value - change) != 0:
                     prev = cmp_value - change
                     change_pct = (change / prev) * 100
-                live_rows.append(
-                    {
-                        "symbol": symbol,
-                        "cmp": round(cmp_value, 2),
-                        "change": round(change or 0, 2),
-                        "changePercent": round(change_pct or 0, 2),
-                    }
-                )
+                return {
+                    "symbol": canonical if canonical in INDEX_ALIASES.values() else symbol,
+                    "cmp": round(cmp_value, 2),
+                    "change": round(change or 0, 2),
+                    "changePercent": round(change_pct or 0, 2),
+                }
+
+            live_quotes = await asyncio.gather(*(fetch_symbol_row(symbol) for symbol in cleaned_input))
+            live_rows: list[dict[str, Any]] = []
+            for quote in live_quotes:
+                if not isinstance(quote, dict):
+                    continue
+                live_rows.append(quote)
             if live_rows:
                 return live_rows
 
@@ -216,8 +245,15 @@ class StockDashboardService:
         top_rows = deduped[:24]
         return await self.providers.enrich_news_images(top_rows, max_items=24)
 
-    async def get_dashboard(self, symbol: str, timeframe: str = "5Y") -> dict[str, Any]:
-        data = get_sample_dashboard(symbol=symbol)
+    async def get_dashboard(self, symbol: str, timeframe: str = "5Y", exchange: str | None = None) -> dict[str, Any]:
+        base_symbol = str(symbol or "").replace(".NS", "").replace(".BO", "").strip().upper() or str(symbol or "").strip().upper()
+        requested_exchange = str(exchange or "").strip().upper()
+        if not requested_exchange:
+            requested_exchange = "BSE" if str(symbol or "").strip().upper().endswith(".BO") else "NSE"
+
+        data = get_sample_dashboard(symbol=base_symbol)
+        data["symbol"] = base_symbol
+        data["exchange"] = requested_exchange or str(data.get("exchange") or "NSE")
 
         (
             nse_quote,
@@ -238,7 +274,7 @@ class StockDashboardService:
             trendlyne_financials,
             trendlyne_shareholding,
             trendlyne_documents,
-        ) = await self._fetch_provider_data(symbol, timeframe)
+        ) = await self._fetch_provider_data(base_symbol, timeframe, exchange=requested_exchange)
 
         # FMP is primary as requested for more current and accurate charts.
         selected_candles = fmp_candles
@@ -266,7 +302,7 @@ class StockDashboardService:
                 data["price"]["fiftyTwoWeekLow"] = min(valid_closes)
                 data["price"]["fiftyTwoWeekHigh"] = max(valid_closes)
 
-        if nse_quote:
+        if nse_quote and requested_exchange != "BSE":
             if nse_quote.get("cmp") is not None:
                 data["price"]["cmp"] = round(float(nse_quote["cmp"]), 2)
             if nse_quote.get("change") is not None:
@@ -606,27 +642,30 @@ class StockDashboardService:
             or has_corporate_actions
         )
 
-    async def _fetch_provider_data(self, symbol: str, timeframe: str = "5Y") -> tuple:
+    async def _fetch_provider_data(self, symbol: str, timeframe: str = "5Y", exchange: str | None = None) -> tuple:
         history_days = max(self._timeframe_days(timeframe), 1825)
+        base_symbol = str(symbol or "").replace(".NS", "").replace(".BO", "").strip().upper()
+        normalized_exchange = str(exchange or "").strip().upper()
+        market_symbol = f"{base_symbol}.BO" if normalized_exchange == "BSE" else base_symbol
         calls: list[tuple[Awaitable[Any], float]] = [
-            (self.providers.get_nse_quote(symbol), 5),
-            (self.providers.get_nse_corporate_events(symbol), 7),
-            (self.providers.get_nse_quarterly_results(symbol), 7),
-            (self.providers.get_news(f"{symbol} India stock"), 5),
-            (self.providers.get_yahoo_quote(symbol), 5),
-            (self.providers.get_yahoo_candles(symbol, history_days), 7),
-            (self.providers.get_yfinance_bundle(symbol, history_days), 10),
-            (self.providers.get_fmp_quote(symbol), 5),
-            (self.providers.get_fmp_candles(symbol, "5Y"), 7),
-            (self.providers.get_fmp_quarterly_results(symbol), 7),
-            (self.providers.get_fmp_profile(symbol), 5),
-            (self.providers.get_fmp_key_metrics(symbol), 6),
-            (self.providers.get_fmp_financial_growth(symbol), 6),
-            (self.providers.get_fmp_analyst_estimates(symbol), 5),
-            (self.providers.get_trendlyne_brokerage(symbol), 6),
-            (self.providers.get_trendlyne_financials(symbol), 8),
-            (self.providers.get_trendlyne_shareholding(symbol), 6),
-            (self.providers.get_trendlyne_documents(symbol), 9),
+            (self.providers.get_nse_quote(base_symbol), 5),
+            (self.providers.get_nse_corporate_events(base_symbol), 7),
+            (self.providers.get_nse_quarterly_results(base_symbol), 7),
+            (self.providers.get_news(f"{base_symbol} India stock"), 5),
+            (self.providers.get_yahoo_quote(market_symbol), 5),
+            (self.providers.get_yahoo_candles(base_symbol if normalized_exchange != "BSE" else market_symbol.replace(".BO", ""), history_days), 7),
+            (self.providers.get_yfinance_bundle(market_symbol, history_days), 10),
+            (self.providers.get_fmp_quote(market_symbol), 5),
+            (self.providers.get_fmp_candles(market_symbol, "5Y"), 7),
+            (self.providers.get_fmp_quarterly_results(market_symbol), 7),
+            (self.providers.get_fmp_profile(market_symbol), 5),
+            (self.providers.get_fmp_key_metrics(market_symbol), 6),
+            (self.providers.get_fmp_financial_growth(market_symbol), 6),
+            (self.providers.get_fmp_analyst_estimates(market_symbol), 5),
+            (self.providers.get_trendlyne_brokerage(base_symbol), 6),
+            (self.providers.get_trendlyne_financials(base_symbol), 8),
+            (self.providers.get_trendlyne_shareholding(base_symbol), 6),
+            (self.providers.get_trendlyne_documents(base_symbol), 9),
         ]
         tasks = [asyncio.create_task(self._safe_provider_call(coro, timeout=timeout)) for coro, timeout in calls]
         done, pending = await asyncio.wait(tasks, timeout=12)
@@ -2049,6 +2088,8 @@ class StockDashboardService:
             name = str(item.get("companyName") or "").strip()
             if not name:
                 continue
+            raw_exchange = str(item.get("exchange") or "").strip().upper()
+            item["exchange"] = "BSE" if raw_exchange == "BSE" else "NSE"
             item["marketCap"] = round(float(item.get("marketCap") or 0), 2)
             item["price"] = round(float(item.get("price") or 0), 2)
             item["change"] = round(float(item.get("change") or 0), 2)
@@ -2121,6 +2162,7 @@ class StockDashboardService:
             fallback_rows.append(
                 {
                     "symbol": symbol,
+                    "exchange": "NSE",
                     "companyName": company_names.get(symbol) or symbol,
                     "marketCap": 0.0,
                     "price": round(price, 2),
@@ -2158,7 +2200,13 @@ class StockDashboardService:
         target_count = max(1, min(len(rows), int(limit or len(rows)), 500))
         target_rows = rows[:target_count]
         snapshots = await asyncio.gather(
-            *(self.providers.get_yfinance_screener_snapshot(str(row.get("symbol") or "")) for row in target_rows),
+            *(
+                self.providers.get_yfinance_screener_snapshot(
+                    str(row.get("symbol") or ""),
+                    exchange=str(row.get("exchange") or "NSE"),
+                )
+                for row in target_rows
+            ),
             return_exceptions=True,
         )
 
@@ -2167,6 +2215,8 @@ class StockDashboardService:
                 continue
             if (not row.get("companyName")) and snapshot.get("companyName"):
                 row["companyName"] = snapshot["companyName"]
+            if not str(row.get("exchange") or "").strip() and snapshot.get("exchange"):
+                row["exchange"] = str(snapshot["exchange"])
             if (self._num(row.get("marketCap")) or 0) <= 0 and snapshot.get("marketCap") is not None:
                 row["marketCap"] = round(float(snapshot["marketCap"]), 2)
             if (self._num(row.get("volume")) or 0) <= 0 and snapshot.get("volume") is not None:

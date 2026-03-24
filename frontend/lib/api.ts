@@ -71,8 +71,12 @@ function isAbortError(error: unknown) {
   return String(error).toLowerCase().includes("aborted");
 }
 
-export async function fetchDashboardEnvelope(symbol: string, options: { requestOrigin?: string } = {}): Promise<DashboardEnvelope> {
-  const key = `dashboard:${symbol.toUpperCase()}:5Y`;
+export async function fetchDashboardEnvelope(
+  symbol: string,
+  options: { requestOrigin?: string; exchange?: string } = {}
+): Promise<DashboardEnvelope> {
+  const normalizedExchange = String(options.exchange || "NSE").trim().toUpperCase() || "NSE";
+  const key = `dashboard:${symbol.toUpperCase()}:5Y:${normalizedExchange}`;
   const fresh = getFreshCache<DashboardEnvelope>(key, 60_000);
   if (fresh) return fresh;
 
@@ -86,7 +90,7 @@ export async function fetchDashboardEnvelope(symbol: string, options: { requestO
   for (const attempt of attempts) {
     try {
       const res = await fetchWithTimeout(
-        getApiUrl(`/${symbol}/dashboard?timeframe=5Y${attempt.refresh ? "&refresh=true" : ""}`),
+        getApiUrl(`/${symbol}/dashboard?timeframe=5Y&exchange=${encodeURIComponent(normalizedExchange)}${attempt.refresh ? "&refresh=true" : ""}`),
         {
           cache: "no-store"
         },
@@ -117,8 +121,8 @@ export async function fetchDashboardEnvelope(symbol: string, options: { requestO
   throw (lastError instanceof Error ? lastError : new Error("Dashboard request failed"));
 }
 
-export async function fetchDashboard(symbol: string): Promise<DashboardData> {
-  const envelope = await fetchDashboardEnvelope(symbol);
+export async function fetchDashboard(symbol: string, options: { exchange?: string } = {}): Promise<DashboardData> {
+  const envelope = await fetchDashboardEnvelope(symbol, options);
   return envelope.data;
 }
 

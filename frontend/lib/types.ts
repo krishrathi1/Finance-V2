@@ -279,6 +279,7 @@ export type ScreenerFilters = {
 export type ScreenerResult = {
   symbol: string;
   companyName: string;
+  exchange: string;
   marketCap: number;
   price: number;
   change: number;

@@ -6,6 +6,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { searchStocks } from "@/lib/api";
 
+function buildStockHref(symbol: string, exchange?: string) {
+  const normalizedExchange = String(exchange || "").trim().toUpperCase();
+  if (!normalizedExchange || normalizedExchange === "NSE" || normalizedExchange === "NSE/BSE") {
+    return `/stocks/${symbol}`;
+  }
+  return `/stocks/${symbol}?exchange=${normalizedExchange}`;
+}
+
 export function StockSearch({ className = "" }: { className?: string }) {
   const router = useRouter();
   const shellRef = useRef<HTMLDivElement | null>(null);
@@ -81,7 +89,7 @@ export function StockSearch({ className = "" }: { className?: string }) {
               <button
                 key={item.symbol}
                 onClick={() => {
-                  router.push(`/stocks/${item.symbol}`);
+                  router.push(buildStockHref(item.symbol, item.exchange));
                   setOpen(false);
                 }}
                 className="group flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-left transition hover:bg-accent/8 sm:rounded-xl"

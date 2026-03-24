@@ -86,6 +86,11 @@ function formatNumber(value: number | null | undefined, decimals = 2): string {
   return value.toFixed(decimals);
 }
 
+function buildStockHref(symbol: string, exchange?: string) {
+  const normalizedExchange = String(exchange || "NSE").trim().toUpperCase() || "NSE";
+  return normalizedExchange === "NSE" ? `/stocks/${symbol}` : `/stocks/${symbol}?exchange=${normalizedExchange}`;
+}
+
 function FilterSection({
   icon: Icon,
   title,
@@ -676,14 +681,17 @@ export default function ScreenerPage() {
                   {sortedResults.map((stock, idx) => (
                     <tr
                       key={stock.symbol}
-                      onClick={() => router.push(`/stocks/${stock.symbol}`)}
+                      onClick={() => router.push(buildStockHref(stock.symbol, stock.exchange))}
                       className="cursor-pointer border-b border-border/20 transition-colors hover:bg-accent/5"
                     >
                       <td className="px-4 py-3 text-[11px] text-muted tabular-nums">{idx + 1}</td>
                       <td className="px-4 py-3">
                         <div>
                           <p className="text-sm font-semibold text-text">{stock.companyName}</p>
-                          <p className="text-[11px] text-muted">{stock.symbol}</p>
+                          <div className="flex items-center gap-2">
+                            <p className="text-[11px] text-muted">{stock.symbol}</p>
+                            <span className="rounded-md bg-bg px-1.5 py-0.5 text-[10px] text-muted">{stock.exchange || "NSE"}</span>
+                          </div>
                         </div>
                       </td>
                       <td className="px-4 py-3 text-right text-sm font-medium tabular-nums text-muted">
