@@ -13,6 +13,10 @@ type NewsArticle = {
   imageUrl: string | null;
 };
 
+function countImages(rows: NewsArticle[]) {
+  return rows.reduce((total, row) => total + (row.imageUrl ? 1 : 0), 0);
+}
+
 export function MarketNews() {
   const [articles, setArticles] = useState<NewsArticle[]>([]);
   const [loading, setLoading] = useState(true);
@@ -25,7 +29,12 @@ export function MarketNews() {
         const data = await fetchMarketNews({ force: forceRefresh });
         if (alive) {
           if (data.length || !forceRefresh) {
-            setArticles(data);
+            setArticles((current) => {
+              if (!forceRefresh) {
+                return data;
+              }
+              return countImages(data) >= countImages(current) ? data : current;
+            });
             setLastUpdated(new Date().toLocaleTimeString());
           }
         }
@@ -36,7 +45,12 @@ export function MarketNews() {
       }
     };
 
-    load(false);
+    void (async () => {
+      await load(false);
+      if (alive) {
+        await load(true);
+      }
+    })();
     const timer = setInterval(() => {
       void load(true);
     }, 2 * 60_000);

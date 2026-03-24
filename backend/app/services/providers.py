@@ -1814,15 +1814,17 @@ class MarketDataProviders:
         image_match = re.search(r'<img[^>]+src="([^"]+)"', description_html, flags=re.IGNORECASE)
         if image_match:
             candidate = image_match.group(1).strip()
-            if self._is_usable_news_image_url(candidate):
-                return candidate
+            normalized = self._normalize_news_image_url(candidate)
+            if normalized:
+                return normalized
 
         enclosure = item.find("enclosure")
         if enclosure is not None:
             enc_url = (enclosure.attrib.get("url") or "").strip()
             enc_type = (enclosure.attrib.get("type") or "").lower()
-            if self._is_usable_news_image_url(enc_url) and ("image" in enc_type or enc_url.lower().endswith((".jpg", ".jpeg", ".png", ".webp"))):
-                return enc_url
+            normalized = self._normalize_news_image_url(enc_url)
+            if normalized and ("image" in enc_type or enc_url.lower().endswith((".jpg", ".jpeg", ".png", ".webp"))):
+                return normalized
 
         media_tag = None
         for child in item:
@@ -1832,9 +1834,73 @@ class MarketDataProviders:
                 break
         if media_tag is not None:
             media_url = (media_tag.attrib.get("url") or "").strip()
-            if self._is_usable_news_image_url(media_url):
-                return media_url
+            normalized = self._normalize_news_image_url(media_url)
+            if normalized:
+                return normalized
 
+        return None
+
+    def _normalize_news_image_url(self, url: str | None, base_url: str | None = None) -> str | None:
+        candidate = unescape(str(url or "").strip())
+        if not candidate or candidate.startswith("data:"):
+            return None
+        if candidate.startswith("//"):
+            candidate = f"https:{candidate}"
+        elif base_url and not candidate.startswith("http"):
+            candidate = urljoin(base_url, candidate)
+        if self._is_usable_news_image_url(candidate):
+            return candidate
+        return None
+
+    def _extract_image_from_srcset(self, srcset: str | None, base_url: str | None = None) -> str | None:
+        if not srcset:
+            return None
+        candidates = [part.strip() for part in str(srcset).split(",") if part.strip()]
+        for part in reversed(candidates):
+            url_part = part.split(" ", 1)[0].strip()
+            normalized = self._normalize_news_image_url(url_part, base_url=base_url)
+            if normalized:
+                return normalized
+        return None
+
+    def _extract_image_from_json_ld(self, payload: Any, base_url: str | None = None) -> str | None:
+        if isinstance(payload, list):
+            for item in payload:
+                candidate = self._extract_image_from_json_ld(item, base_url=base_url)
+                if candidate:
+                    return candidate
+            return None
+        if not isinstance(payload, dict):
+            return None
+
+        for key in ("image", "thumbnailUrl", "thumbnail", "contentUrl"):
+            if key not in payload:
+                continue
+            candidate = self._coerce_json_ld_image(payload.get(key), base_url=base_url)
+            if candidate:
+                return candidate
+
+        for key in ("@graph", "itemListElement", "mainEntity", "primaryImageOfPage"):
+            if key in payload:
+                candidate = self._extract_image_from_json_ld(payload.get(key), base_url=base_url)
+                if candidate:
+                    return candidate
+        return None
+
+    def _coerce_json_ld_image(self, value: Any, base_url: str | None = None) -> str | None:
+        if isinstance(value, str):
+            return self._normalize_news_image_url(value, base_url=base_url)
+        if isinstance(value, list):
+            for item in value:
+                candidate = self._coerce_json_ld_image(item, base_url=base_url)
+                if candidate:
+                    return candidate
+            return None
+        if isinstance(value, dict):
+            for key in ("url", "contentUrl", "thumbnailUrl"):
+                candidate = self._normalize_news_image_url(value.get(key), base_url=base_url)
+                if candidate:
+                    return candidate
         return None
 
     def _is_usable_news_image_url(self, url: str | None) -> bool:
@@ -1850,10 +1916,6 @@ class MarketDataProviders:
 
         blocked_hosts = {
             "news.google.com",
-            "lh3.googleusercontent.com",
-            "lh4.googleusercontent.com",
-            "lh5.googleusercontent.com",
-            "lh6.googleusercontent.com",
             "encrypted-tbn0.gstatic.com",
             "ssl.gstatic.com",
         }
@@ -1905,18 +1967,57 @@ class MarketDataProviders:
             if response.status_code >= 400 or not response.text:
                 return None
             html = response.text
+            final_url = str(response.url or url)
+            soup = BeautifulSoup(html, "html.parser")
 
-            patterns = [
-                r'<meta[^>]+property=["\']og:image["\'][^>]+content=["\']([^"\']+)["\']',
-                r'<meta[^>]+name=["\']twitter:image["\'][^>]+content=["\']([^"\']+)["\']',
-                r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+property=["\']og:image["\']',
-            ]
-            for pattern in patterns:
-                match = re.search(pattern, html, flags=re.IGNORECASE)
-                if match:
-                    img = match.group(1).strip()
-                    if self._is_usable_news_image_url(img):
-                        return img
+            meta_keys = {
+                "og:image",
+                "og:image:url",
+                "twitter:image",
+                "twitter:image:src",
+                "image",
+            }
+            for meta in soup.find_all("meta"):
+                meta_key = (
+                    meta.get("property")
+                    or meta.get("name")
+                    or meta.get("itemprop")
+                    or ""
+                ).strip().lower()
+                if meta_key not in meta_keys:
+                    continue
+                candidate = self._normalize_news_image_url(meta.get("content"), base_url=final_url)
+                if candidate:
+                    return candidate
+
+            for link in soup.find_all("link"):
+                rel_values = [str(value).strip().lower() for value in (link.get("rel") or [])]
+                if "image_src" not in rel_values:
+                    continue
+                candidate = self._normalize_news_image_url(link.get("href"), base_url=final_url)
+                if candidate:
+                    return candidate
+
+            for script in soup.find_all("script", attrs={"type": re.compile(r"ld\+json", re.IGNORECASE)}):
+                raw_payload = script.string or script.get_text(" ", strip=True)
+                if not raw_payload:
+                    continue
+                try:
+                    payload = json.loads(raw_payload)
+                except Exception:
+                    continue
+                candidate = self._extract_image_from_json_ld(payload, base_url=final_url)
+                if candidate:
+                    return candidate
+
+            for img in soup.find_all("img"):
+                for attr in ("src", "data-src", "data-lazy-src", "data-original", "data-image"):
+                    candidate = self._normalize_news_image_url(img.get(attr), base_url=final_url)
+                    if candidate:
+                        return candidate
+                candidate = self._extract_image_from_srcset(img.get("srcset") or img.get("data-srcset"), base_url=final_url)
+                if candidate:
+                    return candidate
             return None
         except Exception:
             return None
