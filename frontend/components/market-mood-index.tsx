@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+import { MarketStatusBadge } from "@/components/market-status-badge";
 import { fetchTickerTape } from "@/lib/api";
 
 type MoodLevel = "Extreme Fear" | "Fear" | "Neutral" | "Greed" | "Extreme Greed";
@@ -89,10 +90,7 @@ export function MarketMoodIndex() {
           </h3>
           <p className="density-copy mt-0.5 text-[11px] text-muted">Based on market breadth & momentum</p>
         </div>
-        <div className="flex h-8 items-center gap-1.5 rounded-full border border-border/70 bg-bg/60 px-3">
-          <span className="pulse-dot h-2 w-2 rounded-full bg-success" />
-          <span className="density-copy text-[11px] font-medium text-muted">Live</span>
-        </div>
+        <MarketStatusBadge />
       </div>
 
       <div className="mt-4 flex flex-col items-center">

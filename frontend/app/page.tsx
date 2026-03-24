@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 
 import { MarketHeatmap } from "@/components/market-heatmap";
+import { MarketStatusBadge } from "@/components/market-status-badge";
 import { MarketMoodIndex } from "@/components/market-mood-index";
 import { MarketNews } from "@/components/market-news";
 import { MarketStatsBar } from "@/components/market-stats-bar";
@@ -293,10 +294,7 @@ export default function HomePage() {
             </div>
             <h2 className="font-[var(--font-space)] text-base font-bold sm:text-lg">Index Heatmap</h2>
           </div>
-          <div className="flex items-center gap-1.5">
-            <span className="pulse-dot h-1.5 w-1.5 rounded-full bg-success" />
-            <span className="text-[11px] font-medium text-success">Live</span>
-          </div>
+          <MarketStatusBadge compact />
         </div>
         <MarketHeatmap />
       </section>

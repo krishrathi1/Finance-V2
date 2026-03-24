@@ -26,6 +26,7 @@ import {
   ShieldCheck,
   Banknote,
 } from "lucide-react";
+import { MarketStatusBadge } from "@/components/market-status-badge";
 import { fetchScreenerResults, fetchAIScreenerResults } from "@/lib/api";
 import type { ScreenerFilters, ScreenerResult } from "@/lib/types";
 
@@ -373,10 +374,7 @@ export default function ScreenerPage() {
             </button>
           </div>
 
-          <div className="flex items-center gap-1.5 text-[10px] text-muted">
-            <span className="pulse-dot h-1.5 w-1.5 rounded-full bg-success" />
-            Live
-          </div>
+          <MarketStatusBadge compact />
 
           {activeFilterCount > 0 && (
             <button

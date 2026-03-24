@@ -27,6 +27,7 @@ import Link from "next/link";
 import { createPortal } from "react-dom";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { MarketStatusBadge } from "@/components/market-status-badge";
 import { fetchIpoAiAnalysis, fetchIpoData } from "@/lib/api";
 import type { IpoAiAnalysis, IpoItem } from "@/lib/api";
 
@@ -639,8 +640,7 @@ export default function IpoPage() {
           <div className="flex items-center gap-2 mb-1.5">
             <CalendarRange className="h-4 w-4 text-accent" />
             <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted">Equity Events</p>
-            <span className="pulse-dot h-1.5 w-1.5 rounded-full bg-success" />
-            <span className="text-[11px] font-medium text-success">Live</span>
+            <MarketStatusBadge compact />
           </div>
           <h1 className="font-[var(--font-space)] text-2xl font-bold tracking-tight sm:text-3xl">
             IPO Calendar
