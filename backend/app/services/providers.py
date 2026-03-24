@@ -1916,10 +1916,14 @@ class MarketDataProviders:
 
         blocked_hosts = {
             "news.google.com",
+            "lh3.googleusercontent.com",
+            "lh4.googleusercontent.com",
+            "lh5.googleusercontent.com",
+            "lh6.googleusercontent.com",
             "encrypted-tbn0.gstatic.com",
             "ssl.gstatic.com",
         }
-        if host in blocked_hosts or host.endswith(".gstatic.com"):
+        if host in blocked_hosts or host.endswith(".gstatic.com") or host.endswith(".googleusercontent.com"):
             return False
 
         blocked_terms = [

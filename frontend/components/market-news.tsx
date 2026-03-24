@@ -14,7 +14,24 @@ type NewsArticle = {
 };
 
 function countImages(rows: NewsArticle[]) {
-  return rows.reduce((total, row) => total + (row.imageUrl ? 1 : 0), 0);
+  return rows.reduce((total, row) => total + (hasUsableImage(row.imageUrl) ? 1 : 0), 0);
+}
+
+function hasUsableImage(imageUrl: string | null) {
+  if (!imageUrl) {
+    return false;
+  }
+  try {
+    const url = new URL(imageUrl);
+    const host = url.hostname.toLowerCase();
+    return !(
+      host === "news.google.com" ||
+      host.endsWith(".gstatic.com") ||
+      host.endsWith(".googleusercontent.com")
+    );
+  } catch {
+    return false;
+  }
 }
 
 export function MarketNews() {
