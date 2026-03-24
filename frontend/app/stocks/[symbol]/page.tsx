@@ -12,6 +12,7 @@ import { KeyRatiosSection } from "@/components/sections/key-ratios-section";
 import { MetricsGrid } from "@/components/sections/metrics-grid";
 import { NewsSection } from "@/components/sections/news-section";
 import { BrokerageSummary } from "@/components/sections/brokerage-summary";
+import { BeginnerSnapshot } from "@/components/sections/beginner-snapshot";
 import { ReturnsPanel } from "@/components/sections/returns-panel";
 import { RiskScore } from "@/components/sections/risk-score";
 import { SmartScore } from "@/components/sections/smart-score";
@@ -365,6 +366,14 @@ export default async function StockDetailsPage({ params }: Props) {
             />
             <MetricsGrid metrics={data.metrics} keyRatioTrends={data.financials.keyRatioTrends} />
           </section>
+
+          <BeginnerSnapshot
+            smartScore={smartScore.score}
+            riskScore={riskScore.score}
+            currentPrice={data.price.cmp}
+            aiTarget={data.price.aiTarget}
+            mlConfidence={smartScore.mlConfidence}
+          />
 
           <div className="grid gap-4 xl:grid-cols-2">
             <SmartScore

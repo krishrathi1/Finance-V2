@@ -82,11 +82,14 @@ export function SmartScore({
   return (
     <Card className="glow-card p-4">
       <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-500/10">
+        <div className="flex items-start gap-2">
+          <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-lg bg-violet-500/10">
             <Sparkles className="h-4 w-4 text-violet-500" />
           </div>
-          <h3 className="text-lg font-semibold">Smart Score</h3>
+          <div>
+            <h3 className="text-lg font-semibold">Smart Score</h3>
+            <p className="text-xs text-muted">Higher is better. This is your quick quality read.</p>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           {label ? (

@@ -57,11 +57,14 @@ export function RiskScore({
   return (
     <Card className="glow-card p-4">
       <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg" style={{ backgroundColor: `${color}18` }}>
+        <div className="flex items-start gap-2">
+          <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-lg" style={{ backgroundColor: `${color}18` }}>
             <ShieldAlert className="h-4 w-4" style={{ color }} />
           </div>
-          <h3 className="text-lg font-semibold">Risk Score</h3>
+          <div>
+            <h3 className="text-lg font-semibold">Risk Score</h3>
+            <p className="text-xs text-muted">Lower is safer. This shows how difficult the stock may feel to hold.</p>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           {label ? (

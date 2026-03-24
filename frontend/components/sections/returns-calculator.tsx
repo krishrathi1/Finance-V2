@@ -19,6 +19,7 @@ export function ReturnsCalculator({
   mlConfidence?: number;
   upProbability?: number;
 }) {
+  const quickAmounts = [5000, 10000, 25000];
   const [amountInput, setAmountInput] = useState("");
   const amount = useMemo(() => {
     const numeric = Number(amountInput.replace(/[^\d]/g, ""));
@@ -78,11 +79,12 @@ export function ReturnsCalculator({
   const trendTone = futureGain >= 0 ? "text-success" : "text-danger";
   const sharesBought = simulation.sharesBought;
   const confidencePct = (simulation.confidence * 100).toFixed(0);
+  const shareEstimate = sharesBought >= 1 ? sharesBought.toFixed(2) : sharesBought.toFixed(3);
 
   return (
     <Card className="flex flex-col overflow-hidden p-3 sm:p-4 xl:h-[52rem]">
       <h3 className="text-lg font-semibold">Predictive ROI Simulator</h3>
-      <p className="mt-1 text-sm text-muted">3-year path shaped by the same bounded ML trend signal used in the stock score.</p>
+      <p className="mt-1 text-sm text-muted">Try a simple amount and see what the current 3-year scenario range looks like.</p>
 
       <div className="mt-3 grid gap-3 sm:grid-cols-1">
         <label className="flex flex-col justify-between rounded-xl border border-border/70 bg-panel/70 p-3 text-sm">
@@ -101,26 +103,50 @@ export function ReturnsCalculator({
           />
           <span className="mt-1 text-xs text-muted">
             {amount > 0
-              ? `Approx. ${Math.floor(sharesBought).toLocaleString()} shares @ ${formatCurrency(currentPrice)}`
-              : `Enter an amount to simulate shares at ${formatCurrency(currentPrice)}`}
+              ? `At today's price, this buys about ${shareEstimate} shares @ ${formatCurrency(currentPrice)}`
+              : `Pick an amount to see the possible 3-year range at ${formatCurrency(currentPrice)}`}
           </span>
         </label>
+        <div className="flex flex-wrap gap-2">
+          {quickAmounts.map((quickAmount) => (
+            <button
+              key={quickAmount}
+              type="button"
+              onClick={() => setAmountInput(String(quickAmount))}
+              className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                amount === quickAmount
+                  ? "border-success/25 bg-success/10 text-success"
+                  : "border-border/70 bg-panel/70 text-muted hover:border-accent/35 hover:text-text"
+              }`}
+            >
+              {formatCurrency(quickAmount)}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className={`mt-4 flex min-h-0 flex-col rounded-xl p-4 ${panelTone}`}>
+        <div className="rounded-2xl border border-border/45 bg-panel/46 px-4 py-3">
+          <p className="text-[11px] uppercase tracking-wide text-muted">Simple Summary</p>
+          <p className="mt-1 text-sm leading-6 text-text">
+            {amount > 0
+              ? `If you invest ${formatCurrency(amount)} today, the current 3-year scenario ranges from ${formatCurrency(bearFuture)} to ${formatCurrency(bullFuture)}. The likely case is ${formatCurrency(future)}.`
+              : "Choose an amount above to translate the forecast into a simple invested-value range."}
+          </p>
+        </div>
         <div className="grid gap-3 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
-          <div className="rounded-2xl border border-border/45 bg-panel/38 px-4 py-4">
-            <p className="text-sm text-muted">Projected Value</p>
+          <div className="mt-3 rounded-2xl border border-border/45 bg-panel/38 px-4 py-4">
+            <p className="text-sm text-muted">Likely Value</p>
             <p className={`mt-1 break-words text-[clamp(1.95rem,3vw,2.8rem)] font-bold leading-tight ${trendTone}`}>{formatCurrency(future)}</p>
-            <p className={`mt-2 text-sm font-medium ${trendTone}`}>Future Price: {formatCurrency(simulatedFuturePrice)} per share</p>
+            <p className={`mt-2 text-sm font-medium ${trendTone}`}>Estimated future price: {formatCurrency(simulatedFuturePrice)} per share</p>
           </div>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
             <div className="flex min-h-[86px] flex-col justify-between rounded-2xl border border-border/45 bg-panel/68 px-4 py-3">
-              <p className="text-[11px] uppercase tracking-wide text-muted">3Y Return</p>
+              <p className="text-[11px] uppercase tracking-wide text-muted">3Y Gain</p>
               <p className={`text-[clamp(1.35rem,1.6vw,1.7rem)] font-semibold ${trendTone}`}>{futureGain >= 0 ? "+" : ""}{futureGain.toFixed(2)}%</p>
             </div>
             <div className="flex min-h-[86px] flex-col justify-between rounded-2xl border border-border/45 bg-panel/68 px-4 py-3">
-              <p className="text-[11px] uppercase tracking-wide text-muted">ML Confidence</p>
+              <p className="text-[11px] uppercase tracking-wide text-muted">Estimate Reliability</p>
               <p className="text-[clamp(1.35rem,1.6vw,1.7rem)] font-semibold text-text">{confidencePct}%</p>
             </div>
           </div>
@@ -129,15 +155,15 @@ export function ReturnsCalculator({
         <div className="mt-4 rounded-2xl border border-border/45 bg-panel/54 p-3">
           <div className="grid gap-3 md:grid-cols-3">
             <div className="rounded-2xl border border-border/45 bg-panel/72 px-4 py-3">
-              <p className="text-[11px] uppercase tracking-wide text-muted">Bear Case</p>
+              <p className="text-[11px] uppercase tracking-wide text-muted">Lower Case</p>
               <p className="mt-2 text-[15px] font-semibold text-rose-500">{formatCurrency(bearFuture)}</p>
             </div>
             <div className="rounded-2xl border border-border/45 bg-panel/72 px-4 py-3">
-              <p className="text-[11px] uppercase tracking-wide text-muted">Base Case</p>
+              <p className="text-[11px] uppercase tracking-wide text-muted">Likely Case</p>
               <p className={`mt-2 text-[15px] font-semibold ${trendTone}`}>{formatCurrency(future)}</p>
             </div>
             <div className="rounded-2xl border border-border/45 bg-panel/72 px-4 py-3">
-              <p className="text-[11px] uppercase tracking-wide text-muted">Bull Case</p>
+              <p className="text-[11px] uppercase tracking-wide text-muted">Higher Case</p>
               <p className="mt-2 text-[15px] font-semibold text-emerald-500">{formatCurrency(bullFuture)}</p>
             </div>
           </div>
@@ -196,20 +222,20 @@ export function ReturnsCalculator({
           </div>
           <div className="flex min-h-[90px] flex-col justify-between rounded-2xl border border-border/45 bg-panel/68 px-4 py-3">
             <p className="text-[11px] uppercase tracking-wide text-muted">Shares</p>
-            <p className="text-[1.05rem] font-semibold text-text">{sharesBought.toFixed(2)}</p>
+            <p className="text-[1.05rem] font-semibold text-text">{shareEstimate}</p>
           </div>
           <div className="flex min-h-[90px] flex-col justify-between rounded-2xl border border-border/45 bg-panel/68 px-4 py-3">
-            <p className="text-[11px] uppercase tracking-wide text-muted">Current Price</p>
+            <p className="text-[11px] uppercase tracking-wide text-muted">Today's Price</p>
             <p className="text-[1.05rem] font-semibold text-text">{formatCurrency(currentPrice)}</p>
           </div>
           <div className="flex min-h-[90px] flex-col justify-between rounded-2xl border border-border/45 bg-panel/68 px-4 py-3">
-            <p className="text-[11px] uppercase tracking-wide text-muted">Model View</p>
+            <p className="text-[11px] uppercase tracking-wide text-muted">Trend View</p>
             <p className={`text-[1.05rem] font-semibold ${trendTone}`}>{futureGain >= 0 ? "Positive" : "Negative"}</p>
           </div>
         </div>
 
         <p className="mt-3 text-[11px] leading-5 text-muted">
-          {symbol} implied 3-year path uses the same bounded ML signal used in score validation. This is a scenario view, not a guaranteed outcome.
+          {symbol} uses the same underlying ML signal as the stock score. This is a scenario estimate, not a guaranteed return.
         </p>
       </div>
     </Card>
