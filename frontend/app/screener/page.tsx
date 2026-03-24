@@ -112,7 +112,7 @@ const MARKET_CAP_PRESETS = [
   { label: "Largecap", subtitle: ">20K Cr", min: 2_400_000_000, max: 0 },
 ] as const;
 
-// Goal-based quick screens (for beginners)
+// Goal-based quick screens (for beginners — results are AI-generated suggestions)
 const GOAL_SCREENS = [
   { icon: Banknote, label: "I want income", query: "High dividend yield NSE stocks above 2%", color: "text-success" },
   { icon: TrendingUp, label: "I want growth", query: "Undervalued mid cap stocks with PE under 25 and high ROE", color: "text-accent" },
@@ -151,10 +151,11 @@ const DEFAULT_FILTERS: ScreenerFilters = {
 
 function formatMarketCap(usd: number): string {
   if (!usd) return "-";
+  // FMP returns market cap in USD — convert at approx rate. Use ~ to indicate estimate.
   const crore = Math.round((usd * 84) / 1e7);
-  if (crore >= 100_000) return `₹${(crore / 100_000).toFixed(2)}L Cr`;
-  if (crore >= 1_000) return `₹${(crore / 1_000).toFixed(1)}K Cr`;
-  return `₹${crore} Cr`;
+  if (crore >= 100_000) return `~₹${(crore / 100_000).toFixed(2)}L Cr`;
+  if (crore >= 1_000) return `~₹${(crore / 1_000).toFixed(1)}K Cr`;
+  return `~₹${crore} Cr`;
 }
 
 function formatNumber(value: number | null | undefined, decimals = 2): string {
@@ -401,6 +402,7 @@ export default function ScreenerPage() {
             <button
               key={gs.label}
               onClick={() => { setAiQuery(gs.query); handleAISearch(gs.query); }}
+              title="AI-powered search — results are AI suggestions, not certified recommendations"
               className="group shrink-0 flex items-center gap-1.5 rounded-full border border-border/50 bg-panel/60 px-3 py-1 text-[11px] font-semibold text-muted transition hover:border-accent/40 hover:bg-accent/5 hover:text-text"
             >
               <gs.icon className={`h-3 w-3 ${gs.color}`} />
@@ -408,7 +410,9 @@ export default function ScreenerPage() {
             </button>
           ))}
           <div className="h-3 w-px bg-border/40 mx-1" />
-          <Star className="h-3 w-3 shrink-0 text-accent/50" />
+          <span className="shrink-0 rounded-full bg-accent/10 px-1.5 py-0.5 text-[9px] font-semibold text-accent">
+            AI
+          </span>
           {PRESET_SCREENS.map((screen) => (
             <button
               key={screen.label}
@@ -827,11 +831,15 @@ export default function ScreenerPage() {
           {/* Footer */}
           {!loading && results.length > 0 && (
             <div className="shrink-0 border-t border-border/30 bg-panel/40 px-4 py-2">
-              <p className="text-[10px] text-muted">
-                {results.length} results · Sorted by{" "}
-                <span className="text-text">{sortKey}</span> ({sortDir}) · Click any row to open
-                stock analysis
-              </p>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-[10px] text-muted">
+                  {results.length} results · Sorted by{" "}
+                  <span className="text-text">{sortKey}</span> ({sortDir}) · Click any row to open stock analysis
+                </p>
+                <p className="text-[10px] text-muted/60">
+                  Data: FMP · ~Market cap converted from USD · Not investment advice
+                </p>
+              </div>
             </div>
           )}
         </main>
