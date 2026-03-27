@@ -65,8 +65,10 @@ html {
   scroll-padding-top: 5rem;
 }
 
-* {
-  @apply border-border;
+@layer base {
+  * {
+    @apply border-border;
+  }
 }
 
 /* Global scrollbar */
