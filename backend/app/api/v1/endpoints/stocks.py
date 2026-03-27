@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 import hashlib
 import json
 import re
+from typing import Any, cast, Optional
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
@@ -54,9 +55,15 @@ def _dashboard_needs_ai_refresh(data: dict) -> bool:
     if not isinstance(data, dict):
         return False
 
-    profile = data.get("profile") if isinstance(data.get("profile"), dict) else {}
-    smart = data.get("smartScore") if isinstance(data.get("smartScore"), dict) else {}
-    risk = data.get("riskScore") if isinstance(data.get("riskScore"), dict) else {}
+    profile = data.get("profile")
+    if not isinstance(profile, dict):
+        profile = {}
+    smart = data.get("smartScore")
+    if not isinstance(smart, dict):
+        smart = {}
+    risk = data.get("riskScore")
+    if not isinstance(risk, dict):
+        risk = {}
 
     profile_missing = (
         not profile.get("incorporationYear")
@@ -247,7 +254,8 @@ def _to_plain_language_ai_text(symbol: str, score: float, label: str, text: str,
     # Keep text short and easy to scan in the UI.
     if len(simplified) > 220:
         chunks = re.split(r"(?<=[.!?])\s+", simplified)
-        simplified = " ".join(chunks[:2]).strip()
+        if isinstance(chunks, list):
+            simplified = " ".join(chunks[:2]).strip()
     if not re.search(r"\b(weak|caution|careful|risk|go slowly|invest slowly|watch)\b", simplified, flags=re.IGNORECASE):
         hint = (weak_hint or "momentum").replace("financialHealth", "financial safety")
         hint = hint.replace("momentum", "recent price trend").replace("profitability", "profit strength")
@@ -351,7 +359,8 @@ def _to_plain_language_risk_text(symbol: str, score: float, label: str, text: st
 
     if len(simplified) > 220:
         chunks = re.split(r"(?<=[.!?])\s+", simplified)
-        simplified = " ".join(chunks[:2]).strip()
+        if isinstance(chunks, list):
+            simplified = " ".join(chunks[:2]).strip()
 
     if not re.search(r"\b(invest slowly|careful|risk|watch)\b", simplified, flags=re.IGNORECASE):
         hint = (high_hint or "technicalRisk").replace("technicalRisk", "price trend risk")
@@ -701,9 +710,9 @@ async def portfolio_risk_assessment(payload: PortfolioRiskRequest) -> dict:
     enriched = [
         {
             "symbol": h.symbol.upper(),
-            "investedValue": round(h.quantity * h.buyPrice, 2),
-            "currentValue": round(h.quantity * (h.currentPrice or h.buyPrice), 2),
-            "weight": round((h.quantity * (h.currentPrice or h.buyPrice)) / denom * 100, 1) if denom > 0 else 0,
+            "investedValue": round(float(h.quantity * h.buyPrice), 2),
+            "currentValue": round(float(h.quantity * (h.currentPrice or h.buyPrice)), 2),
+            "weight": round(float((h.quantity * (h.currentPrice or h.buyPrice)) / denom * 100), 1) if denom > 0 else 0,
             "sector": h.sector or "Unknown",
             "beta": h.beta,
         }
@@ -712,9 +721,9 @@ async def portfolio_risk_assessment(payload: PortfolioRiskRequest) -> dict:
 
     analysis = await ai_adapter.analyze_portfolio_risk(enriched, [])
     return {
-        "totalInvested": round(total_invested, 2),
-        "totalCurrentValue": round(total_current, 2),
-        "totalPnl": round(total_current - total_invested, 2),
+        "totalInvested": round(float(total_invested), 2),
+        "totalCurrentValue": round(float(total_current), 2),
+        "totalPnl": round(float(total_current - total_invested), 2),
         "holdingCount": len(payload.holdings),
         "analysis": analysis,
     }
@@ -742,13 +751,13 @@ async def portfolio_roast(payload: PortfolioRoastRequest) -> dict:
             "symbol": h.symbol.upper(),
             "quantity": h.quantity,
             "avgPrice": h.avgPrice,
-            "currentValue": round(h.currentValue or h.quantity * h.avgPrice, 2),
-            "pnl": round(h.pnl or (h.currentValue or 0) - (h.quantity * h.avgPrice), 2),
+            "currentValue": round(float(h.currentValue or h.quantity * h.avgPrice), 2),
+            "pnl": round(float(h.pnl or (h.currentValue or 0) - (h.quantity * h.avgPrice)), 2),
         }
         for h in payload.holdings
     ]
     result = await ai_adapter.roast_portfolio(holdings_dicts, total)
-    return {"holdings": len(payload.holdings), "totalValue": round(total, 2), "roast": result}
+    return {"holdings": len(payload.holdings), "totalValue": round(float(total), 2), "roast": result}
 
 
 @router.get("/{symbol}/competitor-verdict")
@@ -974,7 +983,7 @@ async def get_returns_projection(
     points = []
     for year in range(0, years + 1):
         value = amount * ((1 + cagr / 100) ** year)
-        points.append({"year": year, "value": round(value, 2)})
+        points.append({"year": year, "value": round(float(value), 2)})
     return {
         "symbol": symbol.upper(),
         "amount": amount,

@@ -1,23 +1,37 @@
-import aioboto3
-from app.core.config import get_settings
-from typing import Optional
 import logging
+from typing import Any, Optional
+
+try:
+    import aioboto3
+except ModuleNotFoundError:  # pragma: no cover - depends on optional environment setup
+    aioboto3 = None
+
+from app.core.config import get_settings
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
 
 class S3Client:
     _instance: Optional['S3Client'] = None
-    _session: Optional[aioboto3.Session] = None
+    _session: Optional[Any] = None
 
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super(S3Client, cls).__new__(cls)
-            cls._session = aioboto3.Session()
+            if aioboto3 is not None:
+                cls._session = aioboto3.Session()
         return cls._instance
 
+    def _ensure_session(self) -> Any:
+        if self._session is None:
+            raise RuntimeError(
+                "S3 support requires the 'aioboto3' package. Install backend requirements first."
+            )
+        return self._session
+
     def get_client(self):
-        return self._session.client(
+        session = self._ensure_session()
+        return session.client(
             's3',
             endpoint_url=settings.s3_endpoint,
             aws_access_key_id=settings.s3_access_key,

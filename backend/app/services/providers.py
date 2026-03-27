@@ -7,7 +7,7 @@ import math
 import re
 import time
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Any, cast, Optional, Union
 from urllib.parse import quote_plus, urljoin, urlparse
 from xml.etree import ElementTree as ET
 
@@ -189,20 +189,20 @@ class MarketDataProviders:
                 results.append({
                     "period": period_text,
                     "date": date_str,
-                    "totalRevenue": round(revenue / 10_000_000, 2) if revenue else 0.0,
-                    "netProfit": round(net_profit / 10_000_000, 2) if net_profit else 0.0,
-                    "profitBeforeTax": round(pbt / 10_000_000, 2) if pbt else 0.0,
-                    "tax": round(tax / 10_000_000, 2) if tax else 0.0,
-                    "expenses": round(expenses / 10_000_000, 2) if expenses else 0.0,
-                    "operatingProfit": round(op_income / 10_000_000, 2) if op_income else 0.0,
+                    "totalRevenue": round(float(revenue / 10_000_000), 2) if revenue else 0.0,
+                    "netProfit": round(float(net_profit / 10_000_000), 2) if net_profit else 0.0,
+                    "profitBeforeTax": round(float(pbt / 10_000_000), 2) if pbt else 0.0,
+                    "tax": round(float(tax / 10_000_000), 2) if tax else 0.0,
+                    "expenses": round(float(expenses / 10_000_000), 2) if expenses else 0.0,
+                    "operatingProfit": round(float(op_income / 10_000_000), 2) if op_income else 0.0,
                     "basicEps": float(item.get("eps") or 0.0),
                     "dilutedEps": float(item.get("epsdiluted") or 0.0),
-                    "interestEarned": round(interest_earned / 10_000_000, 2) if interest_earned else 0.0,
-                    "interestExpended": round(interest_expended / 10_000_000, 2) if interest_expended else 0.0,
-                    "netInterestIncome": round(net_interest_income / 10_000_000, 2) if net_interest_income else 0.0,
-                    "opmPct": round((op_income / revenue * 100), 2) if op_income and revenue else 0.0,
-                    "taxPct": round((tax / pbt * 100), 2) if tax and pbt else 0.0,
-                    "netProfitMarginPct": round((net_profit / revenue * 100), 2) if net_profit and revenue else 0.0,
+                    "interestEarned": round(float(interest_earned / 10_000_000), 2) if interest_earned else 0.0,
+                    "interestExpended": round(float(interest_expended / 10_000_000), 2) if interest_expended else 0.0,
+                    "netInterestIncome": round(float(net_interest_income / 10_000_000), 2) if net_interest_income else 0.0,
+                    "opmPct": round(float(op_income / revenue * 100), 2) if op_income and revenue else 0.0,
+                    "taxPct": round(float(tax / pbt * 100), 2) if tax and pbt else 0.0,
+                    "netProfitMarginPct": round(float(net_profit / revenue * 100), 2) if net_profit and revenue else 0.0,
                 })
 
             # Sort by date ascending
@@ -3772,7 +3772,7 @@ class MarketDataProviders:
                     "changePercent": p_change,
                     "yearHigh": year_high,
                 })
-            return results[:50]  # limit to 50 most recent
+            return cast(list[Any], results)[:50]  # limit to 50 most recent
         except Exception:
             return []
 

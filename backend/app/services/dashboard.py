@@ -61,9 +61,9 @@ class StockDashboardService:
                         if cmp_value is not None:
                             return {
                                 "symbol": canonical,
-                                "cmp": round(cmp_value, 2),
-                                "change": round(change or 0, 2),
-                                "changePercent": round(change_pct or 0, 2),
+                                "cmp": round(float(cmp_value or 0), 2),
+                                "change": round(float(change or 0), 2),
+                                "changePercent": round(float(change_pct or 0), 2),
                             }
 
                 if canonical != symbol and canonical in {"NIFTY 50", "NIFTY BANK", "NIFTY FINANCIAL SERVICES", "NIFTY MIDCAP 100"}:
@@ -71,9 +71,9 @@ class StockDashboardService:
                     if index_quote and index_quote.get("cmp") is not None:
                         return {
                             "symbol": canonical,
-                            "cmp": round(self._num(index_quote.get("cmp")) or 0, 2),
-                            "change": round(self._num(index_quote.get("change")) or 0, 2),
-                            "changePercent": round(self._num(index_quote.get("changePercent")) or 0, 2),
+                            "cmp": round(float(self._num(index_quote.get("cmp")) or 0), 2),
+                            "change": round(float(self._num(index_quote.get("change")) or 0), 2),
+                            "changePercent": round(float(self._num(index_quote.get("changePercent")) or 0), 2),
                         }
 
                 quote = await self.providers.get_nse_quote(symbol)
@@ -91,9 +91,9 @@ class StockDashboardService:
                     change_pct = (change / prev) * 100
                 return {
                     "symbol": canonical if canonical in INDEX_ALIASES.values() else symbol,
-                    "cmp": round(cmp_value, 2),
-                    "change": round(change or 0, 2),
-                    "changePercent": round(change_pct or 0, 2),
+                    "cmp": round(float(cmp_value or 0), 2),
+                    "change": round(float(change or 0), 2),
+                    "changePercent": round(float(change_pct or 0), 2),
                 }
 
             live_quotes = await asyncio.gather(*(fetch_symbol_row(symbol) for symbol in cleaned_input))
