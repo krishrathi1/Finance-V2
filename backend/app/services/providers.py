@@ -22,21 +22,26 @@ from app.core.config import get_settings
 
 settings = get_settings()
 NSE_HEADERS = {
-    "user-agent": "Mozilla/5.0",
+    "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
     "accept-language": "en-US,en;q=0.9",
-    "accept": "application/json",
+    "accept": "application/json, text/plain, */*",
     "referer": "https://www.nseindia.com/",
+    "x-requested-with": "XMLHttpRequest",
 }
 GOOGLE_NEWS_HEADERS = {
-    "user-agent": "Mozilla/5.0",
+    "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
     "accept-language": "en-US,en;q=0.9",
     "accept": "application/rss+xml, application/xml;q=0.9, */*;q=0.8",
     "referer": "https://news.google.com/",
 }
 WEB_PAGE_HEADERS = {
-    "user-agent": "Mozilla/5.0",
+    "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
     "accept-language": "en-US,en;q=0.9",
-    "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+    "sec-fetch-dest": "document",
+    "sec-fetch-mode": "navigate",
+    "sec-fetch-site": "none",
+    "upgrade-insecure-requests": "1",
 }
 TRENDLYNE_BASE_URL = "https://trendlyne.com"
 
@@ -1292,7 +1297,7 @@ class MarketDataProviders:
             return None
 
         stock_id, slug = meta
-        documents_url = f"https://trendlyne.com/fundamentals/annual-earnings-credit/None/{stock_id}/"
+        documents_url = f"https://trendlyne.com/fundamentals/annual-earnings-credit/{stock_id}/{key}/{slug}/"
         filings_url = f"https://trendlyne.com/latest-news/BSE-Announcements/{stock_id}/{key}/{slug}/"
         try:
             docs_html = requests.get(

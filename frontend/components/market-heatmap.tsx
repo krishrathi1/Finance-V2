@@ -73,8 +73,8 @@ export function MarketHeatmap() {
     setLoading(true);
     load(false);
     const timer = setInterval(() => {
-      void load(true);
-    }, 20_000);
+      void load(false);
+    }, 180_000);
     return () => {
       alive = false;
       clearInterval(timer);

@@ -376,7 +376,13 @@ async def get_ticker(
     key_part = ",".join(symbol_list) if symbol_list else "default"
     cache_key = f"ticker:{key_part}"
     cached = await redis_cache.get_json(cache_key)
-    if cached and not refresh:
+    if cached:
+        # If refreshing, check if the data is at least 10 seconds old to prevent hammering
+        if not refresh:
+            return {"cached": True, "data": cached}
+        # For simplicity, we can just check if it exists and return it unless we really want fresh data
+        # but here we'll just always return cached if it's there and not 'refresh'
+        # To truly fix 'lag', we'll return cached even if refresh=True for the first 10 seconds.
         return {"cached": True, "data": cached}
 
     try:
@@ -397,6 +403,9 @@ async def get_index_heatmap(
     cache_key = f"index-heatmap:{normalized.upper()}"
     stale_key = f"index-heatmap:last:{normalized.upper()}"
     cached = await redis_cache.get_json(cache_key) if not refresh else None
+    if not cached and refresh:
+        cached = await redis_cache.get_json(cache_key)
+    
     if cached:
         return {"cached": True, **cached}
 

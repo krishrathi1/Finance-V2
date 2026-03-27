@@ -46,8 +46,8 @@ export function MarketTicker() {
 
     load(false);
     const timer = setInterval(() => {
-      void load(true);
-    }, 20_000);
+      void load(false);
+    }, 120_000);
     return () => {
       alive = false;
       clearInterval(timer);
