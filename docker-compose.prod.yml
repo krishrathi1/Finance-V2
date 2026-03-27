@@ -47,7 +47,7 @@ services:
     env_file:
       - ./frontend/.env.prod
     environment:
-      NEXT_PUBLIC_API_BASE: https://mystockvision.com
+      NEXT_PUBLIC_API_BASE: http://mystockvision.com
       INTERNAL_API_BASE: http://backend:8000
     depends_on:
       - backend

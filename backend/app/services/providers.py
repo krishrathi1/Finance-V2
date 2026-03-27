@@ -614,8 +614,8 @@ class MarketDataProviders:
                 if not stock_id or not symbol or not slug:
                     continue
                 built[symbol] = (stock_id, slug)
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[SEARCH ERROR] Failed to fetch Trendlyne equity map: {e}")
 
         # Fallback from the already-known research report map.
         if self._trendlyne_symbol_url_map:
@@ -631,6 +631,9 @@ class MarketDataProviders:
         if built:
             self._trendlyne_equity_meta_map = built
             self._trendlyne_equity_map_loaded_at = now
+            print(f"[SEARCH INFO] Loaded {len(built)} symbols into equity map.")
+        else:
+            print("[SEARCH WARNING] Trendlyne equity map is empty after refresh.")
 
     def _resolve_trendlyne_equity_meta(self, symbol: str) -> tuple[str, str] | None:
         self._refresh_trendlyne_equity_map_if_needed()
