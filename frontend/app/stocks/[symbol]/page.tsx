@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -40,6 +41,72 @@ type Props = {
   params: { symbol: string };
   searchParams?: { exchange?: string };
 };
+
+const BASE_URL = "https://mystockvision.com";
+
+export async function generateMetadata({ params, searchParams }: Props): Promise<Metadata> {
+  const symbol = params.symbol.toUpperCase();
+  const exchange = String(searchParams?.exchange || "NSE").toUpperCase();
+
+  try {
+    const envelope = await fetchDashboardEnvelope(symbol, { exchange });
+    const raw = envelope.data as Record<string, unknown>;
+    const companyName = String(raw?.companyName || symbol);
+    const sector = String(raw?.sector || "Equity");
+    const profile = (raw?.profile as Record<string, unknown>) ?? {};
+    const description = String(profile?.description || "").slice(0, 120);
+    const priceObj = (raw?.price as Record<string, unknown>) ?? {};
+    const currentPrice = priceObj?.cmp ? `₹${priceObj.cmp}` : "";
+
+    const title = `${companyName} (${symbol}) Share Price, Analysis & Smart Score`;
+    const metaDesc = `${companyName} (${symbol}) live share price${currentPrice ? ` ${currentPrice}` : ""} on ${exchange}. ${description ? description + " " : ""}AI Smart Score, risk rating, financials, brokerage reports & key ratios. Free.`;
+
+    return {
+      title,
+      description: metaDesc.slice(0, 160),
+      keywords: [
+        `${companyName} share price`,
+        `${symbol} stock analysis`,
+        `${companyName} NSE`,
+        `${symbol} BSE`,
+        `${symbol} share price today`,
+        `${companyName} financial results`,
+        `${symbol} smart score`,
+        `${companyName} annual report`,
+        `${symbol} brokerage report`,
+        `${companyName} PE ratio`,
+        `${companyName} ${sector} stock`,
+        `${symbol} target price`,
+        `buy or sell ${companyName}`,
+        `${companyName} quarterly results`,
+        `${symbol} dividend history`,
+      ],
+      alternates: {
+        canonical: `${BASE_URL}/stocks/${symbol}?exchange=${exchange}`,
+      },
+      openGraph: {
+        type: "website",
+        url: `${BASE_URL}/stocks/${symbol}`,
+        title,
+        description: metaDesc.slice(0, 160),
+        siteName: "MyStockVision",
+        locale: "en_IN",
+      },
+      twitter: {
+        card: "summary_large_image",
+        title,
+        description: metaDesc.slice(0, 160),
+        site: "@mystockvision",
+      },
+    };
+  } catch {
+    return {
+      title: `${symbol} Share Price & Stock Analysis | MyStockVision`,
+      description: `View ${symbol} live share price, AI Smart Score, financial statements, key ratios and analyst reports on MyStockVision.`,
+      alternates: { canonical: `${BASE_URL}/stocks/${symbol}` },
+    };
+  }
+}
 
 type BrokerageResearch = NonNullable<DashboardData["brokerageResearch"]>;
 
@@ -263,7 +330,32 @@ export default async function StockDetailsPage({ params, searchParams }: Props) 
     label: "Unavailable"
   };
 
+  const stockJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "FinancialProduct",
+    name: data.companyName,
+    alternateName: symbol,
+    description: data.profile?.description || `${data.companyName} stock analysis on NSE/BSE`,
+    url: `${BASE_URL}/stocks/${symbol}`,
+    provider: {
+      "@type": "Organization",
+      name: "MyStockVision",
+      url: BASE_URL,
+    },
+    feesAndCommissionsSpecification: "Free",
+    additionalProperty: [
+      { "@type": "PropertyValue", name: "Exchange", value: data.exchange },
+      { "@type": "PropertyValue", name: "Sector", value: data.sector },
+      ...(data.price?.cmp ? [{ "@type": "PropertyValue", name: "Current Price (INR)", value: String(data.price.cmp) }] : []),
+    ],
+  };
+
   return (
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(stockJsonLd) }}
+      />
     <div className="stagger-fade space-y-4">
       <PageHero
         breadcrumbs={[{ label: "Home", href: "/" }, { label: symbol }]}
@@ -481,5 +573,6 @@ export default async function StockDetailsPage({ params, searchParams }: Props) 
 
       <AIChat symbol={symbol} />
     </div>
+    </>
   );
 }

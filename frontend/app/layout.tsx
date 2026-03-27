@@ -16,12 +16,98 @@ import "./globals.css";
 const manrope = Manrope({ subsets: ["latin"], variable: "--font-manrope" });
 const space = Space_Grotesk({ subsets: ["latin"], variable: "--font-space" });
 
+const BASE_URL = "https://mystockvision.com";
+
 export const metadata: Metadata = {
+  metadataBase: new URL(BASE_URL),
   title: {
-    default: "StockVision AI | NSE & BSE Intelligence",
-    template: "%s | StockVision AI",
+    default: "MyStockVision — AI Stock Analysis India | NSE & BSE",
+    template: "%s | MyStockVision",
   },
-  description: "AI-powered Indian stock analysis platform with Smart Scores, risk analysis, financial statements, brokerage reports, and live market data for NSE and BSE.",
+  description:
+    "India's AI-powered stock analysis platform. Get Smart Scores, risk ratings, financial statements, brokerage reports, key ratios, IPO calendar, and live NSE & BSE market data — free.",
+  keywords: [
+    "stock analysis India",
+    "NSE BSE stock screener",
+    "Indian stock market",
+    "share price today",
+    "AI stock score",
+    "fundamental analysis India",
+    "stock research platform",
+    "free stock analysis",
+    "best stocks to buy India",
+    "IPO 2024 India",
+    "Nifty 50 analysis",
+    "Sensex stocks",
+    "equity research India",
+    "smart score stock",
+    "stock risk analysis",
+    "financial statements India",
+    "brokerage report",
+    "stock screener India",
+    "portfolio tracker India",
+    "stock comparison tool",
+    "market cap India",
+    "PE ratio India",
+    "dividend stocks India",
+    "smallcap midcap largecap India",
+    "NSE stock data",
+    "BSE stock data",
+    "Reliance TCS Infosys HDFC stock",
+    "mystockvision",
+    "financial forensics AI",
+  ],
+  authors: [{ name: "MyStockVision", url: BASE_URL }],
+  creator: "MyStockVision",
+  publisher: "MyStockVision",
+  category: "Finance",
+  classification: "Stock Market Analysis",
+  alternates: {
+    canonical: BASE_URL,
+  },
+  openGraph: {
+    type: "website",
+    locale: "en_IN",
+    url: BASE_URL,
+    siteName: "MyStockVision",
+    title: "MyStockVision — AI Stock Analysis India | NSE & BSE",
+    description:
+      "India's AI-powered stock research platform. Smart Scores, risk ratings, financials, IPO calendar & live market data for NSE & BSE stocks — completely free.",
+    images: [
+      {
+        url: "/og-image.png",
+        width: 1200,
+        height: 630,
+        alt: "MyStockVision — AI Stock Analysis India",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    site: "@mystockvision",
+    creator: "@mystockvision",
+    title: "MyStockVision — AI Stock Analysis India | NSE & BSE",
+    description:
+      "Free AI-powered stock analysis for Indian equities. Smart Scores, risk ratings, financials & live NSE/BSE data.",
+    images: ["/og-image.png"],
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-video-preview": -1,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+    },
+  },
+  verification: {
+    google: "add-your-google-search-console-verification-code-here",
+  },
+  other: {
+    "theme-color": "#f59e0b",
+  },
 };
 
 export const viewport: Viewport = {
@@ -34,6 +120,69 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@graph": [
+                {
+                  "@type": "WebSite",
+                  "@id": `${BASE_URL}/#website`,
+                  url: BASE_URL,
+                  name: "MyStockVision",
+                  description: "AI-powered Indian stock analysis platform — NSE & BSE",
+                  publisher: { "@id": `${BASE_URL}/#organization` },
+                  potentialAction: {
+                    "@type": "SearchAction",
+                    target: {
+                      "@type": "EntryPoint",
+                      urlTemplate: `${BASE_URL}/stocks/{search_term_string}`,
+                    },
+                    "query-input": "required name=search_term_string",
+                  },
+                  inLanguage: "en-IN",
+                },
+                {
+                  "@type": "Organization",
+                  "@id": `${BASE_URL}/#organization`,
+                  name: "MyStockVision",
+                  url: BASE_URL,
+                  logo: {
+                    "@type": "ImageObject",
+                    url: `${BASE_URL}/favicon.ico`,
+                  },
+                  sameAs: [],
+                },
+                {
+                  "@type": "WebApplication",
+                  "@id": `${BASE_URL}/#webapp`,
+                  name: "MyStockVision — AI Stock Analysis",
+                  url: BASE_URL,
+                  applicationCategory: "FinanceApplication",
+                  operatingSystem: "All",
+                  offers: {
+                    "@type": "Offer",
+                    price: "0",
+                    priceCurrency: "INR",
+                  },
+                  featureList: [
+                    "AI Smart Score for NSE & BSE stocks",
+                    "Risk analysis and rating",
+                    "Financial statements and key ratios",
+                    "Brokerage research reports",
+                    "IPO calendar and analysis",
+                    "Stock screener with filters",
+                    "Portfolio tracker",
+                    "Live market data",
+                  ],
+                },
+              ],
+            }),
+          }}
+        />
+      </head>
       <body className={`${manrope.variable} ${space.variable} min-h-screen font-[var(--font-manrope)]`}>
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
           <DisplaySettingsProvider>
