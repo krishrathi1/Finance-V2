@@ -1,66 +1,105 @@
- # Financial Forensics AI
+# Financial Forensics AI
 
-AI-powered Indian stock research platform built with Next.js 14 + FastAPI + PostgreSQL + Redis + Gemini.
+A professional-grade quantitative trading platform and AI-powered Indian stock research dashboard. Built to deliver real-time market data, advanced charting, and intelligent financial analysis through a modern, responsive, and glassmorphic UI.
 
-## Monorepo Structure
+## 🚀 Features
 
-- `frontend/` - Next.js app (App Router)
-- `backend/` - FastAPI API server
-- `ai-engine/` - Gemini prompt and orchestration layer
-- `data-pipeline/` - Data ingestion/fetch scripts
+- **Modern Trading Dashboard**: Stunning, professional-grade UI featuring glassmorphism, neon accents, and responsive design.
+- **Advanced Charting**: Integrated with the official TradingView Advanced Chart Widget for live, interactive market analysis.
+- **Quantitative Trading Model**: Quant-grade system forecasting daily price movements with high accuracy using historical market data and advanced mathematical modeling.
+- **AI-Powered Insights**: AI-generated research reports, interactive chat assistants (powered by Gemini & Groq), and intelligent Smart/Risk scoring with transparent explanations.
+- **Comprehensive Financial Data**: Supports real-time quote feeds, detailed financial statements (income, balance sheet, cash flow), corporate actions, insider trades, and more.
+- **Global & Indian Markets**: Primary focus on NSE/BSE stock analysis with broad global stock search capabilities.
 
-## Implemented MVP Features
+## 🛠 Tech Stack
 
-- Global stock search and SSR stock detail pages (`/stocks/[symbol]`)
-- Interactive price chart (1D/1W/1M/1Y/5Y views)
-- Key metrics cards with formula tooltips
-- Smart Score (0-5) and Risk Score (weighted model)
-- AI chat assistant (floating orange button)
-- AI-generated research report
-- Returns calculator with projection chart
-- Financial statements tabs (income statement, balance sheet, cash flow)
-- Corporate actions, insider trades, bulk/block deals tables
-- Shareholding pie chart and competitor table
-- Documents section and news sentiment feed
-- Redis caching for dashboard payloads
+### Frontend Architecture
+- **Framework**: Next.js 14 (App Router)
+- **Styling**: Tailwind CSS, PostCSS, Framer Motion, Radix UI
+- **Data Visualization**: Recharts, TradingView Widget
+- **Deployment**: Supports Cloudflare Pages & Vercel (Supabase CORS optimized)
 
-## Quick Start
+### Backend Services
+- **Framework**: FastAPI (Python)
+- **Database Architecture**: PostgreSQL (asyncpg), Redis (caching), SQLite (fallback/local)
+- **ORM**: SQLAlchemy
+- **Data Providers**: yFinance, FMP, NewsAPI, Trendlyne, NSE India, Google News RSS
 
-1. Copy env templates:
-   - `backend/.env.example` -> `backend/.env`
-   - `frontend/.env.example` -> `frontend/.env.local`
-2. Start infra + apps:
+### AI Engine & Pipelines
+- **Models**: Gemini API, Groq (fallback and alternative verification)
+- **Pipelines**: Scheduled Python scripts for market data ingestion (`fetch_market_data.py`), web scraping (`scrape_nse_bse.py`), and Google News mapping.
+
+## 📂 Monorepo Structure
+
+```text
+financial-forensics-ai/
+├── frontend/             # Next.js 14 frontend application
+├── backend/              # FastAPI server handling API routes and business logic
+├── ai-engine/            # LLM orchestration (Gemini/Groq) and prompt generation
+├── data-pipeline/        # Data ingestion scripts and SQL schemas
+├── project/              # Documentation and planning models
+└── deploy/               # Deployment configurations and scripts
+```
+
+## 🏁 Getting Started
+
+### Prerequisites
+- [Docker](https://www.docker.com/) & Docker Compose
+- [Node.js](https://nodejs.org/) 18+
+- [Python](https://www.python.org/) 3.10+
+- API Keys: FMP, NewsAPI, Gemini, Groq, Supabase (optional if fully self-hosting)
+
+### Running with Docker (Recommended)
+
+1. Clone the repository and navigate to the root directory.
+2. Initialize environment variables from templates:
    ```bash
-   docker compose up --build
+   cp backend/.env.example backend/.env
+   cp frontend/.env.example frontend/.env.local
    ```
-3. Open:
-   - Frontend: `http://localhost:3000`
-   - Backend docs: `http://localhost:8000/docs`
+3. Inject your API keys into the respective `.env` files.
+4. Spin up the containers:
+   ```bash
+   docker-compose up --build
+   ```
+5. Access the application:
+   - **Frontend**: `http://localhost:3000`
+   - **Backend API Docs**: `http://localhost:8000/docs`
 
-## Local Without Docker
+### Running Locally (Without Docker)
 
-### Backend
+**Backend Setup**
 ```bash
 cd backend
 python -m venv .venv
-. .venv/Scripts/activate  # Windows
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 pip install -r requirements.txt
+uvicorn main:app --reload --port 8000
 ```
 
-### Frontend
+**Frontend Setup**
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
 
-## Notes
+## 🏗 Architecture & Data Flow
 
-- External providers are integrated with graceful fallback demo data for MVP reliability.
-- Redis is used for response caching.
-- Stock pages are SSR in Next.js.
-- Smart score/risk score now run on a normalized factor pipeline (profitability, growth, valuation, momentum, financial health) with a bounded walk-forward ML adjustment.
-- `data-pipeline/sql/schema.sql` contains starter tables for persistent ingestion.
-- Use `data-pipeline/scripts/fetch_market_data.py` and `data-pipeline/scripts/scrape_nse_bse.py` for snapshots/scraping.
-- Use `data-pipeline/scripts/scrape_google_market_news.py` for daily Google News market snapshots.
-- Use `data-pipeline/scripts/validate_scoring_engine.py` to monitor scoring quality across a symbol basket.
+This application is built for resilience. The API heavily relies on a multi-tiered fallback mechanism to ensure data is always available:
+- **Live Quotes**: `NSE -> Yahoo/yfinance -> FMP`
+- **Charting**: `FMP -> yfinance -> Yahoo`
+- **Scores**: Calculated locally via `scoring.py` with AI-generated explainers on the fly.
+- **Caching**: Redis caches costly dashboard payloads and AI responses to drastically improve rendering times and reduce latency.
+
+## 🤝 Contributing
+
+Pull requests and code reviews are welcome. Please ensure your code passes all type checks (Pyre2) and ESLint warnings before merging.
+
+To validate your quantitative trading changes, run the scoring quality validation script:
+```bash
+python data-pipeline/scripts/validate_scoring_engine.py
+```
+
+---
+*Disclaimer: This platform is for educational and research purposes only. None of the AI-generated reports or insights should be considered financial advice.*
