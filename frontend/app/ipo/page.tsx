@@ -27,6 +27,7 @@ import Link from "next/link";
 import { createPortal } from "react-dom";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { FeatureAuthWall } from "@/components/sections/feature-auth-wall";
 import { MarketStatusBadge } from "@/components/market-status-badge";
 import { FaqSection } from "@/components/seo/faq-section";
 import { fetchIpoAiAnalysis, fetchIpoData } from "@/lib/api";
@@ -731,6 +732,12 @@ export default function IpoPage() {
         </div>
       </div>
 
+      <FeatureAuthWall
+        title="Sign up to use IPO"
+        description="View full IPO cards, AI verdict workflows, and detailed upcoming and recent issue tracking."
+        ctaLabel="Sign up to see IPO details"
+        points={["Upcoming and recent IPO tracking", "AI IPO analysis", "Issue details and risk profile", "Direct path to listed stock research"]}
+      >
       {/* Tabs */}
       <div className="border-b border-border/30">
         <div className="flex gap-6">
@@ -813,6 +820,7 @@ export default function IpoPage() {
       {mounted && selected && (
         <IpoModal ipo={selected} tab={tab} onClose={() => setSelected(null)} />
       )}
+      </FeatureAuthWall>
     </div>
   );
 }

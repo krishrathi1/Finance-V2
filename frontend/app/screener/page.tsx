@@ -26,6 +26,7 @@ import {
   ShieldCheck,
   Banknote,
 } from "lucide-react";
+import { FeatureAuthWall } from "@/components/sections/feature-auth-wall";
 import { MarketStatusBadge } from "@/components/market-status-badge";
 import { fetchScreenerResults, fetchAIScreenerResults } from "@/lib/api";
 import type { ScreenerFilters, ScreenerResult } from "@/lib/types";
@@ -426,6 +427,12 @@ export default function ScreenerPage() {
       </div>
 
       {/* ── Main Body: Sidebar + Results ── */}
+      <FeatureAuthWall
+        title="Sign up to use Screener"
+        description="Apply filters, run AI screens, and view full stock result tables after signup."
+        ctaLabel="Sign up to see screener details"
+        points={["Advanced filters", "AI natural-language screener", "Sortable results table", "Direct stock analysis links"]}
+      >
       <div className="flex flex-1 overflow-hidden">
         {/* ── Left Sidebar ── */}
         <aside className="hidden w-64 shrink-0 flex-col overflow-y-auto border-r border-border/40 bg-panel/60 backdrop-blur-sm lg:flex">
@@ -844,6 +851,7 @@ export default function ScreenerPage() {
           )}
         </main>
       </div>
+      </FeatureAuthWall>
     </div>
   );
 }

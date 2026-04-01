@@ -4,6 +4,7 @@ import { Bell, BellOff, TrendingDown, TrendingUp, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
+import { FeatureAuthWall } from "@/components/sections/feature-auth-wall";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { fetchTickerTape } from "@/lib/api";
 import { checkAlerts, getAlerts, removeAlert } from "@/lib/alerts";
@@ -123,26 +124,32 @@ export default function AlertsPage() {
         </div>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Bell className="h-4 w-4 text-accent" />
-            Active Alerts
-            <span className="ml-auto text-xs font-normal text-muted">
-              {rows.length} alert{rows.length !== 1 ? "s" : ""}
-            </span>
-          </CardTitle>
-        </CardHeader>
+      <FeatureAuthWall
+        title="Sign up to use Alerts"
+        description="Create and track custom price alerts for your stocks with live trigger status."
+        ctaLabel="Sign up to use alerts"
+        points={["Create multiple price alerts", "Auto refresh status", "Triggered vs watching tags", "Quick jump to stock pages"]}
+      >
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Bell className="h-4 w-4 text-accent" />
+              Active Alerts
+              <span className="ml-auto text-xs font-normal text-muted">
+                {rows.length} alert{rows.length !== 1 ? "s" : ""}
+              </span>
+            </CardTitle>
+          </CardHeader>
 
-        <CardContent>
-          {/* Loading */}
-          {loading && (
-            <div className="space-y-3">
-              {Array.from({ length: 3 }).map((_, i) => (
-                <div key={i} className="shimmer h-16 rounded-xl border border-border/40" />
-              ))}
-            </div>
-          )}
+          <CardContent>
+            {/* Loading */}
+            {loading && (
+              <div className="space-y-3">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <div key={i} className="shimmer h-16 rounded-xl border border-border/40" />
+                ))}
+              </div>
+            )}
 
           {/* Empty state */}
           {!loading && rows.length === 0 && (
@@ -295,8 +302,9 @@ export default function AlertsPage() {
               })}
             </div>
           )}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      </FeatureAuthWall>
     </div>
   );
 }

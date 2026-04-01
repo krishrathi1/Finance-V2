@@ -28,6 +28,7 @@ import {
   removeFromWatchlist,
   setWatchlistNote,
 } from "@/lib/watchlist";
+import { FeatureAuthWall } from "@/components/sections/feature-auth-wall";
 
 type TickerRow = {
   symbol: string;
@@ -181,26 +182,32 @@ export default function WatchlistPage() {
         </div>
       </div>
 
-      <Card className="border-accent/20 bg-gradient-to-r from-accent/8 via-amber-500/5 to-transparent">
-        <CardContent className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-sm font-semibold text-text">Instant alerts and notes for every watchlist stock</p>
-            <p className="mt-1 text-xs text-muted">
-              Use the bell icon for target-price notifications and save quick notes like buy level, target, or why you added the stock.
-            </p>
-          </div>
-          <Link
-            href="/alerts"
-            className="flex shrink-0 items-center gap-2 rounded-xl bg-gradient-to-r from-accent to-amber-500 px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
-          >
-            <Bell className="h-3.5 w-3.5" />
-            Manage Alerts
-          </Link>
-        </CardContent>
-      </Card>
+      <FeatureAuthWall
+        title="Sign up to use Watchlist"
+        description="Save stocks, keep notes, set alerts, and access your watchlist tools from one place."
+        ctaLabel="Sign up to use watchlist"
+        points={["Multiple watchlists", "Quick notes per stock", "Price alert shortcuts", "One-click stock analysis"]}
+      >
+        <Card className="border-accent/20 bg-gradient-to-r from-accent/8 via-amber-500/5 to-transparent">
+          <CardContent className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-text">Instant alerts and notes for every watchlist stock</p>
+              <p className="mt-1 text-xs text-muted">
+                Use the bell icon for target-price notifications and save quick notes like buy level, target, or why you added the stock.
+              </p>
+            </div>
+            <Link
+              href="/alerts"
+              className="flex shrink-0 items-center gap-2 rounded-xl bg-gradient-to-r from-accent to-amber-500 px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+            >
+              <Bell className="h-3.5 w-3.5" />
+              Manage Alerts
+            </Link>
+          </CardContent>
+        </Card>
 
-      <Card>
-        <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <Card>
+          <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-wrap items-center gap-2">
             {lists.map((name) => (
               <button
@@ -278,9 +285,9 @@ export default function WatchlistPage() {
           <p className="text-xs text-muted">
             {symbols.length} {symbols.length === 1 ? "stock" : "stocks"}
           </p>
-        </CardHeader>
+          </CardHeader>
 
-        <CardContent>
+          <CardContent>
           {loading && symbols.length > 0 && (
             <div className="space-y-3">
               {Array.from({ length: Math.min(symbols.length, 5) }).map((_, i) => (
@@ -444,8 +451,9 @@ export default function WatchlistPage() {
               })}
             </div>
           )}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      </FeatureAuthWall>
     </div>
   );
 }

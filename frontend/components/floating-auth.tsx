@@ -2,19 +2,22 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import {
+  ADMIN_EMAIL,
+  ADMIN_NAME,
+  ADMIN_PASSWORD,
+  AUTH_STORAGE_KEY,
+  OPEN_AUTH_PANEL_EVENT,
+  type AuthPanelMode,
+  notifyAuthSessionChanged,
+} from "@/lib/auth";
 import { cn } from "@/lib/utils";
-
-const ADMIN_NAME = "Admin";
-const ADMIN_EMAIL = "admin@gmail.com";
-const ADMIN_PASSWORD = "11";
-const AUTH_STORAGE_KEY = "msv_admin_session_v1";
 
 export function FloatingAuth() {
   const [open, setOpen] = useState(false);
   const [activePanel, setActivePanel] = useState<"signin" | "signup" | null>(null);
   const [email, setEmail] = useState(ADMIN_EMAIL);
   const [password, setPassword] = useState(ADMIN_PASSWORD);
-  const [name, setName] = useState(ADMIN_NAME);
   const [signedInAs, setSignedInAs] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -43,6 +46,20 @@ export function FloatingAuth() {
   }, []);
 
   useEffect(() => {
+    const onOpenAuthPanel = (event: Event) => {
+      const custom = event as CustomEvent<{ mode?: AuthPanelMode }>;
+      setActivePanel(custom.detail?.mode === "signin" ? "signin" : "signup");
+      setOpen(false);
+      setError(null);
+    };
+
+    window.addEventListener(OPEN_AUTH_PANEL_EVENT, onOpenAuthPanel as EventListener);
+    return () => {
+      window.removeEventListener(OPEN_AUTH_PANEL_EVENT, onOpenAuthPanel as EventListener);
+    };
+  }, []);
+
+  useEffect(() => {
     try {
       const saved = localStorage.getItem(AUTH_STORAGE_KEY);
       if (!saved) return;
@@ -53,7 +70,7 @@ export function FloatingAuth() {
     }
   }, []);
 
-  const handleAuth = (mode: "signin" | "signup") => {
+  const handleAuth = () => {
     setError(null);
 
     if (email.trim().toLowerCase() !== ADMIN_EMAIL || password !== ADMIN_PASSWORD) {
@@ -61,9 +78,10 @@ export function FloatingAuth() {
       return;
     }
 
-    const resolvedName = mode === "signup" ? name.trim() || ADMIN_NAME : ADMIN_NAME;
+    const resolvedName = ADMIN_NAME;
     setSignedInAs(resolvedName);
     localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ name: resolvedName, email: ADMIN_EMAIL }));
+    notifyAuthSessionChanged();
     setActivePanel(null);
     setOpen(false);
   };
@@ -71,6 +89,7 @@ export function FloatingAuth() {
   const signOut = () => {
     setSignedInAs(null);
     localStorage.removeItem(AUTH_STORAGE_KEY);
+    notifyAuthSessionChanged();
     setOpen(false);
   };
 
@@ -102,7 +121,7 @@ export function FloatingAuth() {
               className="space-y-3.5"
               onSubmit={(event) => {
                 event.preventDefault();
-                handleAuth(activePanel);
+                handleAuth();
               }}
             >
               {activePanel === "signup" && (
@@ -114,10 +133,10 @@ export function FloatingAuth() {
                     className="h-11 w-full rounded-xl border border-border/60 bg-bg/60 px-3 text-sm text-text outline-none transition focus:border-accent/60 focus:ring-2 focus:ring-accent/20"
                     id="auth-name"
                     name="name"
-                    onChange={(event) => setName(event.target.value)}
-                    placeholder="Your name"
+                    readOnly
+                    value={ADMIN_NAME}
+                    placeholder="Admin"
                     type="text"
-                    value={name}
                   />
                 </div>
               )}

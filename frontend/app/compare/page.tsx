@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 
 import { FaqSection } from "@/components/seo/faq-section";
+import { FeatureAuthWall } from "@/components/sections/feature-auth-wall";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { fetchCompareAnalysis, fetchDashboard, searchStocks } from "@/lib/api";
 import type { DashboardData } from "@/lib/types";
@@ -488,17 +489,23 @@ function ComparePageContent() {
         </CardContent>
       </Card>
 
-      {/* Loading */}
-      {loading && (
-        <div className="space-y-4">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div
-              key={i}
-              className="shimmer h-40 rounded-2xl border border-border/40"
-            />
-          ))}
-        </div>
-      )}
+      <FeatureAuthWall
+        title="Sign up to use Compare"
+        description="Unlock side-by-side stock analysis, AI comparison summary, and deeper metric breakdowns."
+        ctaLabel="Sign up to see compare details"
+        points={["Two-stock side-by-side view", "AI comparison summary", "Smart score and risk context", "Valuation and technical comparison"]}
+      >
+        {/* Loading */}
+        {loading && (
+          <div className="space-y-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div
+                key={i}
+                className="shimmer h-40 rounded-2xl border border-border/40"
+              />
+            ))}
+          </div>
+        )}
 
       {/* Results */}
       {dataA && dataB && !loading && (
@@ -958,11 +965,12 @@ function ComparePageContent() {
         </article>
       </section>
 
-      <FaqSection
-        title="Compare Stocks FAQs"
-        intro="These are the main search questions users have when looking for a stock comparison tool in India."
-        items={compareFaqs}
-      />
+        <FaqSection
+          title="Compare Stocks FAQs"
+          intro="These are the main search questions users have when looking for a stock comparison tool in India."
+          items={compareFaqs}
+        />
+      </FeatureAuthWall>
     </div>
   );
 }

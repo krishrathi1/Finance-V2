@@ -27,6 +27,7 @@ import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FaqSection } from "@/components/seo/faq-section";
+import { FeatureAuthWall } from "@/components/sections/feature-auth-wall";
 import { PortfolioDoctor } from "@/components/sections/portfolio-doctor";
 import { fetchAIScreenerResults, fetchTickerTape, fetchPortfolioRiskAssessment, searchStocks, parsePortfolioDocument } from "@/lib/api";
 import { addAlert, getAlertsForSymbol, removeAlert } from "@/lib/alerts";
@@ -910,17 +911,23 @@ export default function PortfolioPage() {
         </div>
       </div>
 
-      {/* Loading shimmer */}
-      {loading && (
-        <div className="space-y-3">
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="shimmer h-24 rounded-2xl border border-border/40" />
-            ))}
+      <FeatureAuthWall
+        title="Sign up to use Portfolio"
+        description="Track holdings, P&L, allocation, and AI portfolio insights after signup."
+        ctaLabel="Sign up to use portfolio"
+        points={["Add and edit holdings", "Live P&L tracking", "Allocation and risk view", "AI portfolio helper"]}
+      >
+        {/* Loading shimmer */}
+        {loading && (
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="shimmer h-24 rounded-2xl border border-border/40" />
+              ))}
+            </div>
+            <div className="shimmer h-48 rounded-2xl border border-border/40" />
           </div>
-          <div className="shimmer h-48 rounded-2xl border border-border/40" />
-        </div>
-      )}
+        )}
 
       {/* Empty state */}
       {!loading && !hasHoldings && (
@@ -1130,6 +1137,8 @@ export default function PortfolioPage() {
           />
         </>
       )}
+
+      </FeatureAuthWall>
 
       {/* Modal */}
       {mounted && showModal && (
