@@ -4,7 +4,6 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { StockSearch } from "@/components/stock-search";
-import { FaqSection } from "@/components/seo/faq-section";
 import { PageHero } from "@/components/page-hero";
 import { CompanyOverview } from "@/components/sections/company-overview";
 import { CorporateActionsSection } from "@/components/sections/corporate-actions-section";
@@ -388,17 +387,6 @@ export default async function StockDetailsPage({ params, searchParams }: Props) 
             : []),
         ],
       },
-      {
-        "@type": "FAQPage",
-        mainEntity: stockFaqs.map((item) => ({
-          "@type": "Question",
-          name: item.question,
-          acceptedAnswer: {
-            "@type": "Answer",
-            text: item.answer,
-          },
-        })),
-      },
     ],
   };
 
@@ -620,12 +608,6 @@ export default async function StockDetailsPage({ params, searchParams }: Props) 
           </section>
 
           <NewsSection symbol={symbol} news={data.news} />
-
-          <FaqSection
-            title={`${symbol} Stock Page FAQs`}
-            intro={`These FAQs help clarify what investors can research on the ${data.companyName} stock analysis page.`}
-            items={stockFaqs}
-          />
         </section>
       </div>
 
