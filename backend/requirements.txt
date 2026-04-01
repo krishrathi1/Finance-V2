@@ -17,3 +17,6 @@ supervisor
 aioboto3
 boto3
 botocore
+pdfplumber
+python-docx
+python-multipart

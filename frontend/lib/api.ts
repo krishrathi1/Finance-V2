@@ -567,3 +567,25 @@ export async function fetchScreenerResults(filters: ScreenerFilters): Promise<Sc
   const payload = await res.json();
   return (payload.results || []) as ScreenerResult[];
 }
+
+export async function parsePortfolioDocument(file: File): Promise<{ holdings: any[] }> {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const url = typeof window !== 'undefined'
+    ? '/api/v1/portfolio/parse-document'
+    : 'http://127.0.0.1:8000/api/v1/portfolio/parse-document';
+
+  const res = await fetch(url, {
+    method: 'POST',
+    body: formData,
+    cache: 'no-store',
+  });
+
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Upload failed' }));
+    throw new Error(error.detail || 'Failed to parse document');
+  } 
+  const payload = await res.json();
+  return { holdings: payload.holdings || [] };
+}

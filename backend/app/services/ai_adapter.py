@@ -140,6 +140,37 @@ class AIAdapter:
             "To stay safe, invest in small parts instead of all at once."
         )
 
+    async def parse_portfolio_document(self, text: str) -> list[dict[str, Any]]:
+        """Use Gemini to intelligently extract portfolio data from unstructured document text."""
+        if not text:
+            return []
+
+        prompt = (
+            "You are a sophisticated financial extraction AI for Indian markets. "
+            "Extract stock information from the following unstructured text. "
+            "For each stock, find: symbol (try to match NSE/BSE tickers if possible), "
+            "companyName (if symbol is ambiguous), buyDate (YYYY-MM-DD), buyPrice (number), "
+            "and quantity (number).\n"
+            "Rules:\n"
+            "- If a date is ambiguous (e.g., 01/02/23), use Indian format (DD/MM/YYYY) first.\n"
+            "- If buyPrice or quantity is missing, estimate from context or use null.\n"
+            "- Respond with ONLY a JSON list of objects, no markdown.\n"
+            f"Text content:\n{text}\n"
+        )
+
+        if self._gemini and settings.gemini_api_key:
+            try:
+                raw = await self._gemini.chat(symbol="PORTFOLIO_PARSER", question=prompt, context={})
+                import re as _re
+                match = _re.search(r"\[.*\]", str(raw), flags=_re.DOTALL)
+                if match:
+                    parsed = json.loads(match.group(0))
+                    if isinstance(parsed, list):
+                        return parsed
+            except Exception:
+                pass
+        return []
+
     async def extract_profile_details(self, symbol: str, context: dict[str, Any]) -> str:
         if self._gemini and settings.gemini_api_key:
             try:

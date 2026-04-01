@@ -28,8 +28,9 @@ import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FaqSection } from "@/components/seo/faq-section";
 import { PortfolioDoctor } from "@/components/sections/portfolio-doctor";
-import { fetchAIScreenerResults, fetchTickerTape, fetchPortfolioRiskAssessment, searchStocks } from "@/lib/api";
+import { fetchAIScreenerResults, fetchTickerTape, fetchPortfolioRiskAssessment, searchStocks, parsePortfolioDocument } from "@/lib/api";
 import { addAlert, getAlertsForSymbol, removeAlert } from "@/lib/alerts";
+import { ImportModal } from "@/components/modals/import-modal";
 import {
   addHolding,
   enrichHoldings,
@@ -766,6 +767,7 @@ export default function PortfolioPage() {
   const [riskError, setRiskError] = useState<string | null>(null);
 
   useEffect(() => { setMounted(true); }, []);
+  const [showImportModal, setShowImportModal] = useState(false);
 
   const loadPortfolio = useCallback(async (options: { force?: boolean; keepLoading?: boolean } = {}) => {
     const { force = false, keepLoading = true } = options;
@@ -890,13 +892,22 @@ export default function PortfolioPage() {
             Holdings, P&amp;L, and allocation — stored in your browser
           </p>
         </div>
-        <button
-          onClick={() => { setEditTarget(null); setShowModal(true); }}
-          className="flex w-fit items-center gap-2 rounded-xl bg-gradient-to-r from-accent to-amber-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
-        >
-          <Plus className="h-4 w-4" />
-          Add Holding
-        </button>
+        <div className="flex flex-wrap gap-2 sm:gap-3">
+          <button
+            onClick={() => setShowImportModal(true)}
+            className="flex items-center gap-2 rounded-xl border border-accent/30 bg-bg px-4 py-2.5 text-sm font-semibold text-accent transition hover:bg-accent/5"
+          >
+            <Sparkles className="h-4 w-4" />
+            Bulk Import AI
+          </button>
+          <button
+            onClick={() => { setEditTarget(null); setShowModal(true); }}
+            className="flex w-fit items-center gap-2 rounded-xl bg-gradient-to-r from-accent to-amber-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+          >
+            <Plus className="h-4 w-4" />
+            Add Holding
+          </button>
+        </div>
       </div>
 
       {/* Loading shimmer */}
@@ -1123,6 +1134,9 @@ export default function PortfolioPage() {
       {/* Modal */}
       {mounted && showModal && (
         <HoldingModal editing={editTarget} onClose={handleModalClose} onSave={loadPortfolio} />
+      )}
+      {mounted && showImportModal && (
+        <ImportModal onClose={() => setShowImportModal(false)} onSave={loadPortfolio} />
       )}
     </div>
   );
