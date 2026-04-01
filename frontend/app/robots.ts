@@ -1,23 +1,17 @@
 import type { MetadataRoute } from "next";
 
+import { SITE_URL } from "@/lib/seo";
+
 export default function robots(): MetadataRoute.Robots {
   return {
     rules: [
       {
         userAgent: "*",
-        allow: ["/", "/stocks/", "/screener", "/ipo", "/compare", "/portfolio", "/watchlist", "/alerts"],
-        disallow: ["/api/", "/_next/", "/admin", "/*.json$"],
-      },
-      {
-        userAgent: "Googlebot",
         allow: "/",
-      },
-      {
-        userAgent: "Bingbot",
-        allow: "/",
+        disallow: ["/api/"],
       },
     ],
-    sitemap: "https://mystockvision.com/sitemap.xml",
-    host: "https://mystockvision.com",
+    sitemap: `${SITE_URL}/sitemap.xml`,
+    host: SITE_URL,
   };
 }

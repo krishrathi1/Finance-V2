@@ -14,6 +14,7 @@ import {
   TrendingUp,
 } from "lucide-react";
 
+import { FaqSection } from "@/components/seo/faq-section";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { fetchCompareAnalysis, fetchDashboard, searchStocks } from "@/lib/api";
 import type { DashboardData } from "@/lib/types";
@@ -301,6 +302,36 @@ function Section({
 /* ─── Main Page ─── */
 
 function ComparePageContent() {
+  const compareFaqs = [
+    {
+      question: "How does the stock comparison tool help?",
+      answer:
+        "It helps you compare two Indian stocks side by side on price, valuation, profitability, Smart Score, risk score, and shareholding so you can judge which business looks stronger right now.",
+    },
+    {
+      question: "Can I compare NSE and BSE stocks here?",
+      answer:
+        "Yes. The compare workflow is built for Indian markets and supports stock comparison research for companies tracked across NSE and BSE data flows.",
+    },
+    {
+      question: "Does the compare page include AI analysis?",
+      answer:
+        "Yes. After you load both stocks, the page can generate an AI summary to explain which stock looks stronger and why across the current metrics.",
+    },
+  ];
+  const compareFaqJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: compareFaqs.map((item) => ({
+      "@type": "Question",
+      name: item.question,
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: item.answer,
+      },
+    })),
+  };
+
   const searchParams = useSearchParams();
   const [symbolA, setSymbolA] = useState(() => searchParams.get("a") || "");
   const [symbolB, setSymbolB] = useState(() => searchParams.get("b") || "");
@@ -392,6 +423,10 @@ function ComparePageContent() {
 
   return (
     <div className="stagger-fade space-y-6 py-4 sm:space-y-8 sm:py-8">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(compareFaqJsonLd) }}
+      />
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -898,6 +933,36 @@ function ComparePageContent() {
           </p>
         </div>
       )}
+
+      <section className="grid gap-4 lg:grid-cols-2">
+        <article className="rounded-[24px] border border-border/45 bg-panel/40 p-5 backdrop-blur-sm">
+          <h2 className="font-[var(--font-space)] text-xl font-bold tracking-tight">
+            Compare Indian stocks with context, not just raw numbers.
+          </h2>
+          <p className="mt-3 text-sm leading-7 text-muted">
+            This stock comparison page is designed for the search intent behind terms like
+            &quot;compare stocks India&quot;, &quot;which stock is better&quot;, and
+            &quot;TCS vs Infosys&quot;. It brings price, valuation, profitability, and AI context
+            into one side-by-side workflow instead of forcing users to open multiple tabs.
+          </p>
+        </article>
+        <article className="rounded-[24px] border border-border/45 bg-panel/40 p-5 backdrop-blur-sm">
+          <h2 className="font-[var(--font-space)] text-xl font-bold tracking-tight">
+            What you can evaluate here
+          </h2>
+          <p className="mt-3 text-sm leading-7 text-muted">
+            Review PE ratio, market cap, dividend yield, ROE, Smart Score, risk score,
+            technical indicators, and shareholding patterns before moving to the full stock pages
+            for deeper research.
+          </p>
+        </article>
+      </section>
+
+      <FaqSection
+        title="Compare Stocks FAQs"
+        intro="These are the main search questions users have when looking for a stock comparison tool in India."
+        items={compareFaqs}
+      />
     </div>
   );
 }

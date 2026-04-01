@@ -26,6 +26,7 @@ import { createPortal } from "react-dom";
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { FaqSection } from "@/components/seo/faq-section";
 import { PortfolioDoctor } from "@/components/sections/portfolio-doctor";
 import { fetchAIScreenerResults, fetchTickerTape, fetchPortfolioRiskAssessment, searchStocks } from "@/lib/api";
 import { addAlert, getAlertsForSymbol, removeAlert } from "@/lib/alerts";
@@ -725,6 +726,36 @@ type RiskAnalysis = {
 };
 
 export default function PortfolioPage() {
+  const portfolioFaqs = [
+    {
+      question: "What can I track with the portfolio page?",
+      answer:
+        "You can track holdings, average buy price, current value, allocation, profit and loss, price alerts, and AI portfolio risk commentary for Indian stocks.",
+    },
+    {
+      question: "Does the portfolio tracker require a login?",
+      answer:
+        "The current portfolio workflow stores data locally in your browser, so it is designed as a lightweight no-login experience for quick tracking and review.",
+    },
+    {
+      question: "Can I use the portfolio page for stock market analysis?",
+      answer:
+        "Yes. The portfolio view is not just a holdings ledger. It also helps you review concentration, target levels, and AI risk insights so you can manage the portfolio with more context.",
+    },
+  ];
+  const portfolioFaqJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: portfolioFaqs.map((item) => ({
+      "@type": "Question",
+      name: item.question,
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: item.answer,
+      },
+    })),
+  };
+
   const [holdings, setHoldings] = useState<HoldingWithValue[]>([]);
   const [loading, setLoading] = useState(true);
   const [mounted, setMounted] = useState(false);
@@ -842,6 +873,10 @@ export default function PortfolioPage() {
 
   return (
     <div className="stagger-fade space-y-6 py-4 sm:space-y-8 sm:py-8">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(portfolioFaqJsonLd) }}
+      />
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
@@ -1053,6 +1088,35 @@ export default function PortfolioPage() {
             Portfolio data is stored locally in your browser. Prices are fetched live and may be delayed.
             This is not investment advice.
           </p>
+
+          <section className="grid gap-4 lg:grid-cols-2">
+            <article className="rounded-[24px] border border-border/45 bg-panel/40 p-5 backdrop-blur-sm">
+              <h2 className="font-[var(--font-space)] text-xl font-bold tracking-tight">
+                Portfolio tracking for Indian investors
+              </h2>
+              <p className="mt-3 text-sm leading-7 text-muted">
+                This page supports search intent around portfolio tracker India, stock holdings
+                tracker, portfolio analysis, and stock return tracking. It combines live prices,
+                allocation, price alerts, and AI portfolio commentary in one browser-based workflow.
+              </p>
+            </article>
+            <article className="rounded-[24px] border border-border/45 bg-panel/40 p-5 backdrop-blur-sm">
+              <h2 className="font-[var(--font-space)] text-xl font-bold tracking-tight">
+                Why this portfolio workflow matters
+              </h2>
+              <p className="mt-3 text-sm leading-7 text-muted">
+                Investors often search for a simple way to monitor current value, profit and loss,
+                and risk concentration across holdings. This page focuses on those tasks without
+                requiring a complex onboarding flow.
+              </p>
+            </article>
+          </section>
+
+          <FaqSection
+            title="Portfolio Tracker FAQs"
+            intro="These answers cover the main questions users search for when looking for a stock portfolio tracker in India."
+            items={portfolioFaqs}
+          />
         </>
       )}
 

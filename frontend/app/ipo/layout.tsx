@@ -1,38 +1,22 @@
 import type { Metadata } from "next";
 
-export const metadata: Metadata = {
-  title: "IPO Calendar India 2024-25 — Upcoming & Recent NSE BSE IPOs",
+import { buildPageMetadata } from "@/lib/seo";
+
+export const metadata: Metadata = buildPageMetadata({
+  title: "IPO Calendar India - Upcoming and Recent NSE BSE IPOs",
   description:
-    "Track all upcoming and recently listed IPOs in India. Dates, GMP, subscription status, allotment, listing price, and AI analysis for every NSE & BSE IPO in 2024-25.",
+    "Track upcoming and recent IPOs in India with issue dates, listing details, price range, and AI-assisted analysis for NSE and BSE public issues.",
+  path: "/ipo",
   keywords: [
-    "IPO calendar India 2024",
+    "IPO calendar India",
     "upcoming IPO India",
     "IPO listing date",
-    "IPO allotment status",
     "IPO GMP today",
-    "NSE IPO 2024",
-    "BSE IPO 2025",
-    "IPO subscription status",
+    "NSE IPO",
+    "BSE IPO",
     "IPO review India",
-    "new IPO this week India",
-    "SME IPO India",
-    "mainboard IPO India",
-    "IPO listing price",
-    "apply IPO India",
   ],
-  alternates: { canonical: "https://mystockvision.com/ipo" },
-  openGraph: {
-    title: "IPO Calendar India 2024-25 — Upcoming & Recent IPOs",
-    description: "All upcoming and recent IPOs on NSE & BSE with dates, GMP, and AI analysis.",
-    url: "https://mystockvision.com/ipo",
-    type: "website",
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "IPO Calendar India 2024-25 — Upcoming & Recent IPOs",
-    description: "All upcoming and recent IPOs on NSE & BSE with dates, GMP, and AI analysis.",
-  },
-};
+});
 
 export default function IpoLayout({ children }: { children: React.ReactNode }) {
   return <>{children}</>;

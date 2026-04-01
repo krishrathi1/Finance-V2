@@ -17,10 +17,12 @@ import { MarketMoodIndex } from "@/components/market-mood-index";
 import { MarketNews } from "@/components/market-news";
 import { MarketStatsBar } from "@/components/market-stats-bar";
 import { PopularStocks } from "@/components/popular-stocks";
+import { FaqSection } from "@/components/seo/faq-section";
 import { StockSearch } from "@/components/stock-search";
 import { TopMovers } from "@/components/top-movers";
 import { ViewportMotionSection } from "@/components/viewport-motion-section";
 import { Badge } from "@/components/ui/badge";
+import { SITE_NAME, SITE_URL } from "@/lib/seo";
 
 const FEATURE_CARDS = [
   {
@@ -100,8 +102,69 @@ const HERO_METRICS = [
 ] as const;
 
 export default function HomePage() {
+  const homeFaqs = [
+    {
+      question: "What can I research on MyStockVision?",
+      answer:
+        "You can research Indian stocks with live price context, Smart Scores, risk ratings, financial statements, peer comparison, IPO tracking, portfolio analysis, and stock screener workflows for NSE and BSE companies.",
+    },
+    {
+      question: "Does MyStockVision cover NSE and BSE stocks?",
+      answer:
+        "Yes. The platform is built for Indian equity research and supports NSE and BSE market workflows, including stock pages, screening, comparison, IPO tracking, alerts, and portfolio analysis.",
+    },
+    {
+      question: "Can I use MyStockVision for stock screening and comparison?",
+      answer:
+        "Yes. The screener page helps you filter stocks by valuation, market cap, dividend yield, and sector, while the compare page helps you review two stocks side by side using price, profitability, Smart Score, and risk views.",
+    },
+    {
+      question: "Is MyStockVision free to use?",
+      answer:
+        "The current web application is positioned as a free research platform for investors who want faster stock analysis, market monitoring, and portfolio review workflows.",
+    },
+  ];
+
+  const homeJsonLd = {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "CollectionPage",
+        name: `${SITE_NAME} home`,
+        url: SITE_URL,
+        description:
+          "Home page for AI-powered Indian stock analysis, stock screener tools, portfolio tracking, and IPO research.",
+      },
+      {
+        "@type": "ItemList",
+        name: "Core stock market tools",
+        itemListElement: [
+          { "@type": "ListItem", position: 1, name: "Stock Screener", url: `${SITE_URL}/screener` },
+          { "@type": "ListItem", position: 2, name: "Compare Stocks", url: `${SITE_URL}/compare` },
+          { "@type": "ListItem", position: 3, name: "Portfolio Tracker", url: `${SITE_URL}/portfolio` },
+          { "@type": "ListItem", position: 4, name: "IPO Calendar", url: `${SITE_URL}/ipo` },
+        ],
+      },
+      {
+        "@type": "FAQPage",
+        mainEntity: homeFaqs.map((item) => ({
+          "@type": "Question",
+          name: item.question,
+          acceptedAnswer: {
+            "@type": "Answer",
+            text: item.answer,
+          },
+        })),
+      },
+    ],
+  };
+
   return (
     <div className="stagger-fade space-y-8 py-4 sm:space-y-10 sm:py-8">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(homeJsonLd) }}
+      />
       <ViewportMotionSection
         className="gradient-border relative z-30 overflow-visible rounded-[28px] px-5 py-6 sm:px-8 sm:py-8 lg:px-10 lg:py-10"
       >
@@ -311,6 +374,74 @@ export default function HomePage() {
         </div>
         <MarketNews />
       </section>
+
+      <section className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+        <article className="rounded-[28px] border border-border/45 bg-panel/40 p-5 backdrop-blur-sm sm:p-8">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-accent">
+            Built For Search Intent
+          </p>
+          <h2 className="mt-3 font-[var(--font-space)] text-2xl font-bold tracking-tight sm:text-3xl">
+            Research Indian stocks faster with one finance workflow.
+          </h2>
+          <p className="mt-4 text-sm leading-7 text-muted sm:text-base">
+            {SITE_NAME} is built for the terms real investors search for every day:
+            stock analysis, share price today, IPO calendar, stock screener, stock comparison,
+            portfolio tracker, and risk analysis for Indian equities. Instead of forcing users to
+            jump across disconnected tools, the app keeps price, quality, valuation, and AI context
+            in the same workflow.
+          </p>
+          <p className="mt-4 text-sm leading-7 text-muted sm:text-base">
+            That makes the site stronger for both users and search engines. Each major page has a
+            dedicated purpose, internal links to related tools, structured metadata, and crawlable
+            copy around high-intent finance topics for NSE and BSE stocks.
+          </p>
+        </article>
+
+        <article className="rounded-[28px] border border-border/45 bg-panel/40 p-5 backdrop-blur-sm sm:p-8">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-accent">
+            Popular Workflows
+          </p>
+          <div className="mt-4 grid gap-3">
+            {[
+              {
+                href: "/screener",
+                title: "Find undervalued or high-dividend stocks",
+                body: "Use the stock screener to filter Indian stocks by sector, valuation, market cap, dividend yield, and price range.",
+              },
+              {
+                href: "/compare",
+                title: "Compare two stocks side by side",
+                body: "Check which stock looks stronger on profitability, Smart Score, risk, and pricing without opening multiple tabs.",
+              },
+              {
+                href: "/portfolio",
+                title: "Review your holdings and portfolio risk",
+                body: "Track P and L, allocation, watch targets, and AI portfolio risk commentary in one place.",
+              },
+              {
+                href: "/ipo",
+                title: "Track upcoming and recent IPOs in India",
+                body: "Monitor IPO dates, listing details, and quick AI takes for new public issues.",
+              },
+            ].map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                className="rounded-2xl border border-border/40 bg-bg/45 p-4 transition hover:border-accent/35 hover:bg-bg/55"
+              >
+                <h3 className="text-base font-semibold text-text">{item.title}</h3>
+                <p className="mt-2 text-sm leading-7 text-muted">{item.body}</p>
+              </Link>
+            ))}
+          </div>
+        </article>
+      </section>
+
+      <FaqSection
+        title="FAQs"
+        intro="These answers target the main search questions users have when looking for stock market analysis tools in India."
+        items={homeFaqs}
+      />
     </div>
   );
 }

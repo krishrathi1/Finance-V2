@@ -28,6 +28,7 @@ import { createPortal } from "react-dom";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { MarketStatusBadge } from "@/components/market-status-badge";
+import { FaqSection } from "@/components/seo/faq-section";
 import { fetchIpoAiAnalysis, fetchIpoData } from "@/lib/api";
 import type { IpoAiAnalysis, IpoItem } from "@/lib/api";
 
@@ -596,6 +597,36 @@ function EmptyState({ tab }: { tab: Tab }) {
 // ─── Page ────────────────────────────────────────────────────────────────────
 
 export default function IpoPage() {
+  const ipoFaqs = [
+    {
+      question: "What can I track on the IPO calendar page?",
+      answer:
+        "You can track upcoming IPOs, recently listed IPOs, issue dates, price range, issue size, listing details, and AI-assisted IPO commentary for Indian public issues.",
+    },
+    {
+      question: "Is this IPO page focused on Indian markets?",
+      answer:
+        "Yes. The page is built for India-focused IPO search intent and helps users monitor public issues connected to NSE and BSE workflows.",
+    },
+    {
+      question: "Does the IPO page provide analysis or only dates?",
+      answer:
+        "It provides dates and issue details, and it also includes AI-based IPO analysis to summarize strengths, risks, valuation context, and listing outlook.",
+    },
+  ];
+  const ipoFaqJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: ipoFaqs.map((item) => ({
+      "@type": "Question",
+      name: item.question,
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: item.answer,
+      },
+    })),
+  };
+
   const [tab, setTab] = useState<Tab>("upcoming");
   const [data, setData] = useState<IpoItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -654,6 +685,10 @@ export default function IpoPage() {
 
   return (
     <div className="stagger-fade space-y-6 py-4 sm:space-y-8 sm:py-8">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(ipoFaqJsonLd) }}
+      />
 
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
@@ -743,6 +778,36 @@ export default function IpoPage() {
       <p className="text-center text-[11px] text-muted/60">
         IPO data sourced from FMP. Refreshes every 30 minutes. AI analysis is for informational purposes only — not investment advice.
       </p>
+
+      <section className="grid gap-4 lg:grid-cols-2">
+        <article className="rounded-[24px] border border-border/45 bg-panel/40 p-5 backdrop-blur-sm">
+          <h2 className="font-[var(--font-space)] text-xl font-bold tracking-tight">
+            IPO tracking for Indian market research
+          </h2>
+          <p className="mt-3 text-sm leading-7 text-muted">
+            This page targets high-intent IPO searches such as upcoming IPO India, IPO calendar,
+            recent IPO listings, and IPO analysis. It combines event tracking with issue size,
+            pricing context, and quick AI analysis so users can move from discovery to first-pass
+            due diligence faster.
+          </p>
+        </article>
+        <article className="rounded-[24px] border border-border/45 bg-panel/40 p-5 backdrop-blur-sm">
+          <h2 className="font-[var(--font-space)] text-xl font-bold tracking-tight">
+            Why this page is useful
+          </h2>
+          <p className="mt-3 text-sm leading-7 text-muted">
+            Instead of forcing investors to search multiple sites for issue dates, listing context,
+            and sentiment, the IPO workflow keeps the core details together and links naturally into
+            the stock research flow after listing.
+          </p>
+        </article>
+      </section>
+
+      <FaqSection
+        title="IPO Calendar FAQs"
+        intro="These FAQs answer the most common questions users search for when looking for IPO information in India."
+        items={ipoFaqs}
+      />
 
       {/* Modal */}
       {mounted && selected && (

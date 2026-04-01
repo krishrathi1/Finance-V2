@@ -4,6 +4,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { StockSearch } from "@/components/stock-search";
+import { FaqSection } from "@/components/seo/faq-section";
 import { PageHero } from "@/components/page-hero";
 import { CompanyOverview } from "@/components/sections/company-overview";
 import { CorporateActionsSection } from "@/components/sections/corporate-actions-section";
@@ -25,6 +26,7 @@ import { CompetitorsSection } from "@/components/sections/competitors-section";
 import { CompetitorVerdict } from "@/components/sections/competitor-verdict";
 import { EarningsTldr } from "@/components/sections/earnings-tldr";
 import { fetchDashboardEnvelope } from "@/lib/api";
+import { POPULAR_STOCK_SYMBOLS, SITE_NAME, SITE_URL, buildBreadcrumbJsonLd } from "@/lib/seo";
 import type { DashboardData } from "@/lib/types";
 
 const PriceSidebar = dynamic(() => import("@/components/sections/price-sidebar").then((m) => m.PriceSidebar), { ssr: false });
@@ -42,11 +44,15 @@ type Props = {
   searchParams?: { exchange?: string };
 };
 
-const BASE_URL = "https://mystockvision.com";
+export function generateStaticParams() {
+  return POPULAR_STOCK_SYMBOLS.map((symbol) => ({ symbol }));
+}
 
 export async function generateMetadata({ params, searchParams }: Props): Promise<Metadata> {
   const symbol = params.symbol.toUpperCase();
   const exchange = String(searchParams?.exchange || "NSE").toUpperCase();
+  const canonicalPath = exchange === "NSE" ? `/stocks/${symbol}` : `/stocks/${symbol}?exchange=${exchange}`;
+  const canonicalUrl = `${SITE_URL}${canonicalPath}`;
 
   try {
     const envelope = await fetchDashboardEnvelope(symbol, { exchange });
@@ -58,8 +64,8 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
     const priceObj = (raw?.price as Record<string, unknown>) ?? {};
     const currentPrice = priceObj?.cmp ? `₹${priceObj.cmp}` : "";
 
-    const title = `${companyName} (${symbol}) Share Price, Analysis & Smart Score`;
-    const metaDesc = `${companyName} (${symbol}) live share price${currentPrice ? ` ${currentPrice}` : ""} on ${exchange}. ${description ? description + " " : ""}AI Smart Score, risk rating, financials, brokerage reports & key ratios. Free.`;
+    const title = `${companyName} (${symbol}) Share Price, Analysis and Smart Score`;
+    const metaDesc = `${companyName} (${symbol}) live share price${currentPrice ? ` ${currentPrice}` : ""} on ${exchange}. ${description ? `${description} ` : ""}AI Smart Score, risk rating, financials, brokerage reports, and key ratios.`;
 
     return {
       title,
@@ -82,14 +88,14 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
         `${symbol} dividend history`,
       ],
       alternates: {
-        canonical: `${BASE_URL}/stocks/${symbol}?exchange=${exchange}`,
+        canonical: canonicalUrl,
       },
       openGraph: {
         type: "website",
-        url: `${BASE_URL}/stocks/${symbol}`,
+        url: canonicalUrl,
         title,
         description: metaDesc.slice(0, 160),
-        siteName: "MyStockVision",
+        siteName: SITE_NAME,
         locale: "en_IN",
       },
       twitter: {
@@ -101,9 +107,9 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
     };
   } catch {
     return {
-      title: `${symbol} Share Price & Stock Analysis | MyStockVision`,
-      description: `View ${symbol} live share price, AI Smart Score, financial statements, key ratios and analyst reports on MyStockVision.`,
-      alternates: { canonical: `${BASE_URL}/stocks/${symbol}` },
+      title: `${symbol} Share Price and Stock Analysis`,
+      description: `View ${symbol} live share price, AI Smart Score, financial statements, key ratios, and analyst reports on ${SITE_NAME}.`,
+      alternates: { canonical: canonicalUrl },
     };
   }
 }
@@ -330,23 +336,69 @@ export default async function StockDetailsPage({ params, searchParams }: Props) 
     label: "Unavailable"
   };
 
+  const canonicalPath = exchange === "NSE" ? `/stocks/${symbol}` : `/stocks/${symbol}?exchange=${exchange}`;
+  const stockFaqs = [
+    {
+      question: `What can I check on the ${symbol} stock page?`,
+      answer: `You can review ${data.companyName} share price, Smart Score, risk rating, financial statements, quarterly results, corporate actions, peer comparison, and recent market news on one page.`,
+    },
+    {
+      question: `Does ${symbol} include both price and fundamentals?`,
+      answer: `${data.companyName} includes price context plus core stock market research signals such as valuation ratios, returns, financials, and AI-generated analysis layers.`,
+    },
+    {
+      question: `Can I compare ${symbol} with other Indian stocks?`,
+      answer: `Yes. You can move from this stock page to the compare workflow or screener workflow to benchmark ${symbol} against sector peers and other NSE or BSE stocks.`,
+    },
+  ];
+
   const stockJsonLd = {
     "@context": "https://schema.org",
-    "@type": "FinancialProduct",
-    name: data.companyName,
-    alternateName: symbol,
-    description: data.profile?.description || `${data.companyName} stock analysis on NSE/BSE`,
-    url: `${BASE_URL}/stocks/${symbol}`,
-    provider: {
-      "@type": "Organization",
-      name: "MyStockVision",
-      url: BASE_URL,
-    },
-    feesAndCommissionsSpecification: "Free",
-    additionalProperty: [
-      { "@type": "PropertyValue", name: "Exchange", value: data.exchange },
-      { "@type": "PropertyValue", name: "Sector", value: data.sector },
-      ...(data.price?.cmp ? [{ "@type": "PropertyValue", name: "Current Price (INR)", value: String(data.price.cmp) }] : []),
+    "@graph": [
+      {
+        "@type": "WebPage",
+        name: `${data.companyName} (${symbol}) stock analysis`,
+        url: `${SITE_URL}${canonicalPath}`,
+        description: data.profile?.description || `${data.companyName} stock analysis for Indian markets`,
+        isPartOf: {
+          "@id": `${SITE_URL}/#website`,
+        },
+      },
+      buildBreadcrumbJsonLd([
+        { name: "Home", path: "/" },
+        { name: symbol, path: canonicalPath },
+      ]),
+      {
+        "@type": "FinancialProduct",
+        name: data.companyName,
+        alternateName: symbol,
+        description: data.profile?.description || `${data.companyName} stock analysis on NSE and BSE`,
+        url: `${SITE_URL}${canonicalPath}`,
+        provider: {
+          "@type": "Organization",
+          name: SITE_NAME,
+          url: SITE_URL,
+        },
+        feesAndCommissionsSpecification: "Free",
+        additionalProperty: [
+          { "@type": "PropertyValue", name: "Exchange", value: data.exchange },
+          { "@type": "PropertyValue", name: "Sector", value: data.sector },
+          ...(data.price?.cmp
+            ? [{ "@type": "PropertyValue", name: "Current Price (INR)", value: String(data.price.cmp) }]
+            : []),
+        ],
+      },
+      {
+        "@type": "FAQPage",
+        mainEntity: stockFaqs.map((item) => ({
+          "@type": "Question",
+          name: item.question,
+          acceptedAnswer: {
+            "@type": "Answer",
+            text: item.answer,
+          },
+        })),
+      },
     ],
   };
 
@@ -568,6 +620,12 @@ export default async function StockDetailsPage({ params, searchParams }: Props) 
           </section>
 
           <NewsSection symbol={symbol} news={data.news} />
+
+          <FaqSection
+            title={`${symbol} Stock Page FAQs`}
+            intro={`These FAQs help clarify what investors can research on the ${data.companyName} stock analysis page.`}
+            items={stockFaqs}
+          />
         </section>
       </div>
 
