@@ -4,6 +4,7 @@ import { Manrope, Space_Grotesk } from "next/font/google";
 
 import { DisplaySettingsProvider } from "@/components/display-settings-provider";
 import { DisplaySettingsToggle } from "@/components/display-settings-toggle";
+import { FloatingAuth } from "@/components/floating-auth";
 import { MarketStatusBadge } from "@/components/market-status-badge";
 import { MarketTicker } from "@/components/market-ticker";
 import { ModeToggle } from "@/components/mode-toggle";
@@ -233,6 +234,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <main className="page-enter mx-auto max-w-[1640px] px-3 py-4 sm:px-5 sm:py-5 md:px-7 md:py-7">
               {children}
             </main>
+            <FloatingAuth />
 
             <footer className="mt-12 border-t border-border/40 bg-panel/20 backdrop-blur-sm">
               <div className="h-px w-full bg-gradient-to-r from-transparent via-accent/35 to-transparent" />
