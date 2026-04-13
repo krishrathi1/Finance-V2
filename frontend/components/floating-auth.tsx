@@ -237,9 +237,16 @@ export function FloatingAuth() {
                 />
               </div>
               <div>
-                <label className="mb-1.5 block text-xs font-medium text-muted" htmlFor="auth-password">
-                  Password
-                </label>
+                <div className="mb-1.5 flex items-center justify-between">
+                  <label className="text-xs font-medium text-muted" htmlFor="auth-password">
+                    Password
+                  </label>
+                  {activePanel === "signin" && (
+                    <a href="/reset-password" className="text-xs text-accent/80 hover:text-accent transition">
+                      Forgot?
+                    </a>
+                  )}
+                </div>
                 <input
                   className="h-11 w-full rounded-xl border border-border/60 bg-bg/60 px-3 text-sm text-text outline-none transition focus:border-accent/60 focus:ring-2 focus:ring-accent/20"
                   id="auth-password"

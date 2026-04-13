@@ -49,10 +49,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(userData);
         setError(null);
       } else {
+        // 401 is expected when user is not logged in - don't log it
         setUser(null);
       }
     } catch (err) {
-      console.error("Failed to fetch user:", err);
+      // Network errors only, 401s are silent
       setUser(null);
     } finally {
       setLoading(false);
