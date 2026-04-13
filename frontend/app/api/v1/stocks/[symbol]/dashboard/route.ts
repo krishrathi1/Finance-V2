@@ -9,7 +9,7 @@ export async function GET(
   try {
     const { symbol } = await params;
 
-    // Mock dashboard data
+    // Mock dashboard data with realistic values
     const mockDashboard = {
       symbol: symbol.toUpperCase(),
       exchange: 'NSE',
@@ -17,17 +17,28 @@ export async function GET(
         companyName: `${symbol.toUpperCase()} Limited`,
         sector: 'Energy',
         industry: 'Oil & Gas',
-        description: 'Leading energy company',
+        description: 'Leading energy company in India with integrated operations across upstream, downstream, and petrochemicals',
         website: 'https://example.com',
         ceo: 'CEO Name',
         chairman: 'Chairman Name',
         employees: 50000,
-        marketCap: 1500000000000,
+        marketCap: 1500000,
         peRatio: 18.5,
-        pbRatio: 2.4,
+        pbRatio: 5.85,
         dividendYield: 2.5,
+        roe: 8.5,
+        roce: 12.3,
+        roa: 3.2,
+        ebitdaMargin: 25.5,
+        eps: 154.2,
+        faceValue: 10,
+        outstandingShares: 100000,
+        netProfitMargin: 8.5,
+        evToSales: 4.2,
+        bookValue: 485.5,
         incorporationYear: 1957,
         headquarters: 'Mumbai, India',
+        previousName: 'N/A',
       },
       quote: {
         cmp: 2850,
@@ -36,6 +47,7 @@ export async function GET(
         open: 2805,
         high: 2890,
         low: 2800,
+        previousClose: 2804.50,
         volume: 15000000,
         dayHigh52Week: 3200,
         dayLow52Week: 2400,
@@ -47,12 +59,12 @@ export async function GET(
       },
       smartScore: {
         score: 7.5,
-        explanation: 'Strong fundamentals with good growth prospects',
+        aiExplanation: 'Strong fundamentals with good growth prospects',
         aiSource: 'gemini',
       },
       riskScore: {
         score: 4.2,
-        explanation: 'Moderate risk due to sector volatility',
+        aiExplanation: 'Moderate risk due to sector volatility',
         aiSource: 'gemini',
       },
       technicals: {
@@ -60,6 +72,21 @@ export async function GET(
         trend: 'uptrend',
         support: 2800,
         resistance: 2900,
+      },
+      financials: {
+        marketCapCr: 1500000,
+        peRatio: 18.5,
+        pegRatio: 1.8,
+        roe: 8.5,
+        roce: 12.3,
+        roa: 3.2,
+        ebitdaMargin: 25.5,
+        casaRatio: 45.3,
+        dividendYield: 2.5,
+        eps: 154.2,
+        netInterestMargin: 3.2,
+        evToSales: 4.2,
+        bookValue: 485.5,
       },
     };
 
