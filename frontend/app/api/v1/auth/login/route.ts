@@ -89,8 +89,12 @@ export async function POST(request: NextRequest) {
     return response;
   } catch (error) {
     console.error('Login error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Login failed';
     return NextResponse.json(
-      { detail: 'Login failed' },
+      {
+        detail: errorMessage,
+        error: process.env.NODE_ENV === 'development' ? String(error) : 'Internal server error'
+      },
       { status: 500 }
     );
   }

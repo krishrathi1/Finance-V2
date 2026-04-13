@@ -52,7 +52,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (!res.ok) {
         const errorData = await res.json();
-        throw new Error(errorData.detail || "Login failed");
+        const errorMsg = errorData.detail || errorData.error || "Login failed";
+        console.error('Login error response:', errorData);
+        throw new Error(errorMsg);
       }
 
       const userData = await res.json();
@@ -60,6 +62,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setError(null);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Login failed";
+      console.error('Login exception:', message);
       setError(message);
       throw err;
     } finally {
