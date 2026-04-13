@@ -5,7 +5,6 @@ import {
   useContext,
   useEffect,
   useState,
-  useCallback,
   ReactNode,
 } from "react";
 
@@ -26,7 +25,6 @@ type AuthContextType = {
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (name: string, email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
-  refresh: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -36,34 +34,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch current user from /api/v1/auth/me
-  const refresh = useCallback(async () => {
-    try {
-      const res = await fetch("/api/v1/auth/me", {
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-      });
-
-      if (res.ok) {
-        const userData = await res.json();
-        setUser(userData);
-        setError(null);
-      } else {
-        // 401 is expected when user is not logged in - don't log it
-        setUser(null);
-      }
-    } catch (err) {
-      // Network errors only, 401s are silent
-      setUser(null);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  // Check user on mount
+  // Initialize auth state
   useEffect(() => {
-    refresh();
-  }, [refresh]);
+    setLoading(false);
+  }, []);
 
   const signIn = async (email: string, password: string) => {
     setLoading(true);
@@ -81,8 +55,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw new Error(errorData.detail || "Login failed");
       }
 
-      // Refetch user
-      await refresh();
+      const userData = await res.json();
+      setUser(userData);
+      setError(null);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Login failed";
       setError(message);
@@ -108,8 +83,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw new Error(errorData.detail || "Registration failed");
       }
 
-      // Refetch user
-      await refresh();
+      const userData = await res.json();
+      setUser(userData);
+      setError(null);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Registration failed";
       setError(message);
@@ -136,7 +112,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, error, signIn, signUp, signOut, refresh }}>
+    <AuthContext.Provider value={{ user, loading, error, signIn, signUp, signOut }}>
       {children}
     </AuthContext.Provider>
   );
