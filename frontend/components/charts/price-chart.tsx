@@ -25,8 +25,8 @@ export function PriceChart({ data, trend, height = 260 }: { data: PricePoint[]; 
   const gradientBase = isUp ? "#34d399" : isDown ? "#fb7185" : "#41c6da";
 
   return (
-    <div style={{ height }} className="w-full">
-      <ResponsiveContainer>
+    <div style={{ height: typeof height === 'number' ? `${height}px` : height, width: "100%" }} className="w-full">
+      <ResponsiveContainer width="100%" height="100%" debounce={300}>
         <AreaChart data={compact}>
           <defs>
             <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">

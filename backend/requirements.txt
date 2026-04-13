@@ -8,6 +8,9 @@ asyncpg==0.30.0
 python-dotenv==1.1.1
 tenacity==9.1.2
 pyotp
+python-jose[cryptography]==3.3.0
+passlib[argon2]==1.7.4
+argon2-cffi==21.3.0
 yfinance
 pandas
 requests
@@ -20,3 +23,4 @@ botocore
 pdfplumber
 python-docx
 python-multipart
+email-validator

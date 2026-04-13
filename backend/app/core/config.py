@@ -34,6 +34,19 @@ class Settings(BaseSettings):
 
     cache_ttl_seconds: int = 180
 
+    jwt_secret_key: str = ""
+    jwt_algorithm: str = "HS256"
+    access_token_expire_minutes: int = 30
+    refresh_token_expire_days: int = 30
+
+    # SMTP Configuration
+    smtp_server: str = ""
+    smtp_port: int = 587
+    smtp_email: str = ""
+    smtp_password: str = ""
+
+    frontend_url: str = "http://localhost:3000"
+
 
 @lru_cache
 def get_settings() -> Settings:

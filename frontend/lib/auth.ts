@@ -1,8 +1,4 @@
-export const ADMIN_NAME = "Admin";
-export const ADMIN_EMAIL = "admin@gmail.com";
-export const ADMIN_PASSWORD = "11";
-export const AUTH_STORAGE_KEY = "msv_admin_session_v1";
-
+// Auth events
 export const OPEN_AUTH_PANEL_EVENT = "open-auth-panel";
 export const AUTH_SESSION_CHANGED_EVENT = "auth-session-changed";
 
@@ -17,3 +13,9 @@ export function notifyAuthSessionChanged() {
   if (typeof window === "undefined") return;
   window.dispatchEvent(new Event(AUTH_SESSION_CHANGED_EVENT));
 }
+
+// Admin mock credentials (for legacy components like FloatingAuth)
+export const ADMIN_NAME = "Admin";
+export const ADMIN_EMAIL = "admin@gmail.com";
+export const ADMIN_PASSWORD = "11";
+export const AUTH_STORAGE_KEY = "finance_auth_session";

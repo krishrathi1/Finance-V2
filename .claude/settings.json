@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mysql -u root financial_forensics -e \"SELECT id, email, name, verified_email, created_at FROM users WHERE email='newuser@example.com';\")",
+      "Bash(curl -X POST http://localhost:3000/api/v1/auth/login -H 'Content-Type: application/json' -d '{\"email\":\"newuser@example.com\",\"password\":\"password123\"}')",
+      "Bash(curl -s -X POST http://localhost:3000/api/v1/auth/login -H 'Content-Type: application/json' -d '{\"email\":\"newuser@example.com\",\"password\":\"password123\"}')",
+      "Bash(curl -s http://localhost:3000/email-preview)",
+      "Read(//tmp/**)",
+      "Bash(mysql -u root financial_forensics -e \"DELETE FROM users WHERE email='yuvraj.arora.23cse@bmu.edu.in'; SELECT 'User deleted' as status; SHOW TABLES; SELECT COUNT\\(*\\) as total_users FROM users;\")",
+      "Bash(pkill -f \"npm run dev\")",
+      "Bash(mysql -u root financial_forensics -e \"DELETE FROM users WHERE email='yuvraj.arora.23cse@bmu.edu.in';\")",
+      "Bash(mysql -u root financial_forensics -e \"SELECT email FROM users WHERE email='yuvraj.arora.23cse@bmu.edu.in';\")",
+      "Bash(xargs grep:*)"
+    ]
+  }
+}

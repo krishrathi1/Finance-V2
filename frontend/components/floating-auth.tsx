@@ -1,25 +1,18 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-
-import {
-  ADMIN_EMAIL,
-  ADMIN_NAME,
-  ADMIN_PASSWORD,
-  AUTH_STORAGE_KEY,
-  OPEN_AUTH_PANEL_EVENT,
-  type AuthPanelMode,
-  notifyAuthSessionChanged,
-} from "@/lib/auth";
+import { AUTH_STORAGE_KEY, OPEN_AUTH_PANEL_EVENT, type AuthPanelMode, notifyAuthSessionChanged } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 
 export function FloatingAuth() {
   const [open, setOpen] = useState(false);
   const [activePanel, setActivePanel] = useState<"signin" | "signup" | null>(null);
-  const [email, setEmail] = useState(ADMIN_EMAIL);
-  const [password, setPassword] = useState(ADMIN_PASSWORD);
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [signedInAs, setSignedInAs] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -51,6 +44,7 @@ export function FloatingAuth() {
       setActivePanel(custom.detail?.mode === "signin" ? "signin" : "signup");
       setOpen(false);
       setError(null);
+      resetForm();
     };
 
     window.addEventListener(OPEN_AUTH_PANEL_EVENT, onOpenAuthPanel as EventListener);
@@ -70,23 +64,102 @@ export function FloatingAuth() {
     }
   }, []);
 
-  const handleAuth = () => {
+  const resetForm = () => {
+    setName("");
+    setEmail("");
+    setPassword("");
+    setError(null);
+  };
+
+  const handleSignup = async () => {
     setError(null);
 
-    if (email.trim().toLowerCase() !== ADMIN_EMAIL || password !== ADMIN_PASSWORD) {
-      setError("Use admin@gmail.com and password 11.");
+    if (!name.trim() || !email.trim() || !password.trim()) {
+      setError("All fields are required");
       return;
     }
 
-    const resolvedName = ADMIN_NAME;
-    setSignedInAs(resolvedName);
-    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ name: resolvedName, email: ADMIN_EMAIL }));
-    notifyAuthSessionChanged();
-    setActivePanel(null);
-    setOpen(false);
+    if (password.length < 8) {
+      setError("Password must be at least 8 characters");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await fetch("/api/v1/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ name: name.trim(), email: email.trim(), password }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setError(data.detail || "Signup failed");
+        return;
+      }
+
+      setSignedInAs(data.name);
+      localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ name: data.name, email: data.email }));
+      notifyAuthSessionChanged();
+      setActivePanel(null);
+      resetForm();
+    } catch (err) {
+      setError("Network error. Please try again.");
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const signOut = () => {
+  const handleSignin = async () => {
+    setError(null);
+
+    if (!email.trim() || !password.trim()) {
+      setError("Email and password are required");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await fetch("/api/v1/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ email: email.trim(), password }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setError(data.detail || "Login failed");
+        return;
+      }
+
+      setSignedInAs(data.name);
+      localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ name: data.name, email: data.email }));
+      notifyAuthSessionChanged();
+      setActivePanel(null);
+      resetForm();
+    } catch (err) {
+      setError("Network error. Please try again.");
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const signOut = async () => {
+    try {
+      await fetch("/api/v1/auth/logout", {
+        method: "POST",
+        credentials: "include",
+      });
+    } catch (err) {
+      console.error(err);
+    }
+
     setSignedInAs(null);
     localStorage.removeItem(AUTH_STORAGE_KEY);
     notifyAuthSessionChanged();
@@ -110,7 +183,10 @@ export function FloatingAuth() {
               <button
                 aria-label="Close auth panel"
                 className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border/60 text-muted transition hover:text-text"
-                onClick={() => setActivePanel(null)}
+                onClick={() => {
+                  setActivePanel(null);
+                  resetForm();
+                }}
                 type="button"
               >
                 x
@@ -121,7 +197,11 @@ export function FloatingAuth() {
               className="space-y-3.5"
               onSubmit={(event) => {
                 event.preventDefault();
-                handleAuth();
+                if (activePanel === "signup") {
+                  handleSignup();
+                } else {
+                  handleSignin();
+                }
               }}
             >
               {activePanel === "signup" && (
@@ -133,10 +213,11 @@ export function FloatingAuth() {
                     className="h-11 w-full rounded-xl border border-border/60 bg-bg/60 px-3 text-sm text-text outline-none transition focus:border-accent/60 focus:ring-2 focus:ring-accent/20"
                     id="auth-name"
                     name="name"
-                    readOnly
-                    value={ADMIN_NAME}
-                    placeholder="Admin"
+                    onChange={(event) => setName(event.target.value)}
+                    placeholder="Your full name"
                     type="text"
+                    value={name}
+                    disabled={loading}
                   />
                 </div>
               )}
@@ -152,6 +233,7 @@ export function FloatingAuth() {
                   placeholder="you@example.com"
                   type="email"
                   value={email}
+                  disabled={loading}
                 />
               </div>
               <div>
@@ -163,29 +245,32 @@ export function FloatingAuth() {
                   id="auth-password"
                   name="password"
                   onChange={(event) => setPassword(event.target.value)}
-                  placeholder={activePanel === "signup" ? "Create password" : "Enter password"}
+                  placeholder={activePanel === "signup" ? "At least 8 characters" : "Enter password"}
                   type="password"
                   value={password}
+                  disabled={loading}
                 />
               </div>
               {error && <p className="text-xs font-medium text-danger">{error}</p>}
               <button
-                className="mt-2 inline-flex h-11 w-full items-center justify-center rounded-xl bg-accent px-4 text-sm font-semibold text-white transition hover:opacity-90"
+                className="mt-2 inline-flex h-11 w-full items-center justify-center rounded-xl bg-accent px-4 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
                 type="submit"
+                disabled={loading}
               >
-                {activePanel === "signup" ? "Create account" : "Continue"}
+                {loading ? "Loading..." : activePanel === "signup" ? "Create account" : "Continue"}
               </button>
             </form>
 
             <p className="mt-4 text-center text-xs text-muted">
               {activePanel === "signup" ? "Already have an account?" : "New here?"}{" "}
               <button
-                className="font-semibold text-accent transition hover:opacity-80"
+                className="font-semibold text-accent transition hover:opacity-80 disabled:opacity-50"
                 onClick={() => {
                   setActivePanel((prev) => (prev === "signup" ? "signin" : "signup"));
-                  setError(null);
+                  resetForm();
                 }}
                 type="button"
+                disabled={loading}
               >
                 {activePanel === "signup" ? "Sign in" : "Create an account"}
               </button>
@@ -241,7 +326,7 @@ export function FloatingAuth() {
                   onClick={() => {
                     setActivePanel("signin");
                     setOpen(false);
-                    setError(null);
+                    resetForm();
                   }}
                   role="menuitem"
                   type="button"
@@ -253,7 +338,7 @@ export function FloatingAuth() {
                   onClick={() => {
                     setActivePanel("signup");
                     setOpen(false);
-                    setError(null);
+                    resetForm();
                   }}
                   role="menuitem"
                   type="button"

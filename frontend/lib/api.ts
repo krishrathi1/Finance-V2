@@ -1,9 +1,7 @@
 import type { DashboardData, ScreenerFilters, ScreenerResult } from "@/lib/types";
 
-const DEFAULT_DEV_BACKEND_BASE = "http://127.0.0.1:8000";
 const INTERNAL_BASE = normalizeBaseUrl(process.env.INTERNAL_API_BASE);
-const PUBLIC_BASE = normalizeBaseUrl(process.env.NEXT_PUBLIC_API_BASE);
-const DEFAULT_BACKEND_BASE = "https://financial-forensics-ai-india.onrender.com";
+const PUBLIC_BASE = normalizeBaseUrl(process.env.NEXT_PUBLIC_API_BASE || '');
 const memoryCache = new Map<string, { at: number; data: unknown }>();
 
 export type DashboardEnvelope = {
@@ -18,25 +16,20 @@ function normalizeBaseUrl(value?: string) {
   return String(value || "").trim().replace(/\/$/, "");
 }
 
-function getDefaultBackendBase() {
-  return process.env.NODE_ENV === "production" ? DEFAULT_BACKEND_BASE : DEFAULT_DEV_BACKEND_BASE;
-}
-
 function getServerApiBase() {
-  return INTERNAL_BASE || PUBLIC_BASE || getDefaultBackendBase();
+  return INTERNAL_BASE || PUBLIC_BASE || '';
 }
 
-function getApiUrl(path: string) {
+function getApiUrl(path: string, type: "stocks" | "auth" | "portfolio" = "stocks") {
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  const prefix = `/api/v1/${type}`;
 
-  // Browser: Use relative paths to stay on same origin and use Nginx/Next.js proxy
   if (typeof window !== "undefined") {
-    return `/api/v1/stocks${normalizedPath}`;
+    return `${prefix}${normalizedPath}`;
   }
 
-  // Server: Use full backend URL (e.g. internal Docker network or production API)
-  const base = getServerApiBase().replace(/\/api$/, "");
-  return `${base}/api/v1/stocks${normalizedPath}`;
+  const base = getServerApiBase();
+  return `${base}${prefix}${normalizedPath}`;
 }
 
 async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number) {
@@ -572,9 +565,7 @@ export async function parsePortfolioDocument(file: File): Promise<{ holdings: an
   const formData = new FormData();
   formData.append('file', file);
 
-  const url = typeof window !== 'undefined'
-    ? '/api/v1/portfolio/parse-document'
-    : 'http://127.0.0.1:8000/api/v1/portfolio/parse-document';
+  const url = getApiUrl('/parse-document', 'portfolio');
 
   const res = await fetch(url, {
     method: 'POST',

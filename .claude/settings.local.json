@@ -3,7 +3,20 @@
     "allow": [
       "Bash(diff -rq . ./finance_v2-main/ --exclude=finance_v2-main --exclude=.git --exclude=node_modules --exclude=__pycache__ --exclude=*.pyc --exclude=venv --exclude=env --exclude=.env)",
       "WebSearch",
-      "Bash(find /c/Users/KRISH/Desktop/Finance/backend -name *.md -o -name README* -o -name docker-compose*)"
+      "Bash(find /c/Users/KRISH/Desktop/Finance/backend -name *.md -o -name README* -o -name docker-compose*)",
+      "Bash(pip install:*)",
+      "Bash(python init_db.py)",
+      "Bash(python create_admin.py)",
+      "Bash(ls -la d:/xamp/htdocs/Finance/Financial-Forensics-AI-India/frontend/.env*)",
+      "Bash(python -c \"from app.schemas.user import RegisterRequest; print\\('✅ Schemas imported successfully'\\)\")",
+      "Bash(python -c \"from app.schemas.user import RegisterRequest; print\\('Schemas imported successfully'\\)\")",
+      "Bash(pkill -f \"npm\\\\|node\\\\|next\")",
+      "Bash(npm run:*)",
+      "Bash(npm install:*)",
+      "Bash(cat)",
+      "Bash(mysql -u root financial_forensics)",
+      "Bash(rm -f EMAIL_DESIGN_PREVIEW.txt EMAIL_TEMPLATES.md IMPLEMENTATION_CHECKLIST.md SESSION_SUMMARY.md SETUP_COMPLETE.md SIMPLIFIED_CHECKLIST.md backend/create_admin.py backend/init_db.py backend/test_smtp.py frontend/setup.sql frontend/scripts)",
+      "Bash(rm -rf frontend/scripts)"
     ]
   }
 }

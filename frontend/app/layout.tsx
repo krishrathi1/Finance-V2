@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import Link from "next/link";
 import { Manrope, Space_Grotesk } from "next/font/google";
 
+import { AuthProvider } from "@/hooks/useAuth";
 import { DisplaySettingsProvider } from "@/components/display-settings-provider";
 import { DisplaySettingsToggle } from "@/components/display-settings-toggle";
 import { FloatingAuth } from "@/components/floating-auth";
@@ -190,7 +191,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className={`${manrope.variable} ${space.variable} min-h-screen font-[var(--font-manrope)]`}>
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
-          <DisplaySettingsProvider>
+          <AuthProvider>
+            <DisplaySettingsProvider>
             <ScrollProgress />
 
             <header className="header-enter sticky top-0 z-40 border-b border-border/40 bg-bg/80 backdrop-blur-xl">
@@ -322,7 +324,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 </div>
               </div>
             </footer>
-          </DisplaySettingsProvider>
+            </DisplaySettingsProvider>
+          </AuthProvider>
         </ThemeProvider>
       </body>
     </html>
