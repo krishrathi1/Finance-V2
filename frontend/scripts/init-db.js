@@ -94,6 +94,20 @@ async function initializeDatabase() {
     `);
     console.log('✓ portfolios table created');
 
+    // Create password reset tokens table
+    await connection.execute(`
+      CREATE TABLE IF NOT EXISTS password_reset_tokens (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        otp VARCHAR(6) NOT NULL,
+        is_used BOOLEAN DEFAULT FALSE,
+        expires_at TIMESTAMP NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      )
+    `);
+    console.log('✓ password_reset_tokens table created');
+
     console.log('\n✅ Database initialized successfully!');
   } catch (error) {
     if (error.message.includes('already exists')) {
