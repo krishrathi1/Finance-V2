@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
-import { verifyAccessToken, getAccessTokenFromRequest } from '@/lib/auth-utils';
+import { verifyAccessToken } from '@/lib/auth-utils';
 
 export async function GET(request: NextRequest) {
   try {
-    const token = getAccessTokenFromRequest(request);
+    // Get token from cookies (Next.js way)
+    const token = request.cookies.get('access_token')?.value;
 
     if (!token) {
       return NextResponse.json(
