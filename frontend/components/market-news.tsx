@@ -13,6 +13,8 @@ type NewsArticle = {
   imageUrl: string | null;
 };
 
+const MARKET_PLACEHOLDER = 'https://images.unsplash.com/photo-1611974717482-98aa003745fc?auto=format&fit=crop&q=80&w=800';
+
 function countImages(rows: NewsArticle[]) {
   return rows.reduce((total, row) => total + (hasUsableImage(row.imageUrl) ? 1 : 0), 0);
 }
@@ -25,9 +27,7 @@ function hasUsableImage(imageUrl: string | null) {
     const url = new URL(imageUrl);
     const host = url.hostname.toLowerCase();
     return !(
-      host === "news.google.com" ||
-      host.endsWith(".gstatic.com") ||
-      host.endsWith(".googleusercontent.com")
+      host === "news.google.com"
     );
   } catch {
     return false;
@@ -128,21 +128,28 @@ export function MarketNews() {
             {article.imageUrl ? (
               <div className="relative h-32 w-full shrink-0 overflow-hidden bg-background/50 sm:h-40">
                 <div className="absolute inset-0 z-[1] bg-gradient-to-t from-black/20 via-transparent to-transparent opacity-70" />
-                <img
-                  src={article.imageUrl}
-                  alt={article.title}
-                  loading="lazy"
-                  referrerPolicy="no-referrer"
-                  className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
-                  onError={(e) => {
-                    const target = e.target as HTMLImageElement;
-                    target.style.display = "none";
-                    const parent = target.parentElement;
-                    if (parent) {
-                      parent.classList.add("news-image-fallback");
-                    }
-                  }}
-                />
+                {hasUsableImage(article.imageUrl) ? (
+                  <img
+                    src={`/api/v1/stocks/proxy-image?url=${encodeURIComponent(article.imageUrl!)}`}
+                    alt={article.title}
+                    className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
+                    loading="lazy"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = MARKET_PLACEHOLDER;
+                    }}
+                  />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center bg-muted/20">
+                    <img 
+                      src={MARKET_PLACEHOLDER} 
+                      className="h-full w-full object-cover opacity-60" 
+                      alt="Market"
+                    />
+                    <div className="absolute inset-0 flex items-center justify-center">
+                       <span className="text-xs font-medium text-muted-foreground uppercase tracking-widest opacity-80">Market Insight</span>
+                    </div>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="news-image-fallback flex h-32 w-full shrink-0 items-center justify-center text-xs text-muted sm:h-40">No Image</div>

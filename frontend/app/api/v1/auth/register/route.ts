@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
     const userId = (result as any).insertId;
 
     // Create tokens
-    const accessToken = createAccessToken(userId, false, 'free');
+    const accessToken = await createAccessToken(userId, false, 'free');
     const { raw: rawRefresh, hash: refreshHash } = await createRefreshToken();
 
     // Store refresh token

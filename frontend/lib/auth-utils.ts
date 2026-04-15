@@ -14,12 +14,12 @@ export async function verifyPassword(password: string, hash: string): Promise<bo
   return bcrypt.compare(password, hash);
 }
 
-export function createAccessToken(userId: number, isAdmin: boolean, tier: string): string {
-  const token = jose.SignJWT({ sub: String(userId), admin: isAdmin, tier })
+export async function createAccessToken(userId: number, isAdmin: boolean, tier: string): Promise<string> {
+  const token = new jose.SignJWT({ sub: String(userId), admin: isAdmin, tier })
     .setProtectedHeader({ alg: 'HS256' })
     .setExpirationTime('30m');
 
-  return token.sign(JWT_SECRET);
+  return await token.sign(JWT_SECRET);
 }
 
 export async function createRefreshToken(): Promise<{ raw: string; hash: string }> {

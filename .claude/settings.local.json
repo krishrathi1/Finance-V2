@@ -16,7 +16,15 @@
       "Bash(cat)",
       "Bash(mysql -u root financial_forensics)",
       "Bash(rm -f EMAIL_DESIGN_PREVIEW.txt EMAIL_TEMPLATES.md IMPLEMENTATION_CHECKLIST.md SESSION_SUMMARY.md SETUP_COMPLETE.md SIMPLIFIED_CHECKLIST.md backend/create_admin.py backend/init_db.py backend/test_smtp.py frontend/setup.sql frontend/scripts)",
-      "Bash(rm -rf frontend/scripts)"
+      "Bash(rm -rf frontend/scripts)",
+      "Bash(curl -s \"http://localhost:3000/api/v1/stocks/RELIANCE/news\")",
+      "Bash(curl -v \"http://localhost:3000/api/v1/stocks/RELIANCE/news\")",
+      "Bash(curl -s \"http://localhost:3000/api/v1/stocks/RELIANCE/quote\")",
+      "Bash(curl -s \"http://localhost:3000/stocks/RELIANCE\")",
+      "Bash(curl -s \"http://localhost:3000/api/v1/stocks/TCS/news\")"
+    ],
+    "additionalDirectories": [
+      "d:\\xamp\\htdocs\\Finance\\Financial-Forensics-AI-India\\frontend\\app\\api\\v1\\stocks\\[symbol]\\news"
     ]
   }
 }

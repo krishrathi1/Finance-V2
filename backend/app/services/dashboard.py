@@ -2018,6 +2018,8 @@ class StockDashboardService:
         price_max: float = 0,
         volume_min: float = 0,
         dividend_min: float = 0,
+        pe_min: float = 0,
+        pe_max: float = 0,
         limit: int = 100,
     ) -> list[dict[str, Any]]:
         is_nse = str(exchange or "NSE").strip().upper() == "NSE"
@@ -2030,6 +2032,12 @@ class StockDashboardService:
                 limit=max(limit * 3, 300), # fetch a larger pool for post-filtering
             )
         else:
+            # Increase limit for the initial fetch if we have strict post-filters like PE or Dividend
+            # FMP doesn't support PE filtering at source for Indian stocks, so we need a larger pool.
+            fetch_limit = limit
+            if pe_min > 0 or pe_max > 0 or dividend_min > 0 or market_cap_min > 0:
+                fetch_limit = max(limit * 5, 500)
+
             raw = await self.providers.get_fmp_stock_screener(
                 exchange=exchange,
                 sector=sector,
@@ -2040,7 +2048,7 @@ class StockDashboardService:
                 price_lower_than=price_max,
                 volume_more_than=volume_min,
                 dividend_more_than=dividend_min,
-                limit=limit,
+                limit=fetch_limit,
             )
             processed = self._normalize_screener_rows(raw)
             if not processed and self._can_use_live_screener_fallback(
@@ -2077,6 +2085,13 @@ class StockDashboardService:
                 continue
             if dividend_min > 0 and float(item.get("dividendYield") or 0) < dividend_min:
                 continue
+            item_pe = item.get("pe")
+            if pe_min > 0:
+                if item_pe is None or float(item_pe) < pe_min:
+                    continue
+            if pe_max > 0:
+                if item_pe is None or float(item_pe) > pe_max:
+                    continue
             filtered.append(item)
 
         filtered.sort(key=lambda x: float(x.get("marketCap") or 0), reverse=True)

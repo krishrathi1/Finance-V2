@@ -1,0 +1,109 @@
+import { useEffect, useState } from 'react';
+
+export interface StockQuote {
+  symbol: string;
+  companyName: string;
+  industry: string;
+  sector: string;
+
+  // Price Information
+  lastPrice: number;
+  open: number;
+  close: number;
+  previousClose: number;
+  vwap: number;
+  change: number;
+  pChange: number;
+
+  // High/Low Information
+  fiftytwoWeekHigh: number;
+  fiftytwoWeekHighDate: string;
+  fiftytwoWeekLow: number;
+  fiftytwoWeekLowDate: string;
+
+  // Intraday High/Low
+  intraDayHigh: number;
+  intraDayLow: number;
+
+  // Circuit Limits
+  upperCP: number;
+  lowerCP: number;
+
+  // Valuation Metrics
+  marketCapCr: number | null;
+  peRatio: number | null;
+  industryPE: number | null;
+  pegRatio: number | null;
+  bookValue: number | null;
+  priceToBook: number | null;
+  evToSales: number | null;
+
+  // Profitability Metrics
+  roe: number | null;
+  roce: number | null;
+  roa: number | null;
+  ebitdaMargin: number | null;
+  netProfitMargin: number | null;
+  operatingMargin: number | null;
+
+  // Per Share Data
+  eps: number | null;
+  dividendYield: number | null;
+  outstandingSharesCr: number | null;
+
+  // Financial Data
+  netProfit: number;
+  profitBeforeTax: number;
+  netSales: number;
+  totalIncome: number;
+
+  // Risk Metrics
+  debtEquityRatio: number;
+  casaRatio: number | null;
+  netInterestMargin: number | null;
+
+  // Additional Info
+  faceValue: number;
+  isin: string;
+  listingDate: string;
+  tradingStatus: string;
+
+  timestamp: string;
+}
+
+export function useStockQuote(symbol: string) {
+  const [data, setData] = useState<StockQuote | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchQuote = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+
+        const response = await fetch(
+          `/api/v1/stocks/${symbol}/quote`
+        );
+
+        if (!response.ok) {
+          throw new Error(`Failed to fetch quote: ${response.statusText}`);
+        }
+
+        const quoteData = await response.json();
+        setData(quoteData);
+      } catch (err) {
+        console.error('Quote fetch error:', err);
+        setError(err instanceof Error ? err.message : 'Failed to fetch quote');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (symbol) {
+      fetchQuote();
+    }
+  }, [symbol]);
+
+  return { data, loading, error };
+}

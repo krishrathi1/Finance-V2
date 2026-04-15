@@ -14,9 +14,7 @@ cors_origins = [origin.strip() for origin in settings.cors_origins.split(",") if
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    await redis_cache.connect()
     yield
-    await redis_cache.disconnect()
 
 
 app = FastAPI(title=settings.app_name, debug=settings.app_debug, lifespan=lifespan)

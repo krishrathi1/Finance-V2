@@ -12,14 +12,16 @@ import { PriceAlertButton } from "@/components/price-alert-button";
 import { AddToPortfolioButton } from "@/components/add-to-portfolio-button";
 import { Card } from "@/components/ui/card";
 import { formatCurrency, formatPercent } from "@/lib/format";
+import { useChartData } from "@/hooks/useChartData";
+import { useStockQuote } from "@/hooks/useStockQuote";
 import type { DashboardData } from "@/lib/types";
 
 const ranges = [
-  { key: "1D", days: 1 },
-  { key: "1W", days: 7 },
-  { key: "1M", days: 30 },
-  { key: "1Y", days: 365 },
-  { key: "5Y", days: 1825 }
+  { key: "1D", label: "1D" },
+  { key: "1W", label: "1W" },
+  { key: "1M", label: "1M" },
+  { key: "1Y", label: "1Y" },
+  { key: "5Y", label: "5Y" }
 ];
 
 export function PriceSidebar({ data }: { data: DashboardData }) {
@@ -28,13 +30,25 @@ export function PriceSidebar({ data }: { data: DashboardData }) {
   const [mounted, setMounted] = useState(false);
   const selected = ranges.find((item) => item.key === range) || ranges[3];
 
+  // Fetch chart data from NSE API
+  const { data: chartData, loading: chartLoading } = useChartData(data.symbol, range);
+
+  // Fetch quote data for 52W high/low
+  const { data: quoteData } = useStockQuote(data.symbol);
+
   useEffect(() => {
     setMounted(true);
     return () => setMounted(false);
   }, []);
 
   const rangeHistory = useMemo(() => {
-    if (selected.days === 1) {
+    // Use fetched chart data if available, fallback to dashboard data
+    if (chartData?.history && chartData.history.length > 0) {
+      return chartData.history;
+    }
+
+    // Fallback to existing dashboard data
+    if (selected.key === "1D") {
       const intraday = data.price.intraday ?? [];
       if (intraday.length > 0) {
         const ordered = [...intraday].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
@@ -45,26 +59,28 @@ export function PriceSidebar({ data }: { data: DashboardData }) {
       return data.price.history.slice(-30);
     }
     const ordered = [...data.price.history].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-    return ordered.slice(-Math.min(selected.days, ordered.length));
-  }, [data.price.history, data.price.intraday, selected.days]);
+    return ordered.slice(-30);
+  }, [chartData, data.price.history, data.price.intraday, selected.key]);
+
+  const currentPrice = quoteData?.lastPrice || data.price.cmp;
 
   const { trend, startPrice, endPrice } = useMemo(() => {
     if (rangeHistory.length < 2) {
       return {
         trend: undefined as "up" | "down" | undefined,
-        startPrice: data.price.cmp,
-        endPrice: data.price.cmp
+        startPrice: currentPrice,
+        endPrice: currentPrice
       };
     }
     const startObj = rangeHistory[0];
     const endObj = rangeHistory[rangeHistory.length - 1];
-    const latestPrice = endObj?.close ?? data.price.cmp;
+    const latestPrice = endObj?.close ?? currentPrice;
     return {
       trend: (latestPrice >= startObj.close ? "up" : "down") as "up" | "down",
       startPrice: startObj.close,
       endPrice: latestPrice
     };
-  }, [rangeHistory, data.price.cmp]);
+  }, [rangeHistory, currentPrice]);
 
   const rangePointChange = startPrice ? endPrice - startPrice : 0;
   const rangePercentChange = startPrice ? (rangePointChange / startPrice) * 100 : 0;
@@ -111,8 +127,8 @@ export function PriceSidebar({ data }: { data: DashboardData }) {
           </div>
           <div className="flex flex-wrap items-center justify-end gap-1.5 sm:flex-nowrap sm:self-start">
             <WatchlistButton symbol={data.symbol} className="h-9 w-9 p-0" />
-            <PriceAlertButton symbol={data.symbol} currentPrice={data.price.cmp} className="h-9 w-9 p-0" />
-            <AddToPortfolioButton symbol={data.symbol} companyName={data.companyName} currentPrice={data.price.cmp} className="h-9 w-9 p-0" />
+            <PriceAlertButton symbol={data.symbol} currentPrice={quoteData?.lastPrice || data.price.cmp} className="h-9 w-9 p-0" />
+            <AddToPortfolioButton symbol={data.symbol} companyName={data.companyName} currentPrice={quoteData?.lastPrice || data.price.cmp} className="h-9 w-9 p-0" />
             <button
               onClick={() => setIsExpanded(true)}
               className="flex h-9 w-9 items-center justify-center rounded-md p-0 text-muted transition-colors hover:bg-accent/20 hover:text-foreground"
@@ -123,7 +139,7 @@ export function PriceSidebar({ data }: { data: DashboardData }) {
         </div>
 
         <div className="mt-4 flex flex-col gap-2 sm:grid sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start sm:gap-x-3 sm:gap-y-1">
-          <p className="min-w-0 text-2xl font-bold leading-none sm:text-3xl">{formatCurrency(data.price.cmp, data.price.currency)}</p>
+          <p className="min-w-0 text-2xl font-bold leading-none sm:text-3xl">{formatCurrency(quoteData?.lastPrice || data.price.cmp, data.price.currency)}</p>
           <div className={`min-w-0 sm:text-right ${isPositive ? "text-success" : "text-danger"}`}>
             <p className="text-xl font-semibold leading-none sm:text-2xl">
               {isPositive ? "+" : ""}
@@ -135,7 +151,7 @@ export function PriceSidebar({ data }: { data: DashboardData }) {
           </div>
         </div>
 
-        <div className="mt-4">
+        <div className="mt-4 min-w-0 overflow-hidden">
           <PriceChart data={rangeHistory} trend={trend} height="clamp(220px, 56vw, 260px)" />
         </div>
 
@@ -143,14 +159,14 @@ export function PriceSidebar({ data }: { data: DashboardData }) {
 
         <div className="mt-4">
           <div className="mb-1 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs text-muted">
-            <span>52W Low {formatCurrency(data.price.fiftyTwoWeekLow)}</span>
-            <span>52W High {formatCurrency(data.price.fiftyTwoWeekHigh)}</span>
+            <span>52W Low {formatCurrency(quoteData?.fiftytwoWeekLow || data.price.fiftyTwoWeekLow)}</span>
+            <span>52W High {formatCurrency(quoteData?.fiftytwoWeekHigh || data.price.fiftyTwoWeekHigh)}</span>
           </div>
           <div className="h-2 rounded-full bg-bg">
             <motion.div
               initial={{ width: 0 }}
               animate={{
-                width: `${((data.price.cmp - data.price.fiftyTwoWeekLow) / (data.price.fiftyTwoWeekHigh - data.price.fiftyTwoWeekLow + 0.0001)) * 100}%`
+                width: `${((currentPrice - (quoteData?.fiftytwoWeekLow || data.price.fiftyTwoWeekLow)) / ((quoteData?.fiftytwoWeekHigh || data.price.fiftyTwoWeekHigh) - (quoteData?.fiftytwoWeekLow || data.price.fiftyTwoWeekLow) + 0.0001)) * 100}%`
               }}
               className="h-2 rounded-full bg-gradient-to-r from-amber-400 to-lime-400"
             />
@@ -210,15 +226,15 @@ export function PriceSidebar({ data }: { data: DashboardData }) {
                     </div>
 
                     <div className="flex flex-wrap items-center gap-3">
-                      <p className="text-2xl font-bold sm:text-4xl">{formatCurrency(data.price.cmp, data.price.currency)}</p>
+                      <p className="text-2xl font-bold sm:text-4xl">{formatCurrency(currentPrice, data.price.currency)}</p>
                       <div className={`flex items-baseline gap-2 text-base font-semibold sm:text-xl ${isPositive ? "text-success" : "text-danger"}`}>
                         <span>{isPositive ? "+" : ""}{formatCurrency(pointChange, data.price.currency)}</span>
                         <span className="text-sm opacity-90 sm:text-base">({formatPercent(percentChange)}) {changeLabel}</span>
                       </div>
                     </div>
 
-                    <div className="mt-8 min-h-0 flex-1">
-                      <PriceChart data={rangeHistory} trend={trend} height="50vh" />
+                    <div className="mt-8 min-h-0 min-w-0 flex-1 overflow-hidden">
+                      <PriceChart data={rangeHistory} trend={trend} height="100%" />
                     </div>
 
                     <div className="mx-auto mt-6 w-full max-w-md">

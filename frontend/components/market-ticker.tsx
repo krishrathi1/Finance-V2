@@ -59,9 +59,9 @@ export function MarketTicker() {
   }, [rows]);
 
   const durationSeconds = useMemo(() => {
-    const minDuration = 360;
-    const maxDuration = 3200;
-    const secondsPerItem = 10;
+    const minDuration = 212; // 360 / 1.7
+    const maxDuration = 1882; // 3200 / 1.7
+    const secondsPerItem = 5.88; // 10 / 1.7
     return Math.max(minDuration, Math.min(maxDuration, Math.round(tape.length * secondsPerItem)));
   }, [tape.length]);
 

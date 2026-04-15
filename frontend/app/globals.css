@@ -717,7 +717,7 @@ html[data-density="compact"] .density-value { font-size: 1rem; }
   display: inline-flex;
   min-width: max-content;
   white-space: nowrap;
-  animation: ticker-scroll 40s linear infinite;
+  animation: ticker-scroll 24s linear infinite;
   will-change: transform;
 }
 
@@ -788,7 +788,7 @@ html[data-density="compact"] .density-value { font-size: 1rem; }
 ───────────────────────────────────────────────────────────────────────── */
 
 @media (max-width: 639px) {
-  .ticker-track { animation-duration: 65s; }
+  .ticker-track { animation-duration: 38s; }
   .overflow-auto { -webkit-overflow-scrolling: touch; }
   html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
   .hero-orb { display: none; }

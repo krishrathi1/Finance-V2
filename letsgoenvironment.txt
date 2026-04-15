@@ -1,0 +1,21 @@
+NODE_ENV=development
+
+NEXT_PUBLIC_API_BASE=http://localhost:3000
+INTERNAL_API_BASE=http://localhost:3000
+JWT_SECRET_KEY=your-secret-key-change-me-in-production-32-chars-minimum
+
+MYSQL_HOST=localhost
+MYSQL_USER=root
+MYSQL_PASSWORD=
+MYSQL_DATABASE=financial_forensics
+
+SMTP_SERVER=mail.voreva.in
+SMTP_PORT=587
+SMTP_EMAIL=noreply@mystockvision.com
+SMTP_PASSWORD=OrpENt,79,;
+
+# API Keys
+FMP_API_KEY=f7kfILhVCH29cqa7VApmPiyc6fXrneX9
+NEWS_API_KEY=afb02bd75fab48038f89f82830127389
+GEMINI_API_KEY=AIzaSyCEfzp_b2Auk_ESLhj6xpAKdGL3WIrCH0w
+GEMINI_MODEL=gemini-3-flash-preview

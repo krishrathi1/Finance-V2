@@ -10,8 +10,8 @@ import { CorporateActionsSection } from "@/components/sections/corporate-actions
 import { DashboardAutoRefresh } from "@/components/sections/dashboard-auto-refresh";
 import { DocumentsSection } from "@/components/sections/documents-section";
 import { KeyRatiosSection } from "@/components/sections/key-ratios-section";
-import { MetricsGrid } from "@/components/sections/metrics-grid";
-import { NewsSection } from "@/components/sections/news-section";
+const MetricsGridLive = dynamic(() => import("@/components/sections/metrics-grid-live").then((m) => m.MetricsGridLive), { ssr: false });
+const NewsSectionLive = dynamic(() => import("@/components/sections/news-section-live").then((m) => m.NewsSectionLive), { ssr: false });
 import { BrokerageSummary } from "@/components/sections/brokerage-summary";
 import { BeginnerSnapshot } from "@/components/sections/beginner-snapshot";
 import { ReturnsPanel } from "@/components/sections/returns-panel";
@@ -499,7 +499,7 @@ export default async function StockDetailsPage({ params, searchParams }: Props) 
               ipoDate={data.profile.ipoDate}
               country={data.profile.country}
             />
-            <MetricsGrid metrics={data.metrics} keyRatioTrends={data.financials.keyRatioTrends} />
+            <MetricsGridLive symbol={symbol} dashboardMetrics={data.metrics} keyRatioTrends={data.financials.keyRatioTrends} />
           </section>
 
           <StockAuthWall>
@@ -537,13 +537,14 @@ export default async function StockDetailsPage({ params, searchParams }: Props) 
             <TechnicalsSection technicals={data.technicals} />
 
             <div className="grid gap-4 xl:grid-cols-2">
-              <ReturnsCalculator
+              {/* Temporarily disabled - has ResponsiveContainer issue */}
+              {/* <ReturnsCalculator
                 symbol={symbol}
                 currentPrice={data.price.cmp}
                 aiTarget={data.price.aiTarget}
                 mlConfidence={smartScore.mlConfidence}
                 upProbability={smartScore.validation?.upProbability}
-              />
+              /> */}
               <BrokerageSummary brokerage={data.brokerageResearch} />
             </div>
 
@@ -609,7 +610,7 @@ export default async function StockDetailsPage({ params, searchParams }: Props) 
               <CompetitorVerdict symbol={symbol} />
             </section>
 
-            <NewsSection symbol={symbol} news={data.news} />
+            <NewsSectionLive symbol={symbol} fallbackNews={data.news} />
             <AIChat symbol={symbol} />
           </StockAuthWall>
         </section>

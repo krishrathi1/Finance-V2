@@ -527,27 +527,14 @@ async def stock_screener(
             price_max=price_max,
             volume_min=volume_min,
             dividend_min=dividend_min,
+            pe_min=pe_min,
+            pe_max=pe_max,
             limit=limit,
         )
 
-        # Post-filter by PE and Dividend if requested
-        if pe_min > 0 or pe_max > 0 or dividend_min > 0:
-            filtered = []
-            for item in results:
-                if pe_min > 0 or pe_max > 0:
-                    pe = item.get("pe")
-                    if pe is None:
-                        continue
-                    if pe_min > 0 and pe < pe_min:
-                        continue
-                    if pe_max > 0 and pe > pe_max:
-                        continue
-                if dividend_min > 0:
-                    div = item.get("dividendYield")
-                    if div is None or div < dividend_min:
-                        continue
-                filtered.append(item)
-            results = filtered
+        # Manual post-filter check just in case, or for custom fields not yet in service
+        # (Already handled in service, but keeping for backward compatibility of custom rules if any)
+        # Simplified since service-level filtering is now active.
 
         payload = {"results": results, "count": len(results)}
         if results:
@@ -654,24 +641,13 @@ async def ai_stock_screener(payload: AIScreenerRequest) -> dict:
             exchange=exchange, sector=sector, industry="",
             market_cap_min=market_cap_min, market_cap_max=market_cap_max,
             price_min=price_min, price_max=price_max,
-            volume_min=volume_min, dividend_min=dividend_min, limit=limit,
+            volume_min=volume_min,
+            dividend_min=dividend_min,
+            pe_min=pe_min,
+            pe_max=pe_max,
+            limit=limit,
         )
-        if pe_min > 0 or pe_max > 0 or dividend_min > 0:
-            filtered = []
-            for r in results:
-                if pe_min > 0 or pe_max > 0:
-                    if r.get("pe") is None:
-                        continue
-                    if pe_min > 0 and r["pe"] < pe_min:
-                        continue
-                    if pe_max > 0 and r["pe"] > pe_max:
-                        continue
-                if dividend_min > 0:
-                    div = r.get("dividendYield")
-                    if div is None or div < dividend_min:
-                        continue
-                filtered.append(r)
-            results = filtered
+        # Post-filtering is now handled within dashboard_service.screen_stocks
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Screener error: {exc}")
 

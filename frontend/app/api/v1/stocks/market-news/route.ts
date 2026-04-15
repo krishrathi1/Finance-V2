@@ -1,34 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { newsProvider } from '@/lib/providers/news';
 
 export async function GET(request: NextRequest) {
   try {
-    // Mock market news
-    const mockNews = [
-      {
-        title: 'Market gains on strong corporate earnings',
-        source: 'Financial Times',
-        publishedAt: new Date().toISOString(),
-        summary: 'Indian markets closed higher driven by positive earnings reports',
-        url: 'https://example.com/news1',
-        imageUrl: null,
-      },
-      {
-        title: 'RBI maintains repo rate steady',
-        source: 'Reuters',
-        publishedAt: new Date(Date.now() - 3600000).toISOString(),
-        summary: 'The Reserve Bank of India kept key rates unchanged',
-        url: 'https://example.com/news2',
-        imageUrl: null,
-      },
-    ];
+    const refresh = request.nextUrl.searchParams.get('refresh') === 'true';
+    
+    // Fetch live news from NewsAPI instead of mock data
+    const articles = await newsProvider.getMarketNews();
 
+    // The API client in frontend/lib/api.ts expects a { data: [...] } envelope
     return NextResponse.json({
-      data: mockNews,
+      success: true,
+      data: articles || []
     });
   } catch (error) {
     console.error('Market news error:', error);
     return NextResponse.json(
-      { detail: 'Failed to fetch market news' },
+      { detail: 'Failed to fetch market news', data: [] },
       { status: 500 }
     );
   }

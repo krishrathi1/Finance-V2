@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create tokens
-    const accessToken = createAccessToken(user.id, user.is_admin, user.tier);
+    const accessToken = await createAccessToken(user.id, user.is_admin, user.tier);
     const { raw: rawRefresh, hash: refreshHash } = await createRefreshToken();
 
     // Store refresh token

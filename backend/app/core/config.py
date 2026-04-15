@@ -18,7 +18,6 @@ class Settings(BaseSettings):
     cors_origin_regex: str = r"^https://.*\.(vercel\.app|onrender\.com)$"
 
     database_url: str = "sqlite+aiosqlite:///financial_forensics.db"
-    redis_url: str = "redis://localhost:6379/0"
 
     fmp_api_key: str = ""
     news_api_key: str = ""
@@ -26,11 +25,6 @@ class Settings(BaseSettings):
 
     gemini_api_key: str = ""
     gemini_model: str = "gemini-3-flash-preview"
-
-    s3_access_key: str = ""
-    s3_secret_key: str = ""
-    s3_endpoint: str = "https://files.massive.com"
-    s3_bucket: str = "flatfiles"
 
     cache_ttl_seconds: int = 180
 
