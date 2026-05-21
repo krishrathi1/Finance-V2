@@ -5,7 +5,14 @@ import { useEffect, useMemo, useState } from "react";
 
 import { fetchTickerTape } from "@/lib/api";
 
-type TickerRow = { symbol: string; cmp: number; change: number; changePercent: number };
+type TickerRow = {
+  symbol: string;
+  cmp: number;
+  change: number;
+  changePercent: number;
+  high?: number;
+  low?: number;
+};
 
 function formatSigned(value: number) {
   return `${value >= 0 ? "+" : ""}${value.toFixed(2)}`;
@@ -78,13 +85,24 @@ export function MarketTicker() {
           const symbolPath = item.symbol.replace(/\s+/g, "");
           const isStockSymbol = !item.symbol.includes(" ");
           const content = (
-            <>
+            <span className="inline-flex items-center gap-2 sm:gap-2.5">
               <TrendMarker up={up} />
-              <span>{item.symbol}</span>
-              <span>{item.cmp ? `Rs ${item.cmp.toLocaleString("en-IN", { maximumFractionDigits: 2 })}` : "-"}</span>
-              <span className={color}>{item.cmp ? `${formatSigned(item.change)} (${formatSigned(item.changePercent)}%) 1D` : ""}</span>
+              <span className="font-bold tracking-wide text-text">{item.symbol}</span>
+              <span className="font-semibold text-text/95">
+                Rs {item.cmp.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+              {item.high !== undefined && item.low !== undefined && (
+                <span className="inline-flex items-center gap-1.5 text-[10px] text-muted/80 font-medium bg-bg/40 border border-border/40 px-1.5 py-0.5 rounded shadow-sm">
+                  <span className="text-success/90">H: <span className="font-semibold text-text/85">{item.high.toLocaleString("en-IN", { maximumFractionDigits: 2 })}</span></span>
+                  <span className="text-border/40">|</span>
+                  <span className="text-danger/90">L: <span className="font-semibold text-text/85">{item.low.toLocaleString("en-IN", { maximumFractionDigits: 2 })}</span></span>
+                </span>
+              )}
+              <span className={`${color} font-bold text-xs sm:text-sm whitespace-nowrap`}>
+                {formatSigned(item.change)} ({formatSigned(item.changePercent)}%)
+              </span>
               <TrendMarker up={up} />
-            </>
+            </span>
           );
 
           if (!isStockSymbol) {

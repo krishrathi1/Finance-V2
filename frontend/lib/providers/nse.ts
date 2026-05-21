@@ -11,6 +11,8 @@ export interface HeatmapRow {
   cmp: number;
   change: number;
   changePercent: number;
+  high?: number;
+  low?: number;
 }
 
 export class NSEProvider {
@@ -64,6 +66,8 @@ export class NSEProvider {
           cmp: parseFloat(item.lastPrice) || 0,
           change: parseFloat(item.change) || 0,
           changePercent: parseFloat(item.pChange) || 0,
+          high: parseFloat(item.dayHigh) || undefined,
+          low: parseFloat(item.dayLow) || undefined,
         }))
         .filter((row: HeatmapRow) => row.cmp > 0);
 
