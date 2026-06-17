@@ -36,6 +36,12 @@ export async function fetchWithTimeout(url: string, opts: FetchOpts = {}): Promi
   }
 }
 
+function redactSecrets(message: unknown): string {
+  return String(message)
+    .replace(/([?&](?:api[_-]?key|apikey|key|token|secret|password)=)[^&\s]+/gi, "$1[redacted]")
+    .replace(/(AIza[0-9A-Za-z_-]{20,})/g, "[redacted-google-key]");
+}
+
 /** GET JSON with retries. Returns null on any failure (never throws). */
 export async function getJson<T = any>(url: string, opts: FetchOpts = {}): Promise<T | null> {
   const retries = opts.retries ?? 1;
@@ -54,7 +60,7 @@ export async function getJson<T = any>(url: string, opts: FetchOpts = {}): Promi
       lastErr = err;
     }
   }
-  if (lastErr) console.warn(`[provider] getJson failed: ${String(lastErr)}`);
+  if (lastErr) console.warn(`[provider] getJson failed: ${redactSecrets(lastErr)}`);
   return null;
 }
 
@@ -75,7 +81,7 @@ export async function getText(url: string, opts: FetchOpts = {}): Promise<string
       lastErr = err;
     }
   }
-  if (lastErr) console.warn(`[provider] getText failed: ${String(lastErr)}`);
+  if (lastErr) console.warn(`[provider] getText failed: ${redactSecrets(lastErr)}`);
   return null;
 }
 
@@ -103,7 +109,7 @@ export async function safeCall<T>(fn: () => Promise<T>, timeoutMs: number, label
       try {
         return await fn();
       } catch (err) {
-        console.warn(`[provider] ${label} failed: ${String(err)}`);
+        console.warn(`[provider] ${label} failed: ${redactSecrets(err)}`);
         return null;
       }
     })(),
