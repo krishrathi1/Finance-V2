@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import Link from "next/link";
 import { Manrope, Space_Grotesk } from "next/font/google";
+import { Suspense } from "react";
 
 import { AuthProvider } from "@/hooks/useAuth";
 import { DisplaySettingsProvider } from "@/components/display-settings-provider";
@@ -11,6 +12,7 @@ import { MarketTicker } from "@/components/market-ticker";
 import { ModeToggle } from "@/components/mode-toggle";
 import { NavLinks } from "@/components/nav-links";
 import { ScrollProgress } from "@/components/scroll-progress";
+import { SmoothExperience } from "@/components/smooth-experience";
 import { ThemeProvider } from "@/components/theme-provider";
 import { OG_IMAGE_PATH, SITE_DESCRIPTION, SITE_NAME, SITE_TITLE, SITE_URL } from "@/lib/seo";
 
@@ -194,6 +196,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <AuthProvider>
             <DisplaySettingsProvider>
             <ScrollProgress />
+            <Suspense fallback={null}>
+              <SmoothExperience />
+            </Suspense>
 
             <header className="header-enter sticky top-0 z-40 border-b border-border/40 bg-bg/80 backdrop-blur-xl">
               <div className="mx-auto flex max-w-[1640px] items-center justify-between px-3 py-2.5 sm:px-5 sm:py-3 md:px-7">
