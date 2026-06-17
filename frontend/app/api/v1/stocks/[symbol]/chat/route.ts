@@ -1,26 +1,46 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { chatAnswer } from '@/lib/backend/ai/features';
+import { getNseQuote } from '@/lib/backend/providers/nse';
+
+export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
 
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ symbol: string }> }
 ) {
-  try {
-    const { symbol } = await params;
-    const { question } = await request.json();
+  const { symbol } = await params;
 
-    // Mock AI response
-    const mockAnswer = `Based on ${symbol.toUpperCase()}'s recent performance and market conditions, this is a general analysis. For detailed investment advice, please consult a financial advisor.`;
+  try {
+    const body = await request.json().catch(() => ({}));
+    const question = typeof body?.question === 'string' ? body.question : '';
+
+    // Light context: company name / P/E from a single NSE quote.
+    const context: Record<string, unknown> = { symbol: symbol.toUpperCase() };
+    try {
+      const quote = await getNseQuote(symbol);
+      if (quote) {
+        if (quote.companyName) context.companyName = quote.companyName;
+        if (quote.peRatio !== null && quote.peRatio !== undefined) {
+          context.metrics = { peRatio: quote.peRatio };
+        }
+      }
+    } catch {
+      // Ignore context-gathering failures.
+    }
+
+    const result = await chatAnswer(symbol, question, context);
 
     return NextResponse.json({
-      answer: mockAnswer,
-      source: 'fallback',
-      symbol: symbol.toUpperCase(),
+      answer: result.answer,
+      source: result.source,
     });
   } catch (error) {
     console.error('Chat error:', error);
-    return NextResponse.json(
-      { detail: 'Failed to process question' },
-      { status: 500 }
-    );
+    // GOLDEN RULE: never 500.
+    return NextResponse.json({
+      answer: 'AI engine is unavailable right now.',
+      source: 'fallback',
+    });
   }
 }

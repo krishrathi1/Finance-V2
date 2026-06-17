@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { parseScreenerQuery } from "@/lib/backend/ai/features";
 import { getJson, toFloat, round2 } from "@/lib/backend/http";
 import type { ScreenerResult } from "@/lib/types";
 
@@ -7,7 +8,6 @@ export const maxDuration = 60;
 
 const FMP_HOST = "https://financialmodelingprep.com";
 
-/** Filters accepted by the FMP stock screener (already parsed/numeric). */
 type FmpScreenerFilters = {
   exchange?: string;
   sector?: string;
@@ -31,7 +31,6 @@ function nullableNum(value: unknown): number | null {
   return toFloat(value);
 }
 
-/** Strip the .NS/.BO exchange suffix from a displayed symbol. */
 function stripSuffix(symbol: string): string {
   return String(symbol || "")
     .trim()
@@ -43,7 +42,6 @@ function stripSuffix(symbol: string): string {
 function mapRow(row: any): ScreenerResult {
   const price = num(row?.price);
   const lastDividend = nullableNum(row?.lastAnnualDividend);
-  // Derive dividend yield (%) from the last annual dividend when present.
   const dividendYield =
     lastDividend !== null && price > 0 ? round2((lastDividend / price) * 100) : null;
 
@@ -66,13 +64,8 @@ function mapRow(row: any): ScreenerResult {
   };
 }
 
-/**
- * Run the FMP stock screener (exchange pinned to NSE) and map to ScreenerResult[].
- * Returns [] on any failure. Shared by the GET route and the AI screener route.
- */
-async function runFmpScreener(
-  filters: FmpScreenerFilters,
-): Promise<ScreenerResult[]> {
+/** Run the FMP stock screener (exchange pinned to NSE). Returns [] on failure. */
+async function runFmpScreener(filters: FmpScreenerFilters): Promise<ScreenerResult[]> {
   const key = process.env.FMP_API_KEY || "";
   if (!key) return [];
 
@@ -90,7 +83,6 @@ async function runFmpScreener(
   if (filters.volume_min) params.set("volumeMoreThan", String(filters.volume_min));
   if (filters.pe_min) params.set("peMoreThan", String(filters.pe_min));
   if (filters.pe_max) params.set("peLowerThan", String(filters.pe_max));
-  // Pull a deeper pool so post-filtering/limit still yields results.
   params.set("limit", String(Math.max(limit, 100)));
   params.set("apikey", key);
 
@@ -98,37 +90,53 @@ async function runFmpScreener(
   const payload = await getJson<any[]>(url, { timeoutMs: 12_000 });
   if (!Array.isArray(payload)) return [];
 
-  const mapped = payload
+  return payload
     .filter((row) => row && typeof row === "object" && row.symbol)
     .map(mapRow)
-    .filter((row) => Boolean(row.symbol));
-
-  return mapped.slice(0, limit);
+    .filter((row) => Boolean(row.symbol))
+    .slice(0, limit);
 }
 
-export async function GET(request: NextRequest) {
-  try {
-    const sp = request.nextUrl.searchParams;
-    const filters: FmpScreenerFilters = {
-      exchange: sp.get("exchange") || "NSE",
-      sector: sp.get("sector") || undefined,
-      industry: sp.get("industry") || undefined,
-      market_cap_min: nullableNum(sp.get("market_cap_min")) ?? undefined,
-      market_cap_max: nullableNum(sp.get("market_cap_max")) ?? undefined,
-      pe_min: nullableNum(sp.get("pe_min")) ?? undefined,
-      pe_max: nullableNum(sp.get("pe_max")) ?? undefined,
-      price_min: nullableNum(sp.get("price_min")) ?? undefined,
-      price_max: nullableNum(sp.get("price_max")) ?? undefined,
-      dividend_min: nullableNum(sp.get("dividend_min")) ?? undefined,
-      volume_min: nullableNum(sp.get("volume_min")) ?? undefined,
-      limit: nullableNum(sp.get("limit")) ?? undefined,
-    };
+/** Coerce a parsed (possibly string/number) filter map into numeric FMP filters. */
+function toFmpFilters(parsed: Record<string, unknown>): FmpScreenerFilters {
+  const numOrUndef = (v: unknown): number | undefined => {
+    const n = toFloat(v);
+    return n === null ? undefined : n;
+  };
+  return {
+    exchange: typeof parsed.exchange === "string" && parsed.exchange ? String(parsed.exchange) : "NSE",
+    sector: typeof parsed.sector === "string" && parsed.sector ? String(parsed.sector) : undefined,
+    industry: typeof parsed.industry === "string" && parsed.industry ? String(parsed.industry) : undefined,
+    market_cap_min: numOrUndef(parsed.market_cap_min),
+    market_cap_max: numOrUndef(parsed.market_cap_max),
+    pe_min: numOrUndef(parsed.pe_min),
+    pe_max: numOrUndef(parsed.pe_max),
+    price_min: numOrUndef(parsed.price_min),
+    price_max: numOrUndef(parsed.price_max),
+    dividend_min: numOrUndef(parsed.dividend_min),
+    volume_min: numOrUndef(parsed.volume_min),
+    limit: numOrUndef(parsed.limit),
+  };
+}
 
-    const results = await runFmpScreener(filters);
-    return NextResponse.json({ results, count: results.length, cached: false });
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json().catch(() => ({}));
+    const query = String(body?.query || "").trim();
+
+    if (!query) {
+      return NextResponse.json({ results: [], parsedFilters: {} });
+    }
+
+    const { filters } = await parseScreenerQuery(query);
+    const parsedFilters = (filters && typeof filters === "object" ? filters : {}) as Record<string, unknown>;
+
+    const results = await runFmpScreener(toFmpFilters(parsedFilters));
+
+    return NextResponse.json({ results, parsedFilters });
   } catch (error) {
-    console.error("Screener error:", error);
+    console.error("AI screener error:", error);
     // Golden rule: never 500 — return an empty but valid payload.
-    return NextResponse.json({ results: [], count: 0 });
+    return NextResponse.json({ results: [], parsedFilters: {} });
   }
 }

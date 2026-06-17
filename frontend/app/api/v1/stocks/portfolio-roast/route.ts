@@ -1,27 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { portfolioRoast } from '@/lib/backend/ai/features';
+
+export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
 
 export async function POST(request: NextRequest) {
   try {
-    const { holdings } = await request.json();
+    const body = await request.json();
+    const holdings = Array.isArray(body?.holdings) ? body.holdings : [];
+    const totalValue =
+      typeof body?.totalValue === 'number' ? body.totalValue : undefined;
+
+    const result = await portfolioRoast(holdings, totalValue);
 
     return NextResponse.json({
-      analysis: 'Portfolio shows decent fundamentals with room for improvement',
-      positives: [
-        'Good mix of large-cap stocks',
-        'Reasonable sector diversification',
-      ],
-      concerns: [
-        'Could improve dividend yield',
-        'Consider adding emerging companies',
-      ],
-      overallScore: 7,
-      source: 'fallback',
+      analysis: result.analysis,
+      positives: result.positives,
+      concerns: result.concerns,
+      overallScore: result.overallScore,
+      source: result.source,
     });
   } catch (error) {
     console.error('Portfolio roast error:', error);
-    return NextResponse.json(
-      { detail: 'Failed to generate portfolio analysis' },
-      { status: 500 }
-    );
+    return NextResponse.json({
+      analysis: 'Portfolio analysis is unavailable right now.',
+      positives: [],
+      concerns: [],
+      overallScore: '',
+      source: 'fallback',
+    });
   }
 }

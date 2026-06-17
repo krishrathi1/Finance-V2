@@ -1,62 +1,164 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from "next/server";
+import { getJson, baseSymbol } from "@/lib/backend/http";
+
+export const dynamic = "force-dynamic";
+export const maxDuration = 60;
+
+interface NewsItem {
+  title: string;
+  source: string;
+  publishedAt: string;
+  url: string;
+  summary: string;
+  imageUrl: string | null;
+  sentimentScore: number;
+}
+
+const POSITIVE_WORDS = [
+  "surge",
+  "surges",
+  "rise",
+  "rises",
+  "rally",
+  "gain",
+  "gains",
+  "jump",
+  "jumps",
+  "soar",
+  "soars",
+  "profit",
+  "profits",
+  "growth",
+  "beats",
+  "beat",
+  "record",
+  "high",
+  "strong",
+  "boost",
+  "upgrade",
+  "outperform",
+  "bullish",
+  "buy",
+  "expansion",
+  "win",
+  "wins",
+  "positive",
+  "dividend",
+  "approval",
+  "approved",
+];
+
+const NEGATIVE_WORDS = [
+  "fall",
+  "falls",
+  "drop",
+  "drops",
+  "plunge",
+  "plunges",
+  "slump",
+  "decline",
+  "declines",
+  "loss",
+  "losses",
+  "weak",
+  "miss",
+  "misses",
+  "downgrade",
+  "cut",
+  "cuts",
+  "bearish",
+  "sell",
+  "fraud",
+  "probe",
+  "fine",
+  "penalty",
+  "lawsuit",
+  "default",
+  "risk",
+  "warning",
+  "concern",
+  "concerns",
+  "negative",
+  "crash",
+  "slide",
+];
+
+/** Simple lexicon-based sentiment in the 0..1 range (0.5 = neutral). */
+function computeSentiment(text: string): number {
+  const lower = String(text || "").toLowerCase();
+  let pos = 0;
+  let neg = 0;
+  for (const w of POSITIVE_WORDS) {
+    if (lower.includes(w)) pos += 1;
+  }
+  for (const w of NEGATIVE_WORDS) {
+    if (lower.includes(w)) neg += 1;
+  }
+  const total = pos + neg;
+  if (total === 0) return 0.5;
+  // Map net polarity (-1..1) onto 0..1, centered at 0.5.
+  const net = (pos - neg) / total;
+  const score = 0.5 + net * 0.4;
+  return Math.max(0, Math.min(1, Math.round(score * 100) / 100));
+}
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ symbol: string }> }
 ) {
-  try {
-    const { symbol } = await params;
+  const { symbol } = await params;
+  const sym = baseSymbol(symbol);
+  const company = request.nextUrl.searchParams.get("company")?.trim();
+  const timestamp = new Date().toISOString();
 
-    const mockNews = [
-      {
-        title: `${symbol}: Strong Q3 Results Drive Investor Confidence`,
-        source: 'Financial Express',
-        publishedAt: new Date(Date.now() - 86400000).toISOString(),
-        summary: `${symbol} reported strong Q3 earnings with 15% YoY growth in revenue. The company exceeded analyst expectations.`,
-        url: `https://example.com/news/${symbol}/1`,
-        imageUrl: null,
-        sentimentScore: 0.8,
-      },
-      {
-        title: `${symbol} Expands Operations to New Markets`,
-        source: 'Business Standard',
-        publishedAt: new Date(Date.now() - 172800000).toISOString(),
-        summary: `The company announced expansion into three new geographic markets, expected to boost revenue by 20%.`,
-        url: `https://example.com/news/${symbol}/2`,
-        imageUrl: null,
-        sentimentScore: 0.75,
-      },
-      {
-        title: `Market Analysis: ${symbol} Trading at Fair Valuation`,
-        source: 'ET Markets',
-        publishedAt: new Date(Date.now() - 259200000).toISOString(),
-        summary: `Analysts suggest ${symbol} is trading at reasonable valuations with strong growth potential in coming quarters.`,
-        url: `https://example.com/news/${symbol}/3`,
-        imageUrl: null,
-        sentimentScore: 0.7,
-      },
-      {
-        title: `${symbol}: Managing Inflationary Pressures`,
-        source: 'Moneycontrol',
-        publishedAt: new Date(Date.now() - 345600000).toISOString(),
-        summary: `${symbol} management discusses strategies to manage rising costs while maintaining margins in the current economic environment.`,
-        url: `https://example.com/news/${symbol}/4`,
-        imageUrl: null,
-        sentimentScore: 0.55,
-      },
-    ];
+  try {
+    const apiKey = process.env.NEWS_API_KEY;
+    const articles: NewsItem[] = [];
+    const seen = new Set<string>();
+
+    if (apiKey) {
+      const query = `"${company || sym} India stock"`;
+      const url =
+        `https://newsapi.org/v2/everything?q=${encodeURIComponent(query)}` +
+        `&language=en&sortBy=publishedAt&pageSize=12&apiKey=${apiKey}`;
+
+      const payload = await getJson<any>(url, { timeoutMs: 9000, retries: 1 });
+      const raw = Array.isArray(payload?.articles) ? payload.articles : [];
+
+      for (const a of raw) {
+        const u = String(a?.url || "");
+        if (!u || seen.has(u)) continue;
+        seen.add(u);
+        const title = String(a?.title || "").trim();
+        const summary = String(a?.description || a?.content || "").trim();
+        if (!title) continue;
+        articles.push({
+          title,
+          source: String(a?.source?.name || "News"),
+          publishedAt: String(a?.publishedAt || timestamp),
+          url: u,
+          summary,
+          imageUrl: a?.urlToImage || null,
+          sentimentScore: computeSentiment(`${title} ${summary}`),
+        });
+      }
+    }
+
+    const sorted = articles
+      .sort((x, y) => new Date(y.publishedAt).getTime() - new Date(x.publishedAt).getTime())
+      .slice(0, 12);
 
     return NextResponse.json({
-      data: mockNews,
-      symbol: symbol.toUpperCase(),
-      timestamp: new Date().toISOString(),
+      data: sorted,
+      symbol: sym.toUpperCase(),
+      timestamp,
     });
   } catch (error) {
-    console.error('Stock news error:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Failed to fetch news';
-    return NextResponse.json(
-      { detail: errorMessage },
-      { status: 500 }
-    );
+    console.error("[stock news] route error:", error);
+    return NextResponse.json({
+      data: [] as NewsItem[],
+      symbol: sym.toUpperCase(),
+      timestamp,
+    });
   }
 }

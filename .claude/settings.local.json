@@ -21,10 +21,18 @@
       "Bash(curl -v \"http://localhost:3000/api/v1/stocks/RELIANCE/news\")",
       "Bash(curl -s \"http://localhost:3000/api/v1/stocks/RELIANCE/quote\")",
       "Bash(curl -s \"http://localhost:3000/stocks/RELIANCE\")",
-      "Bash(curl -s \"http://localhost:3000/api/v1/stocks/TCS/news\")"
+      "Bash(curl -s \"http://localhost:3000/api/v1/stocks/TCS/news\")",
+      "Bash(zap ls *)",
+      "Bash(zap git *)",
+      "Bash(zap wc *)",
+      "Skill(run)",
+      "Skill(run:*)"
     ],
     "additionalDirectories": [
       "d:\\xamp\\htdocs\\Finance\\Financial-Forensics-AI-India\\frontend\\app\\api\\v1\\stocks\\[symbol]\\news"
     ]
-  }
+  },
+  "disabledMcpjsonServers": [
+    "code-review-graph"
+  ]
 }

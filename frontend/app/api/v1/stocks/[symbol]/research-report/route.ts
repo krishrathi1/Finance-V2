@@ -1,25 +1,51 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { researchReport } from '@/lib/backend/ai/features';
+import { getNseQuote } from '@/lib/backend/providers/nse';
+
+export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ symbol: string }> }
 ) {
+  const { symbol } = await params;
+
   try {
-    const { symbol } = await params;
+    // Light context: company name / P/E from a single NSE quote.
+    const context: Record<string, unknown> = { symbol: symbol.toUpperCase() };
+    try {
+      const quote = await getNseQuote(symbol);
+      if (quote) {
+        if (quote.companyName) context.companyName = quote.companyName;
+        if (quote.peRatio !== null && quote.peRatio !== undefined) {
+          context.metrics = { peRatio: quote.peRatio };
+        }
+      }
+    } catch {
+      // Ignore context-gathering failures.
+    }
+
+    const result = await researchReport(symbol, context);
 
     return NextResponse.json({
-      title: `Research Report: ${symbol.toUpperCase()}`,
-      report: `Detailed analysis of ${symbol.toUpperCase()} including financial metrics, market position, and outlook.`,
-      recommendations: 'Buy',
-      targetPrice: 'Above current levels',
-      riskLevel: 'Moderate',
-      source: 'fallback',
+      title: result.title,
+      report: result.report,
+      recommendations: result.recommendations,
+      targetPrice: result.targetPrice,
+      riskLevel: result.riskLevel,
+      source: result.source,
     });
   } catch (error) {
     console.error('Research report error:', error);
-    return NextResponse.json(
-      { detail: 'Failed to fetch research report' },
-      { status: 500 }
-    );
+    // GOLDEN RULE: never 500.
+    return NextResponse.json({
+      title: `${symbol} Research Report`,
+      report: 'Research report is unavailable right now.',
+      recommendations: [],
+      targetPrice: null,
+      riskLevel: 'medium',
+      source: 'fallback',
+    });
   }
 }

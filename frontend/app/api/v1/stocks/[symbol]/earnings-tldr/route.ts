@@ -1,26 +1,47 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { earningsTldr } from '@/lib/backend/ai/features';
+import { getNseQuote, getNseQuarterlyResults } from '@/lib/backend/providers/nse';
+
+export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ symbol: string }> }
 ) {
+  const { symbol } = await params;
+
   try {
-    const { symbol } = await params;
+    // Light context: quarterly results feed the earnings summary, plus the
+    // company name for nicer phrasing.
+    const context: Record<string, unknown> = { symbol: symbol.toUpperCase() };
+    try {
+      const [quote, quarterly] = await Promise.all([
+        getNseQuote(symbol),
+        getNseQuarterlyResults(symbol),
+      ]);
+      if (quote?.companyName) context.companyName = quote.companyName;
+      if (quarterly?.quarterly?.length) {
+        context.quarterlyData = quarterly.quarterly;
+      }
+    } catch {
+      // Ignore context-gathering failures.
+    }
+
+    const result = await earningsTldr(symbol, context);
 
     return NextResponse.json({
-      summary: `Latest earnings for ${symbol.toUpperCase()} show steady performance`,
-      highlights: [
-        'Revenue growth maintained',
-        'Margins relatively stable',
-        'Strong cash generation',
-      ],
-      source: 'fallback',
+      summary: result.summary,
+      highlights: result.highlights,
+      source: result.source,
     });
   } catch (error) {
     console.error('Earnings TLDR error:', error);
-    return NextResponse.json(
-      { detail: 'Failed to fetch earnings summary' },
-      { status: 500 }
-    );
+    // GOLDEN RULE: never 500.
+    return NextResponse.json({
+      summary: 'Earnings summary is unavailable right now.',
+      highlights: [],
+      source: 'fallback',
+    });
   }
 }

@@ -3,9 +3,11 @@
 import { Area, AreaChart, CartesianGrid, Tooltip, XAxis, YAxis } from "recharts";
 import { useId, useState, useEffect, useRef, useLayoutEffect } from "react";
 
-import type { PricePoint } from "@/lib/types";
+// PriceChart only reads `date` and `close`, so accept any series that provides them
+// (full PricePoint[] from the dashboard, or the {date, close}[] the sidebar derives).
+type ChartPoint = { date: string; close: number };
 
-export function PriceChart({ data, trend, height = 260 }: { data: PricePoint[]; trend?: "up" | "down"; height?: number | string }) {
+export function PriceChart({ data, trend, height = 260 }: { data: ChartPoint[]; trend?: "up" | "down"; height?: number | string }) {
   const gradientId = useId().replace(/:/g, "");
   const containerRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState<number | null>(null);

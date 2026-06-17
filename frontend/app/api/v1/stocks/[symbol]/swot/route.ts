@@ -1,53 +1,62 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { swotAnalysis } from '@/lib/backend/ai/features';
+import { getNseQuote } from '@/lib/backend/providers/nse';
+
+export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ symbol: string }> }
 ) {
+  const { symbol } = await params;
+  // `refresh` is accepted for client cache-busting; no server cache to bust here.
+  void request.nextUrl.searchParams.get('refresh');
+
   try {
-    const { symbol } = await params;
+    // Light, cheap context: a single NSE quote gives us the company name,
+    // P/E and sector hints the SWOT prompt/fallback can use.
+    let companyName = '';
+    const context: Record<string, unknown> = { symbol: symbol.toUpperCase() };
+    try {
+      const quote = await getNseQuote(symbol);
+      if (quote) {
+        if (quote.companyName) {
+          companyName = quote.companyName;
+          context.companyName = quote.companyName;
+        }
+        if (quote.peRatio !== null && quote.peRatio !== undefined) {
+          context.metrics = { peRatio: quote.peRatio };
+        }
+      }
+    } catch {
+      // Ignore context-gathering failures; the AI layer has its own fallback.
+    }
 
-    // Mock SWOT analysis
-    const swotData = {
-      strengths: [
-        'Strong brand presence in the sector',
-        'Consistent revenue growth track record',
-        'Healthy balance sheet with low debt',
-        'Diverse product portfolio',
-        'Strong market position',
-      ],
-      weaknesses: [
-        'Dependent on domestic market',
-        'Margins under pressure from rising input costs',
-        'Limited international presence',
-        'High capital intensity',
-      ],
-      opportunities: [
-        'Expanding into new geographies',
-        'Growing digital adoption in the sector',
-        'Potential for strategic acquisitions',
-        'New product development',
-        'Emerging market opportunities',
-      ],
-      threats: [
-        'Intensifying competition from global players',
-        'Regulatory changes could impact operations',
-        'Currency fluctuation risks',
-        'Geopolitical uncertainties',
-        'Economic slowdown risks',
-      ],
-      bullCase:
-        'If the company successfully executes its expansion strategy and maintains current margins, the stock could see meaningful upside driven by revenue growth and improving return ratios.',
-      bearCase:
-        'Prolonged margin compression from rising costs, combined with slowing demand or regulatory headwinds, could limit near-term upside and pressure valuations.',
-    };
+    const result = await swotAnalysis(symbol, companyName, context);
 
-    return NextResponse.json(swotData);
+    return NextResponse.json({
+      strengths: result.strengths,
+      weaknesses: result.weaknesses,
+      opportunities: result.opportunities,
+      threats: result.threats,
+      bullCase: result.bullCase,
+      bearCase: result.bearCase,
+      generatedAt: result.generatedAt,
+      source: result.source,
+    });
   } catch (error) {
     console.error('SWOT error:', error);
-    return NextResponse.json(
-      { detail: 'Failed to fetch SWOT analysis' },
-      { status: 500 }
-    );
+    // GOLDEN RULE: never 500. Return a valid fallback-shaped payload.
+    return NextResponse.json({
+      strengths: [],
+      weaknesses: [],
+      opportunities: [],
+      threats: [],
+      bullCase: '',
+      bearCase: '',
+      generatedAt: new Date().toISOString(),
+      source: 'fallback',
+    });
   }
 }
