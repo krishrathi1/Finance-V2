@@ -1,1 +1,0 @@
-"use strict";exports.id=877,exports.ids=[877],exports.modules={8877:(t,r,e)=>{e.r(r),e.d(r,{ReturnsCalculator:()=>s});let s=(0,e(8570).createProxy)(String.raw`C:\Users\KRISH\Desktop\Finance\frontend\components\sections\returns-calculator.tsx#ReturnsCalculator`)}};

@@ -1,1 +1,0 @@
-"use strict";exports.id=671,exports.ids=[671],exports.modules={7671:(s,e,n)=>{n.r(e),n.d(e,{FinancialsSection:()=>t});let t=(0,n(8570).createProxy)(String.raw`C:\Users\KRISH\Desktop\Finance\frontend\components\sections\financials-section.tsx#FinancialsSection`)}};

@@ -1,1 +1,0 @@
-"use strict";exports.id=741,exports.ids=[741],exports.modules={5741:(e,r,s)=>{s.r(r),s.d(r,{PriceSidebar:()=>t});let t=(0,s(8570).createProxy)(String.raw`C:\Users\KRISH\Desktop\Finance\frontend\components\sections\price-sidebar.tsx#PriceSidebar`)}};
