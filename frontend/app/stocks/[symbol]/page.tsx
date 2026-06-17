@@ -5,39 +5,14 @@ import { notFound } from "next/navigation";
 
 import { StockSearch } from "@/components/stock-search";
 import { PageHero } from "@/components/page-hero";
-import { CompanyOverview } from "@/components/sections/company-overview";
-import { CorporateActionsSection } from "@/components/sections/corporate-actions-section";
 import { DashboardAutoRefresh } from "@/components/sections/dashboard-auto-refresh";
-import { DocumentsSection } from "@/components/sections/documents-section";
-import { KeyRatiosSection } from "@/components/sections/key-ratios-section";
-const MetricsGridLive = dynamic(() => import("@/components/sections/metrics-grid-live").then((m) => m.MetricsGridLive), { ssr: false });
-const NewsSectionLive = dynamic(() => import("@/components/sections/news-section-live").then((m) => m.NewsSectionLive), { ssr: false });
-import { BrokerageSummary } from "@/components/sections/brokerage-summary";
-import { BeginnerSnapshot } from "@/components/sections/beginner-snapshot";
-import { ReturnsPanel } from "@/components/sections/returns-panel";
-import { RiskScore } from "@/components/sections/risk-score";
-import { SmartScore } from "@/components/sections/smart-score";
+import { LiveStockDetails } from "@/components/sections/live-stock-details";
 import { StockSectionTabs } from "@/components/sections/stock-section-tabs";
-import { StockAuthWall } from "@/components/sections/stock-auth-wall";
-import { SwotAnalysis } from "@/components/sections/swot-analysis";
-import { TechnicalsSection } from "@/components/sections/technicals-section";
-import { AnalystEstimatesSection } from "@/components/sections/analyst-estimates-section";
-import { CompetitorsSection } from "@/components/sections/competitors-section";
-import { CompetitorVerdict } from "@/components/sections/competitor-verdict";
-import { EarningsTldr } from "@/components/sections/earnings-tldr";
 import { fetchDashboardEnvelope } from "@/lib/api";
 import { POPULAR_STOCK_SYMBOLS, SITE_NAME, SITE_URL, buildBreadcrumbJsonLd } from "@/lib/seo";
 import type { DashboardData } from "@/lib/types";
 
 const PriceSidebar = dynamic(() => import("@/components/sections/price-sidebar").then((m) => m.PriceSidebar), { ssr: false });
-const FinancialsSection = dynamic(() => import("@/components/sections/financials-section").then((m) => m.FinancialsSection), { ssr: false });
-const QuarterlyResultsSection = dynamic(
-  () => import("@/components/sections/quarterly-results-section").then((m) => m.QuarterlyResultsSection),
-  { ssr: false }
-);
-const ShareholdingSection = dynamic(() => import("@/components/sections/shareholding-section").then((m) => m.ShareholdingSection), { ssr: false });
-const ReturnsCalculator = dynamic(() => import("@/components/sections/returns-calculator").then((m) => m.ReturnsCalculator), { ssr: false });
-const AIChat = dynamic(() => import("@/components/sections/ai-chat").then((m) => m.AIChat), { ssr: false });
 
 type Props = {
   params: { symbol: string };
@@ -486,138 +461,7 @@ export default async function StockDetailsPage({ params, searchParams }: Props) 
         <section className="min-w-0 space-y-4">
           <StockSectionTabs />
 
-          <section id="overview" className="space-y-4">
-            <CompanyOverview
-              description={data.profile.description}
-              incorporationYear={data.profile.incorporationYear}
-              headquarters={data.profile.headquarters}
-              website={data.profile.website}
-              chairman={data.profile.chairman}
-              previousName={data.profile.previousName}
-              ceo={data.profile.ceo}
-              employees={data.profile.employees}
-              ipoDate={data.profile.ipoDate}
-              country={data.profile.country}
-            />
-            <MetricsGridLive
-              symbol={symbol}
-              exchange={data.exchange}
-              dashboardMetrics={data.metrics}
-              keyRatioTrends={data.financials.keyRatioTrends}
-            />
-          </section>
-
-          <StockAuthWall>
-            <BeginnerSnapshot
-              smartScore={smartScore.score}
-              riskScore={riskScore.score}
-              currentPrice={data.price.cmp}
-              aiTarget={data.price.aiTarget}
-              mlConfidence={smartScore.mlConfidence}
-            />
-
-            <div className="grid gap-4 xl:grid-cols-2">
-              <SmartScore
-                score={smartScore.score}
-                dimensions={smartScore.dimensions}
-                aiExplanation={smartScore.aiExplanation || smartScore.explanation}
-                methodology={smartScore.methodology}
-                label={smartScore.label}
-              />
-              <RiskScore
-                score={riskScore.score}
-                components={riskScore.components}
-                aiExplanation={riskScore.aiExplanation || riskScore.explanation}
-                methodology={riskScore.methodology}
-                label={riskScore.label}
-              />
-            </div>
-
-            <section id="swot">
-              <SwotAnalysis symbol={symbol} />
-            </section>
-
-            <ReturnsPanel summary={data.returnsSummary} heatmap={data.returnsHeatmap} />
-
-            <TechnicalsSection technicals={data.technicals} />
-
-            <div className="grid gap-4 xl:grid-cols-2">
-              {/* Temporarily disabled - has ResponsiveContainer issue */}
-              {/* <ReturnsCalculator
-                symbol={symbol}
-                currentPrice={data.price.cmp}
-                aiTarget={data.price.aiTarget}
-                mlConfidence={smartScore.mlConfidence}
-                upProbability={smartScore.validation?.upProbability}
-              /> */}
-              <BrokerageSummary brokerage={data.brokerageResearch} />
-            </div>
-
-            {data.analystEstimates && data.analystEstimates.length > 0 && (
-              <AnalystEstimatesSection estimates={data.analystEstimates} />
-            )}
-
-            <section id="corporate-actions">
-              <CorporateActionsSection actions={data.corporateActions} />
-            </section>
-
-            <section id="quarterly-results">
-              <QuarterlyResultsSection
-                quarterly={data.financials.quarterly}
-                standalone={data.financials.quarterlyStandalone}
-                consolidated={data.financials.quarterlyConsolidated}
-                standaloneDetailed={data.financials.quarterlyDetailedStandalone}
-                consolidatedDetailed={data.financials.quarterlyDetailedConsolidated}
-              />
-            </section>
-
-            <EarningsTldr symbol={symbol} />
-
-            <section id="financials">
-              <FinancialsSection
-                growthSnapshot={data.financials.growthSnapshot}
-                quarterly={data.financials.quarterly}
-                yearly={data.financials.yearly}
-                incomeStatement={data.financials.incomeStatement}
-                balanceSheet={data.financials.balanceSheet}
-                cashFlow={data.financials.cashFlow}
-              />
-            </section>
-
-            <section id="shareholding">
-              <ShareholdingSection
-                quarter={data.shareholding.quarter}
-                promoters={data.shareholding.promoters}
-                fii={data.shareholding.fii}
-                dii={data.shareholding.dii}
-                publicHolding={data.shareholding.public}
-                history={data.shareholding.history}
-                topHolders={data.shareholding.topHolders}
-                sourceUrl={data.shareholding.sourceUrl}
-              />
-            </section>
-
-            <section id="key-ratios">
-              <KeyRatiosSection metrics={data.metrics} trends={data.financials.keyRatioTrends} />
-            </section>
-
-            <section id="documents">
-              <DocumentsSection
-                annualReports={data.documents.annualReports}
-                investorPresentations={data.documents.investorPresentations}
-                creditRatings={data.documents.creditRatings}
-                exchangeFilings={data.documents.exchangeFilings}
-              />
-            </section>
-
-            <section id="competitors">
-              <CompetitorsSection competitors={data.competitors} />
-              <CompetitorVerdict symbol={symbol} />
-            </section>
-
-            <NewsSectionLive symbol={symbol} fallbackNews={data.news} />
-            <AIChat symbol={symbol} />
-          </StockAuthWall>
+          <LiveStockDetails initialData={data} symbol={symbol} exchange={data.exchange || exchange} />
         </section>
       </div>
     </div>

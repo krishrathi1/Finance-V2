@@ -77,13 +77,16 @@ export function useStockQuote(symbol: string, exchange = 'NSE') {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const fetchQuote = async () => {
+    let cancelled = false;
+
+    const fetchQuote = async (silent = false) => {
       try {
-        setLoading(true);
+        if (!silent) setLoading(true);
         setError(null);
 
         const response = await fetch(
-          `/api/v1/stocks/${symbol}/quote?exchange=${encodeURIComponent(exchange)}`
+          `/api/v1/stocks/${symbol}/quote?exchange=${encodeURIComponent(exchange)}&t=${Date.now()}`,
+          { cache: "no-store" }
         );
 
         if (!response.ok) {
@@ -91,18 +94,28 @@ export function useStockQuote(symbol: string, exchange = 'NSE') {
         }
 
         const quoteData = await response.json();
-        setData(quoteData);
+        if (!cancelled) setData(quoteData);
       } catch (err) {
+        if (cancelled) return;
         console.error('Quote fetch error:', err);
-        setError(err instanceof Error ? err.message : 'Failed to fetch quote');
+        if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to fetch quote');
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
 
     if (symbol) {
       fetchQuote();
     }
+
+    const timer = window.setInterval(() => {
+      if (symbol) fetchQuote(true);
+    }, 30_000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
   }, [symbol, exchange]);
 
   return { data, loading, error };

@@ -14,13 +14,16 @@ export function useChartData(symbol: string, days: string = '1W', exchange = 'NS
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const fetchChartData = async () => {
+    let cancelled = false;
+
+    const fetchChartData = async (silent = false) => {
       try {
-        setLoading(true);
+        if (!silent) setLoading(true);
         setError(null);
 
         const response = await fetch(
-          `/api/v1/stocks/${symbol}/chart?days=${encodeURIComponent(days)}&exchange=${encodeURIComponent(exchange)}`
+          `/api/v1/stocks/${symbol}/chart?days=${encodeURIComponent(days)}&exchange=${encodeURIComponent(exchange)}&t=${Date.now()}`,
+          { cache: "no-store" }
         );
 
         if (!response.ok) {
@@ -28,18 +31,28 @@ export function useChartData(symbol: string, days: string = '1W', exchange = 'NS
         }
 
         const chartData = await response.json();
-        setData(chartData);
+        if (!cancelled) setData(chartData);
       } catch (err) {
+        if (cancelled) return;
         console.error('Chart data fetch error:', err);
-        setError(err instanceof Error ? err.message : 'Failed to fetch chart data');
+        if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to fetch chart data');
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
 
     if (symbol) {
       fetchChartData();
     }
+
+    const timer = window.setInterval(() => {
+      if (symbol) fetchChartData(true);
+    }, 30_000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
   }, [symbol, days, exchange]);
 
   return { data, loading, error };

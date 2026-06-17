@@ -62,7 +62,7 @@ export function PriceSidebar({ data }: { data: DashboardData }) {
     return ordered.slice(-30);
   }, [chartData, data.price.history, data.price.intraday, selected.key]);
 
-  const currentPrice = quoteData?.lastPrice || data.price.cmp;
+  const currentPrice = quoteData?.lastPrice ?? data.price.cmp;
 
   const { trend, startPrice, endPrice } = useMemo(() => {
     if (rangeHistory.length < 2) {
@@ -84,12 +84,15 @@ export function PriceSidebar({ data }: { data: DashboardData }) {
 
   const rangePointChange = startPrice ? endPrice - startPrice : 0;
   const rangePercentChange = startPrice ? (rangePointChange / startPrice) * 100 : 0;
+  const weekLow = quoteData?.fiftytwoWeekLow && quoteData.fiftytwoWeekLow > 0 ? quoteData.fiftytwoWeekLow : data.price.fiftyTwoWeekLow;
+  const weekHigh = quoteData?.fiftytwoWeekHigh && quoteData.fiftytwoWeekHigh > 0 ? quoteData.fiftytwoWeekHigh : data.price.fiftyTwoWeekHigh;
+  const weekRangeProgress = Math.max(0, Math.min(100, ((currentPrice - weekLow) / (weekHigh - weekLow + 0.0001)) * 100));
   const isOneDay = selected.key === "1D";
   const pointChange = isOneDay
-    ? (Number.isFinite(data.price.change) ? data.price.change : rangePointChange)
+    ? (Number.isFinite(quoteData?.change) ? Number(quoteData?.change) : Number.isFinite(data.price.change) ? data.price.change : rangePointChange)
     : rangePointChange;
   const percentChange = isOneDay
-    ? (Number.isFinite(data.price.changePercent) ? data.price.changePercent : rangePercentChange)
+    ? (Number.isFinite(quoteData?.pChange) ? Number(quoteData?.pChange) : Number.isFinite(data.price.changePercent) ? data.price.changePercent : rangePercentChange)
     : rangePercentChange;
   const changeLabel = isOneDay ? "1D" : selected.key;
   const isPositive = pointChange >= 0;
@@ -127,8 +130,8 @@ export function PriceSidebar({ data }: { data: DashboardData }) {
           </div>
           <div className="flex flex-wrap items-center justify-end gap-1.5 sm:flex-nowrap sm:self-start">
             <WatchlistButton symbol={data.symbol} className="h-9 w-9 p-0" />
-            <PriceAlertButton symbol={data.symbol} currentPrice={quoteData?.lastPrice || data.price.cmp} className="h-9 w-9 p-0" />
-            <AddToPortfolioButton symbol={data.symbol} companyName={data.companyName} currentPrice={quoteData?.lastPrice || data.price.cmp} className="h-9 w-9 p-0" />
+            <PriceAlertButton symbol={data.symbol} currentPrice={currentPrice} className="h-9 w-9 p-0" />
+            <AddToPortfolioButton symbol={data.symbol} companyName={data.companyName} currentPrice={currentPrice} className="h-9 w-9 p-0" />
             <button
               onClick={() => setIsExpanded(true)}
               className="flex h-9 w-9 items-center justify-center rounded-md p-0 text-muted transition-colors hover:bg-accent/20 hover:text-foreground"
@@ -139,7 +142,7 @@ export function PriceSidebar({ data }: { data: DashboardData }) {
         </div>
 
         <div className="mt-4 flex flex-col gap-2 sm:grid sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start sm:gap-x-3 sm:gap-y-1">
-          <p className="min-w-0 text-2xl font-bold leading-none sm:text-3xl">{formatCurrency(quoteData?.lastPrice || data.price.cmp, data.price.currency)}</p>
+          <p className="min-w-0 text-2xl font-bold leading-none sm:text-3xl">{formatCurrency(currentPrice, data.price.currency)}</p>
           <div className={`min-w-0 sm:text-right ${isPositive ? "text-success" : "text-danger"}`}>
             <p className="text-xl font-semibold leading-none sm:text-2xl">
               {isPositive ? "+" : ""}
@@ -159,14 +162,14 @@ export function PriceSidebar({ data }: { data: DashboardData }) {
 
         <div className="mt-4">
           <div className="mb-1 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs text-muted">
-            <span>52W Low {formatCurrency(quoteData?.fiftytwoWeekLow || data.price.fiftyTwoWeekLow)}</span>
-            <span>52W High {formatCurrency(quoteData?.fiftytwoWeekHigh || data.price.fiftyTwoWeekHigh)}</span>
+            <span>52W Low {formatCurrency(weekLow)}</span>
+            <span>52W High {formatCurrency(weekHigh)}</span>
           </div>
           <div className="h-2 rounded-full bg-bg">
             <motion.div
               initial={{ width: 0 }}
               animate={{
-                width: `${((currentPrice - (quoteData?.fiftytwoWeekLow || data.price.fiftyTwoWeekLow)) / ((quoteData?.fiftytwoWeekHigh || data.price.fiftyTwoWeekHigh) - (quoteData?.fiftytwoWeekLow || data.price.fiftyTwoWeekLow) + 0.0001)) * 100}%`
+                width: `${weekRangeProgress}%`
               }}
               className="h-2 rounded-full bg-gradient-to-r from-amber-400 to-lime-400"
             />

@@ -66,18 +66,21 @@ function isAbortError(error: unknown) {
 
 export async function fetchDashboardEnvelope(
   symbol: string,
-  options: { requestOrigin?: string; exchange?: string } = {}
+  options: { requestOrigin?: string; exchange?: string; force?: boolean } = {}
 ): Promise<DashboardEnvelope> {
   const normalizedExchange = String(options.exchange || "NSE").trim().toUpperCase() || "NSE";
+  const force = Boolean(options.force);
   const key = `dashboard:${symbol.toUpperCase()}:5Y:${normalizedExchange}`;
-  const fresh = getFreshCache<DashboardEnvelope>(key, 30_000);
+  const fresh = force ? null : getFreshCache<DashboardEnvelope>(key, 30_000);
   if (fresh) return fresh;
 
   const stale = getStaleCache<DashboardEnvelope>(key);
-  const attempts = [
-    { timeoutMs: 15_000, refresh: false },
-    { timeoutMs: 20_000, refresh: true }
-  ];
+  const attempts = force
+    ? [{ timeoutMs: 20_000, refresh: true }]
+    : [
+        { timeoutMs: 15_000, refresh: false },
+        { timeoutMs: 20_000, refresh: true }
+      ];
   let lastError: unknown = null;
 
   for (const attempt of attempts) {

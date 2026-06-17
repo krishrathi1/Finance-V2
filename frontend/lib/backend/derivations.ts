@@ -287,10 +287,9 @@ export function deriveTechnicals(history: PricePoint[]): DashboardData["technica
   const pivots: PivotLevels = { standard: { ...zero }, fibonacci: { ...zero } };
 
   if (closes.length > 0 && highs.length > 0 && lows.length > 0) {
-    const lastIdx = closes.length > 1 ? -2 : -1;
-    const H = highs[highs.length + lastIdx];
-    const L = lows[lows.length + lastIdx];
-    const C = closes[closes.length + lastIdx];
+    const H = highs[highs.length - 1];
+    const L = lows[lows.length - 1];
+    const C = closes[closes.length - 1];
 
     const P = (H + L + C) / 3;
     const diff = H - L;
