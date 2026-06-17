@@ -10,6 +10,7 @@
  */
 
 import type { DashboardData } from "@/lib/types";
+import type { AnalystConsensus } from "@/lib/backend/contracts";
 import { baseSymbol, round2, safeCall, getText, DESKTOP_UA } from "@/lib/backend/http";
 import { getSampleDashboard } from "@/lib/backend/sample";
 import { getNseQuote, getNseCorporateEvents, getNseQuarterlyResults } from "@/lib/backend/providers/nse";
@@ -183,6 +184,227 @@ async function fetchSymbolNews(company: string, symbol: string): Promise<Dashboa
         sentimentScore: scoreSentiment(`${it.title} ${it.description}`),
       };
     });
+}
+
+type BrokerageResearch = NonNullable<DashboardData["brokerageResearch"]>;
+type BrokerageReport = BrokerageResearch["reports"][number];
+type BrokerAction = "buy" | "hold" | "sell";
+
+function normalizeBrokerAction(value: string | null | undefined): BrokerAction {
+  const action = String(value || "").trim().toLowerCase();
+  if (action.includes("sell") || action.includes("underperform") || action.includes("reduce")) return "sell";
+  if (action.includes("buy") || action.includes("outperform") || action.includes("accumulate") || action.includes("overweight")) return "buy";
+  return "hold";
+}
+
+function actionFromTarget(cmp: number | null | undefined, target: number | null | undefined): BrokerAction {
+  if (!cmp || cmp <= 0 || !target || target <= 0) return "hold";
+  const upside = ((target - cmp) / cmp) * 100;
+  if (upside >= 5) return "buy";
+  if (upside <= -5) return "sell";
+  return "hold";
+}
+
+function actionFromRecommendation(
+  recommendationKey: string | null | undefined,
+  recommendationMean: number | null | undefined,
+  cmp: number | null | undefined,
+  target: number | null | undefined
+): BrokerAction {
+  if (recommendationKey) return normalizeBrokerAction(recommendationKey);
+  if (recommendationMean !== null && recommendationMean !== undefined) {
+    if (recommendationMean <= 2.5) return "buy";
+    if (recommendationMean >= 3.5) return "sell";
+    return "hold";
+  }
+  return actionFromTarget(cmp, target);
+}
+
+function actionFromTrend(row: NonNullable<AnalystConsensus["recommendationTrend"]>[number]): BrokerAction {
+  const strongBuy = num(row.strongBuy) ?? 0;
+  const buy = num(row.buy) ?? 0;
+  const hold = num(row.hold) ?? 0;
+  const sell = num(row.sell) ?? 0;
+  const strongSell = num(row.strongSell) ?? 0;
+  const buyVotes = strongBuy + buy;
+  const sellVotes = sell + strongSell;
+  if (hold >= buyVotes && hold >= sellVotes) return "hold";
+  if (buyVotes > sellVotes) return "buy";
+  if (sellVotes > buyVotes) return "sell";
+  return "hold";
+}
+
+function voteSummary(row: NonNullable<AnalystConsensus["recommendationTrend"]>[number]): string {
+  const strongBuy = num(row.strongBuy) ?? 0;
+  const buy = num(row.buy) ?? 0;
+  const hold = num(row.hold) ?? 0;
+  const sell = num(row.sell) ?? 0;
+  const strongSell = num(row.strongSell) ?? 0;
+  return `${strongBuy + buy} buy / ${hold} hold / ${sell + strongSell} sell votes`;
+}
+
+function dateForConsensusPeriod(period: string | undefined, now = new Date()): string {
+  const match = String(period || "").match(/(-?\d+)m/i);
+  const date = new Date(now);
+  if (match) date.setUTCMonth(date.getUTCMonth() + Number(match[1]));
+  return date.toISOString().slice(0, 10);
+}
+
+function dateFromEstimate(row: Record<string, number | string | null> | undefined, now = new Date()): string {
+  const raw = String(row?.period ?? row?.date ?? row?.fiscalDateEnding ?? "").trim();
+  const parsed = raw ? new Date(raw) : now;
+  if (Number.isNaN(parsed.getTime())) return now.toISOString().slice(0, 10);
+  return parsed.toISOString().slice(0, 10);
+}
+
+function estimateNumber(row: Record<string, number | string | null> | undefined, ...keys: string[]): number | null {
+  for (const key of keys) {
+    const rounded = round2(row?.[key]);
+    if (rounded !== null) return rounded;
+  }
+  return null;
+}
+
+function summarizeBrokerage(reports: BrokerageReport[]): BrokerageResearch["summary"] {
+  const now = Date.now();
+  const summary: BrokerageResearch["summary"] = { "1D": 0, "1W": 0, "1M": 0, buy: 0, hold: 0, sell: 0, total: reports.length };
+
+  for (const report of reports) {
+    const action = normalizeBrokerAction(report.action);
+    summary[action] += 1;
+
+    const parsed = Date.parse(report.date);
+    if (!Number.isFinite(parsed)) continue;
+    const ageDays = Math.max(0, (now - parsed) / 86_400_000);
+    if (ageDays <= 1) summary["1D"] += 1;
+    if (ageDays <= 7) summary["1W"] += 1;
+    if (ageDays <= 31) summary["1M"] += 1;
+  }
+
+  return summary;
+}
+
+function buildBrokerageResearch({
+  base,
+  requestedExchange,
+  companyName,
+  cmp,
+  aiTarget,
+  analystConsensus,
+  fmpEstimates,
+}: {
+  base: string;
+  requestedExchange: string;
+  companyName: string;
+  cmp: number;
+  aiTarget: number;
+  analystConsensus?: AnalystConsensus | null;
+  fmpEstimates?: Array<Record<string, number | string | null>> | null;
+}): BrokerageResearch {
+  const now = new Date();
+  const yahooTicker = `${base}.${requestedExchange === "BSE" ? "BO" : "NS"}`;
+  const yahooUrl = `https://finance.yahoo.com/quote/${encodeURIComponent(yahooTicker)}/analysis`;
+  const reports: BrokerageReport[] = [];
+
+  const targetMean = round2(analystConsensus?.targetMeanPrice);
+  const targetHigh = round2(analystConsensus?.targetHighPrice);
+  const targetLow = round2(analystConsensus?.targetLowPrice);
+  const recommendationMean = round2(analystConsensus?.recommendationMean);
+  const analystCount = round2(analystConsensus?.numberOfAnalystOpinions);
+  const trendRows = analystConsensus?.recommendationTrend || [];
+
+  for (const row of trendRows.slice(0, 4)) {
+    const action = actionFromTrend(row);
+    const period = row.period || "current";
+    const targetRange = targetLow !== null && targetHigh !== null ? ` Target range Rs ${targetLow} - Rs ${targetHigh}.` : "";
+    const rating = recommendationMean;
+    reports.push({
+      broker: "Yahoo Finance analysts",
+      action,
+      targetPrice: targetMean,
+      rating,
+      date: dateForConsensusPeriod(period, now),
+      headline: `${companyName || base} analyst consensus is ${action}`,
+      summary: `Consensus for ${period}: ${voteSummary(row)}.${targetMean !== null ? ` Mean target Rs ${targetMean}.` : ""}${targetRange}`,
+      url: yahooUrl,
+    });
+  }
+
+  if (!reports.length && (targetMean !== null || recommendationMean !== null || analystConsensus?.recommendationKey)) {
+    const action = actionFromRecommendation(analystConsensus?.recommendationKey, recommendationMean, cmp, targetMean);
+    reports.push({
+      broker: "Yahoo Finance consensus",
+      action,
+      targetPrice: targetMean,
+      rating: recommendationMean,
+      date: now.toISOString().slice(0, 10),
+      headline: `${companyName || base} consensus view is ${action}`,
+      summary: `${analystCount !== null ? `${analystCount} analyst opinions. ` : ""}${
+        targetMean !== null ? `Mean target Rs ${targetMean}. ` : ""
+      }${targetLow !== null && targetHigh !== null ? `Range Rs ${targetLow} - Rs ${targetHigh}.` : ""}`.trim(),
+      url: yahooUrl,
+    });
+  }
+
+  if (fmpEstimates && fmpEstimates.length) {
+    const row = fmpEstimates[0];
+    const eps = estimateNumber(row, "estimatedEpsAvg", "estimatedEps");
+    const revenue = estimateNumber(row, "estimatedRevenueAvg", "estimatedRevenue");
+    const netIncome = estimateNumber(row, "estimatedNetIncomeAvg", "estimatedNetIncome");
+    const analysts = estimateNumber(row, "numberAnalystsEstimatedEps", "numberAnalystsEstimatedRevenue");
+    const period = String(row?.period ?? row?.date ?? "latest period");
+    const action = actionFromTarget(cmp, aiTarget);
+    const parts = [
+      analysts !== null ? `${analysts} analyst estimates` : "Forward analyst estimates",
+      eps !== null ? `EPS avg ${eps}` : "",
+      revenue !== null ? `revenue avg ${revenue}` : "",
+      netIncome !== null ? `net income avg ${netIncome}` : "",
+    ].filter(Boolean);
+
+    reports.push({
+      broker: "FMP analyst estimates",
+      action,
+      targetPrice: aiTarget > 0 ? round2(aiTarget) : null,
+      rating: null,
+      date: dateFromEstimate(row, now),
+      headline: `${companyName || base} forward estimate snapshot`,
+      summary: `${parts.join("; ")} for ${period}. Action uses the current live price versus the latest model target.`,
+      url: "",
+    });
+  }
+
+  if (!reports.length) {
+    const action = actionFromTarget(cmp, aiTarget);
+    const target = aiTarget > 0 ? round2(aiTarget) : null;
+    reports.push({
+      broker: "Live model consensus",
+      action,
+      targetPrice: target,
+      rating: null,
+      date: now.toISOString().slice(0, 10),
+      headline: `${companyName || base} live model view`,
+      summary: `External broker consensus was unavailable from live providers, so this view is derived from the refreshed price history, technicals, fundamentals, and model target.`,
+      url: "",
+    });
+  }
+
+  const hasYahoo = reports.some((report) => report.broker.startsWith("Yahoo"));
+  const hasFmp = reports.some((report) => report.broker.startsWith("FMP"));
+  const source = hasYahoo && hasFmp
+    ? "Yahoo Finance + FMP"
+    : hasYahoo
+      ? "Yahoo Finance analyst consensus"
+      : hasFmp
+        ? "FMP analyst estimates"
+        : "Live model consensus";
+
+  return {
+    source,
+    sourceUrl: hasYahoo ? yahooUrl : "",
+    updatedAt: now.toISOString(),
+    summary: summarizeBrokerage(reports),
+    reports,
+  };
 }
 
 export interface BuildOptions {
@@ -409,6 +631,15 @@ export async function buildDashboard(symbol: string, options: BuildOptions = {})
   if (growth) data.financials.growthSnapshot = growth;
   data.technicals = deriveTechnicals(data.price.history);
   data.price.aiTarget = calculatePredictiveTarget(data.price.history, data.metrics, data.technicals, data.price.cmp || 0);
+  data.brokerageResearch = buildBrokerageResearch({
+    base,
+    requestedExchange,
+    companyName: data.companyName || base,
+    cmp: data.price.cmp || 0,
+    aiTarget: data.price.aiTarget || 0,
+    analystConsensus: bundle.analystConsensus,
+    fmpEstimates,
+  });
 
   data.smartScore = computeSmartScore({
     metrics: data.metrics,

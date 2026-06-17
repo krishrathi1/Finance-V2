@@ -59,6 +59,23 @@ export interface QuarterlyResults {
   quarterlyDetailedConsolidated?: QuarterlyDetailedPoint[];
 }
 
+export interface AnalystConsensus {
+  recommendationTrend?: Array<{
+    period?: string;
+    strongBuy?: number | null;
+    buy?: number | null;
+    hold?: number | null;
+    sell?: number | null;
+    strongSell?: number | null;
+  }>;
+  targetMeanPrice?: number | null;
+  targetHighPrice?: number | null;
+  targetLowPrice?: number | null;
+  recommendationMean?: number | null;
+  recommendationKey?: string | null;
+  numberOfAnalystOpinions?: number | null;
+}
+
 /** The "bundle" a Yahoo/yfinance-style provider returns (everything it can scrape at once). */
 export interface ProviderBundle {
   candles?: Candle[];
@@ -83,6 +100,7 @@ export interface ProviderBundle {
     history?: ShareholdingPoint[];
     sourceUrl?: string;
   };
+  analystConsensus?: AnalystConsensus;
   news?: Array<{ title: string; url: string; publishedAt?: string; source?: string; summary?: string }>;
 }
 

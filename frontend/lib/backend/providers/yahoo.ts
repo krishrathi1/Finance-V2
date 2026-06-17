@@ -381,6 +381,45 @@ function mapMetrics(qs: any): Record<string, number | null> {
   return metrics;
 }
 
+/** Map Yahoo recommendationTrend + financialData target fields into analyst consensus. */
+function mapAnalystConsensus(qs: any): ProviderBundle["analystConsensus"] {
+  const financialData = qs?.financialData ?? {};
+  const trendRows: any[] = Array.isArray(qs?.recommendationTrend?.trend) ? qs.recommendationTrend.trend : [];
+
+  const recommendationTrend = trendRows
+    .map((row) => ({
+      period: rawStr(row?.period) ?? undefined,
+      strongBuy: round2(rawNum(row?.strongBuy)),
+      buy: round2(rawNum(row?.buy)),
+      hold: round2(rawNum(row?.hold)),
+      sell: round2(rawNum(row?.sell)),
+      strongSell: round2(rawNum(row?.strongSell)),
+    }))
+    .filter((row) =>
+      [row.strongBuy, row.buy, row.hold, row.sell, row.strongSell].some((value) => value !== null)
+    );
+
+  const consensus: ProviderBundle["analystConsensus"] = {
+    recommendationTrend,
+    targetMeanPrice: round2(rawNum(financialData.targetMeanPrice)),
+    targetHighPrice: round2(rawNum(financialData.targetHighPrice)),
+    targetLowPrice: round2(rawNum(financialData.targetLowPrice)),
+    recommendationMean: round2(rawNum(financialData.recommendationMean)),
+    recommendationKey: rawStr(financialData.recommendationKey),
+    numberOfAnalystOpinions: round2(rawNum(financialData.numberOfAnalystOpinions)),
+  };
+
+  const hasTargets = [
+    consensus.targetMeanPrice,
+    consensus.targetHighPrice,
+    consensus.targetLowPrice,
+    consensus.recommendationMean,
+    consensus.numberOfAnalystOpinions,
+  ].some((value) => value !== null && value !== undefined);
+
+  return recommendationTrend.length || consensus.recommendationKey || hasTargets ? consensus : undefined;
+}
+
 /** Generic helper to read a value from a Yahoo statement row by key. */
 function rowVal(row: any, key: string): number | null {
   return toCrore(row?.[key]);
@@ -588,6 +627,9 @@ export async function getYahooBundle(marketSymbol: string, days: number): Promis
 
     const shareholding = mapShareholding(qs);
     if (shareholding) bundle.shareholding = shareholding;
+
+    const analystConsensus = mapAnalystConsensus(qs);
+    if (analystConsensus) bundle.analystConsensus = analystConsensus;
 
     const quote = mapBundleQuote(qs);
     if (quote) bundle.quote = quote;

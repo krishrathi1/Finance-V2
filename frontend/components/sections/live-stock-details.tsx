@@ -14,6 +14,7 @@ import { DocumentsSection } from "@/components/sections/documents-section";
 import { EarningsTldr } from "@/components/sections/earnings-tldr";
 import { KeyRatiosSection } from "@/components/sections/key-ratios-section";
 import { MetricsGridLive } from "@/components/sections/metrics-grid-live";
+import { ReturnsCalculator } from "@/components/sections/returns-calculator";
 import { ReturnsPanel } from "@/components/sections/returns-panel";
 import { RiskScore } from "@/components/sections/risk-score";
 import { ShareholdingSection } from "@/components/sections/shareholding-section";
@@ -164,6 +165,13 @@ export function LiveStockDetails({ initialData, symbol, exchange }: { initialDat
 
         <div className="grid gap-4 xl:grid-cols-2">
           <BrokerageSummary brokerage={data.brokerageResearch} />
+          <ReturnsCalculator
+            symbol={symbol}
+            currentPrice={data.price.cmp}
+            aiTarget={data.price.aiTarget}
+            mlConfidence={smartScore.mlConfidence}
+            upProbability={smartScore.validation?.upProbability}
+          />
         </div>
 
         {data.analystEstimates && data.analystEstimates.length > 0 && (
