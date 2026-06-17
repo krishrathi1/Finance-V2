@@ -19,6 +19,7 @@ export async function GET(request: NextRequest) {
           rows: await getLiveTickerRows(requestedSymbols, { refresh }),
           universeCount: requestedSymbols.length,
           source: "requested",
+          quoteSource: "provider",
           updatedAt: new Date().toISOString(),
         }
       : await getLiveTickerSnapshot(refresh);
@@ -27,6 +28,7 @@ export async function GET(request: NextRequest) {
       data: snapshot.rows,
       updatedAt: snapshot.updatedAt,
       source: snapshot.source,
+      quoteSource: snapshot.quoteSource,
       universeCount: snapshot.universeCount,
       quotedCount: snapshot.rows.length,
     });

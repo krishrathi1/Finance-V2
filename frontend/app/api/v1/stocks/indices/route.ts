@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   return NextResponse.json({
-    data: getMarketIndexOptions(),
+    data: await getMarketIndexOptions(),
     updatedAt: new Date().toISOString(),
   });
 }

@@ -5,7 +5,12 @@ import { useEffect, useState } from "react";
 
 import { fetchTickerTape } from "@/lib/api";
 
-type TickerRow = { symbol: string; cmp: number; change: number; changePercent: number };
+type TickerRow = { symbol: string; cmp: number; change: number; changePercent: number; exchange?: "NSE" | "BSE" };
+
+function stockHref(row: TickerRow) {
+  const symbolPath = encodeURIComponent(row.symbol.replace(/\s+/g, ""));
+  return `/stocks/${symbolPath}${row.exchange === "BSE" ? "?exchange=BSE" : ""}`;
+}
 
 function ShimmerChips() {
   return (
@@ -73,13 +78,18 @@ export function PopularStocks() {
             const positive = row.changePercent >= 0;
             return (
               <Link
-                key={row.symbol}
-                href={`/stocks/${row.symbol}`}
+                key={`${row.exchange || "NSE"}-${row.symbol}`}
+                href={stockHref(row)}
                 className="group flex shrink-0 items-center gap-2 rounded-full border border-border/70 bg-panel/70 px-3 py-1.5 backdrop-blur transition hover:border-accent/40 hover:bg-panel active:scale-[0.98]"
               >
                 <span className="text-xs font-bold tracking-wide text-text group-hover:text-accent">
                   {row.symbol}
                 </span>
+                {row.exchange ? (
+                  <span className="rounded border border-border/50 bg-bg/45 px-1 py-0.5 text-[9px] font-bold text-muted">
+                    {row.exchange}
+                  </span>
+                ) : null}
                 <span
                   className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none ${
                     positive

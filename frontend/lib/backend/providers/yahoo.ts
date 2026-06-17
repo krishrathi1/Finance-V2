@@ -181,16 +181,20 @@ function parseChartCandles(result: any, days: number): Candle[] {
 }
 
 /**
- * Daily candles for an Indian equity. Tries `{SYM}.NS` then `{SYM}.BO`.
- * First ticker yielding candles wins. Returns null on total failure.
+ * Daily candles for an Indian equity. Suffixed symbols use that exchange; bare
+ * symbols try `{SYM}.NS` then `{SYM}.BO`.
  */
 export async function getYahooCandles(base: string, days: number): Promise<Candle[] | null> {
   try {
-    const sym = baseSymbol(base);
-    if (!sym) return null;
+    const key = String(base || "").trim().toUpperCase();
+    if (!key) return null;
     const dayCount = days && days > 0 ? days : 1825;
-    for (const suffix of [".NS", ".BO"]) {
-      const result = await fetchChartResult(`${sym}${suffix}`, dayCount);
+    const sym = baseSymbol(key);
+    if (!sym) return null;
+    const tickers = /\.(NS|BO)$/i.test(key) ? [key] : [`${sym}.NS`, `${sym}.BO`];
+
+    for (const ticker of tickers) {
+      const result = await fetchChartResult(ticker, dayCount);
       if (!result) continue;
       const candles = parseChartCandles(result, dayCount);
       if (candles.length > 0) return candles;
@@ -540,8 +544,7 @@ export async function getYahooBundle(marketSymbol: string, days: number): Promis
     const dayCount = days && days > 0 ? days : 1825;
 
     // Candles are independent of the crumb flow and always attempted.
-    const candleBase = baseSymbol(marketSymbol);
-    const candles = await getYahooCandles(candleBase, dayCount);
+    const candles = await getYahooCandles(marketSymbol, dayCount);
 
     const bundle: ProviderBundle = {};
     if (candles && candles.length) bundle.candles = candles;

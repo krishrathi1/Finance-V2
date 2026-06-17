@@ -8,7 +8,7 @@ interface ChartDataResponse {
   timestamp: string;
 }
 
-export function useChartData(symbol: string, days: string = '1W') {
+export function useChartData(symbol: string, days: string = '1W', exchange = 'NSE') {
   const [data, setData] = useState<ChartDataResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -20,7 +20,7 @@ export function useChartData(symbol: string, days: string = '1W') {
         setError(null);
 
         const response = await fetch(
-          `/api/v1/stocks/${symbol}/chart?days=${days}`
+          `/api/v1/stocks/${symbol}/chart?days=${encodeURIComponent(days)}&exchange=${encodeURIComponent(exchange)}`
         );
 
         if (!response.ok) {
@@ -40,7 +40,7 @@ export function useChartData(symbol: string, days: string = '1W') {
     if (symbol) {
       fetchChartData();
     }
-  }, [symbol, days]);
+  }, [symbol, days, exchange]);
 
   return { data, loading, error };
 }

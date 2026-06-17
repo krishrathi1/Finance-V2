@@ -6,14 +6,16 @@ import type { KeyRatioTrends } from "@/lib/types";
 
 export function MetricsGridLive({
   symbol,
+  exchange,
   dashboardMetrics,
   keyRatioTrends
 }: {
   symbol: string;
+  exchange: string;
   dashboardMetrics: Record<string, number | null>;
   keyRatioTrends?: KeyRatioTrends;
 }) {
-  const { data: quoteData } = useStockQuote(symbol);
+  const { data: quoteData } = useStockQuote(symbol, exchange);
 
   // Transform quote data to match MetricsGrid expected keys
   const mergedMetrics = {

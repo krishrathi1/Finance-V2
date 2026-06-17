@@ -70,7 +70,7 @@ export async function fetchDashboardEnvelope(
 ): Promise<DashboardEnvelope> {
   const normalizedExchange = String(options.exchange || "NSE").trim().toUpperCase() || "NSE";
   const key = `dashboard:${symbol.toUpperCase()}:5Y:${normalizedExchange}`;
-  const fresh = getFreshCache<DashboardEnvelope>(key, 60_000);
+  const fresh = getFreshCache<DashboardEnvelope>(key, 30_000);
   if (fresh) return fresh;
 
   const stale = getStaleCache<DashboardEnvelope>(key);
@@ -243,6 +243,7 @@ export async function fetchReturnsProjection(symbol: string, amount: number, cag
 }
 
 export async function fetchTickerTape(symbols: string[] = [], options: { force?: boolean } = {}) {
+  type TickerTapeRow = { symbol: string; cmp: number; change: number; changePercent: number; exchange?: "NSE" | "BSE" };
   const force = Boolean(options.force);
   const queryParts: string[] = [];
   if (symbols.length) {
@@ -255,10 +256,10 @@ export async function fetchTickerTape(symbols: string[] = [], options: { force?:
   const key = `ticker:${symbols.join(",") || "default"}`;
   const fresh = force
     ? null
-    : getFreshCache<Array<{ symbol: string; cmp: number; change: number; changePercent: number }>>(key, 10_000);
+    : getFreshCache<TickerTapeRow[]>(key, 10_000);
   if (fresh) return fresh;
 
-  const stale = getStaleCache<Array<{ symbol: string; cmp: number; change: number; changePercent: number }>>(key);
+  const stale = getStaleCache<TickerTapeRow[]>(key);
   try {
     const timeoutMs = symbols.length ? (force ? 7000 : 4500) : (force ? 35_000 : 25_000);
     const res = await fetchWithTimeout(getApiUrl(`/ticker${query}`), { cache: "no-store" }, timeoutMs);
@@ -266,9 +267,50 @@ export async function fetchTickerTape(symbols: string[] = [], options: { force?:
       throw new Error(`Ticker request failed: ${res.status}`);
     }
     const payload = await res.json();
-    const rows = (payload.data || []) as Array<{ symbol: string; cmp: number; change: number; changePercent: number }>;
+    const rows = (payload.data || []) as TickerTapeRow[];
     setCache(key, rows);
     return rows;
+  } catch (err) {
+    if (stale) return stale;
+    throw err;
+  }
+}
+
+export type MarketMoodPayload = {
+  value: number | null;
+  level?: "Extreme Fear" | "Fear" | "Neutral" | "Greed" | "Extreme Greed";
+  updatedAt?: string;
+  source?: string;
+  quoteSource?: string;
+  universeCount?: number;
+  quotedCount?: number;
+  advancing?: number;
+  declining?: number;
+  unchanged?: number;
+  averageChange?: number;
+  breadthScore?: number;
+  momentumScore?: number;
+};
+
+export async function fetchMarketMood(options: { force?: boolean } = {}): Promise<MarketMoodPayload> {
+  const force = Boolean(options.force);
+  const key = "market-mood";
+  const fresh = force ? null : getFreshCache<MarketMoodPayload>(key, 10_000);
+  if (fresh) return fresh;
+
+  const stale = getStaleCache<MarketMoodPayload>(key);
+
+  try {
+    const query = force ? "?refresh=true" : "";
+    const res = await fetchWithTimeout(getApiUrl(`/market-mood${query}`), { cache: "no-store" }, force ? 35_000 : 25_000);
+    if (!res.ok) {
+      throw new Error(`Market mood request failed: ${res.status}`);
+    }
+    const payload = (await res.json()) as MarketMoodPayload;
+    if (typeof payload.value === "number") {
+      setCache(key, payload);
+    }
+    return payload;
   } catch (err) {
     if (stale) return stale;
     throw err;
@@ -278,7 +320,7 @@ export async function fetchTickerTape(symbols: string[] = [], options: { force?:
 type IndexHeatmapPayload = {
   indexName: string;
   updatedAt: string;
-  rows: Array<{ symbol: string; cmp: number; change: number; changePercent: number }>;
+  rows: Array<{ symbol: string; cmp: number; change: number; changePercent: number; exchange?: "NSE" | "BSE" }>;
   source: string;
   constituentCount: number;
 };
@@ -303,7 +345,7 @@ export async function fetchIndexHeatmap(indexName: string, options: { force?: bo
     const data: IndexHeatmapPayload = {
       indexName: (payload.indexName || indexName) as string,
       updatedAt: (payload.updatedAt || "") as string,
-      rows: (payload.rows || []) as Array<{ symbol: string; cmp: number; change: number; changePercent: number }>,
+      rows: (payload.rows || []) as Array<{ symbol: string; cmp: number; change: number; changePercent: number; exchange?: "NSE" | "BSE" }>,
       source: typeof payload.source === "string" ? payload.source : "",
       constituentCount: typeof payload.constituentCount === "number" ? payload.constituentCount : 0,
     };

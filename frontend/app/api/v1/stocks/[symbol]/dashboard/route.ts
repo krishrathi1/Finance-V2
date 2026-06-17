@@ -6,7 +6,7 @@ import { getFresh, getStale, setCache } from "@/lib/backend/cache";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-const FRESH_TTL_MS = 180_000; // 3 min
+const FRESH_TTL_MS = 30_000;
 
 export async function GET(
   request: NextRequest,

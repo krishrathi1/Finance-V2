@@ -1,14 +1,105 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+import { getNseQuote } from '@/lib/backend/providers/nse';
+import { getYahooQuote } from '@/lib/backend/providers/yahoo';
+
+function yahooQuoteResponse(symbol: string, exchange: string, quote: Awaited<ReturnType<typeof getYahooQuote>>) {
+  return {
+    symbol: symbol.toUpperCase(),
+    companyName: '',
+    industry: '',
+    sector: '',
+    lastPrice: quote?.cmp || 0,
+    open: 0,
+    close: 0,
+    previousClose: quote?.cmp && quote?.change !== null && quote?.change !== undefined ? quote.cmp - quote.change : 0,
+    vwap: 0,
+    change: quote?.change || 0,
+    pChange: quote?.changePercent || 0,
+    fiftytwoWeekHigh: quote?.fiftyTwoWeekHigh || 0,
+    fiftytwoWeekHighDate: '',
+    fiftytwoWeekLow: quote?.fiftyTwoWeekLow || 0,
+    fiftytwoWeekLowDate: '',
+    intraDayHigh: 0,
+    intraDayLow: 0,
+    upperCP: 0,
+    lowerCP: 0,
+    marketCapCr: quote?.marketCap || null,
+    peRatio: quote?.peRatio || null,
+    industryPE: null,
+    pegRatio: null,
+    bookValue: null,
+    priceToBook: null,
+    evToSales: null,
+    roe: null,
+    roce: null,
+    roa: null,
+    ebitdaMargin: null,
+    netProfitMargin: null,
+    operatingMargin: null,
+    eps: null,
+    dividendYield: quote?.dividendYield || null,
+    outstandingSharesCr: null,
+    netProfit: 0,
+    profitBeforeTax: 0,
+    netSales: 0,
+    totalIncome: 0,
+    debtEquityRatio: 0,
+    casaRatio: null,
+    netInterestMargin: null,
+    faceValue: 0,
+    isin: '',
+    listingDate: '',
+    tradingStatus: quote?.cmp ? 'Active' : 'Unavailable',
+    exchange,
+    timestamp: new Date().toISOString(),
+    source: 'yahoo',
+  };
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ symbol: string }> }
 ) {
   try {
     const { symbol } = await params;
+    const exchange = (request.nextUrl.searchParams.get('exchange') || 'NSE').trim().toUpperCase();
+    const baseSymbol = symbol.toUpperCase().replace(/\.(NS|BO)$/i, '');
+    const marketSymbol = exchange === 'BSE' ? `${baseSymbol}.BO` : `${baseSymbol}.NS`;
+
+    if (exchange === 'BSE') {
+      const quote = await getYahooQuote(marketSymbol);
+      if (!quote?.cmp) {
+        return NextResponse.json(
+          { detail: 'Failed to fetch BSE quote data' },
+          { status: 502 }
+        );
+      }
+      return NextResponse.json(yahooQuoteResponse(baseSymbol, exchange, quote));
+    }
+
+    const providerQuote = await getNseQuote(baseSymbol);
+    if (providerQuote?.cmp) {
+      return NextResponse.json({
+        ...yahooQuoteResponse(baseSymbol, exchange, providerQuote),
+        companyName: providerQuote.companyName || '',
+        fiftytwoWeekHigh: providerQuote.fiftyTwoWeekHigh || 0,
+        fiftytwoWeekLow: providerQuote.fiftyTwoWeekLow || 0,
+        peRatio: providerQuote.peRatio || null,
+        industryPE: providerQuote.industryPe || null,
+        faceValue: providerQuote.faceValue || 0,
+        outstandingSharesCr: providerQuote.outstandingShares || null,
+        source: 'nse',
+      });
+    }
+
+    const yahooFallbackQuote = await getYahooQuote(baseSymbol);
+    if (yahooFallbackQuote?.cmp) {
+      return NextResponse.json(yahooQuoteResponse(baseSymbol, exchange, yahooFallbackQuote));
+    }
 
     // Fetch quote data from NSE API
-    const quoteUrl = `https://www.nseindia.com/api/quote-equity?symbol=${symbol.toUpperCase()}`;
+    const quoteUrl = `https://www.nseindia.com/api/quote-equity?symbol=${baseSymbol}`;
 
     const quoteResponse = await fetch(quoteUrl, {
       method: 'GET',
@@ -20,6 +111,8 @@ export async function GET(
     });
 
     if (!quoteResponse.ok) {
+      const quote = await getYahooQuote(marketSymbol);
+      if (quote?.cmp) return NextResponse.json(yahooQuoteResponse(baseSymbol, exchange, quote));
       return NextResponse.json(
         { detail: `Failed to fetch from NSE API: ${quoteResponse.statusText}` },
         { status: quoteResponse.status }
@@ -31,7 +124,7 @@ export async function GET(
     // Try to fetch quarterly results for financial metrics
     let quarterlyResults = null;
     try {
-      const resultsUrl = `https://www.nseindia.com/api/results-comparision?symbol=${symbol.toUpperCase()}`;
+      const resultsUrl = `https://www.nseindia.com/api/results-comparision?symbol=${baseSymbol}`;
       const resultsResponse = await fetch(resultsUrl, {
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
@@ -85,7 +178,7 @@ export async function GET(
       : null;
 
     const transformedData = {
-      symbol: symbol.toUpperCase(),
+      symbol: baseSymbol,
       companyName: info.companyName || '',
       industry: industryInfo.industry || '',
       sector: industryInfo.sector || '',
@@ -151,6 +244,7 @@ export async function GET(
       isin: info.isin || '',
       listingDate: metadata.listingDate || '',
       tradingStatus: securityInfo.tradingStatus || 'Active',
+      exchange,
 
       timestamp: new Date().toISOString(),
     };

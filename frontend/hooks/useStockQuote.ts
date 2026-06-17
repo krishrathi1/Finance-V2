@@ -71,7 +71,7 @@ export interface StockQuote {
   timestamp: string;
 }
 
-export function useStockQuote(symbol: string) {
+export function useStockQuote(symbol: string, exchange = 'NSE') {
   const [data, setData] = useState<StockQuote | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -83,7 +83,7 @@ export function useStockQuote(symbol: string) {
         setError(null);
 
         const response = await fetch(
-          `/api/v1/stocks/${symbol}/quote`
+          `/api/v1/stocks/${symbol}/quote?exchange=${encodeURIComponent(exchange)}`
         );
 
         if (!response.ok) {
@@ -103,7 +103,7 @@ export function useStockQuote(symbol: string) {
     if (symbol) {
       fetchQuote();
     }
-  }, [symbol]);
+  }, [symbol, exchange]);
 
   return { data, loading, error };
 }

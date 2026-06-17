@@ -31,10 +31,10 @@ export function PriceSidebar({ data }: { data: DashboardData }) {
   const selected = ranges.find((item) => item.key === range) || ranges[3];
 
   // Fetch chart data from NSE API
-  const { data: chartData, loading: chartLoading } = useChartData(data.symbol, range);
+  const { data: chartData, loading: chartLoading } = useChartData(data.symbol, range, data.exchange);
 
   // Fetch quote data for 52W high/low
-  const { data: quoteData } = useStockQuote(data.symbol);
+  const { data: quoteData } = useStockQuote(data.symbol, data.exchange);
 
   useEffect(() => {
     setMounted(true);

@@ -52,6 +52,80 @@ function num(x: unknown): number | null {
   return null;
 }
 
+function previousCalendarDate(dateKey: string) {
+  const date = new Date(`${dateKey}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() - 1);
+  return date.toISOString().slice(0, 10);
+}
+
+function candleClose(row: any): number | null {
+  return num(row?.close);
+}
+
+function hasCandleRows(rows: unknown): rows is any[] {
+  return Array.isArray(rows) && rows.some((row) => candleClose(row) !== null);
+}
+
+function selectCandleRows(...candidates: unknown[]): any[] {
+  for (const rows of candidates) {
+    if (hasCandleRows(rows)) return rows;
+  }
+  return [];
+}
+
+function syncHistoryWithLiveQuote(price: any) {
+  const cmp = num(price?.cmp);
+  if (cmp === null || cmp <= 0) return;
+
+  const today = new Date().toISOString().slice(0, 10);
+  const change = num(price?.change);
+  const previousClose = change !== null ? round2(cmp - change) : null;
+  const history = Array.isArray(price.history) ? [...price.history] : [];
+  const last = history.length ? history[history.length - 1] : null;
+  const lastClose = candleClose(last);
+  const liveDate = String(last?.date || "") === today ? String(last.date) : today;
+  const open = previousClose ?? lastClose ?? cmp;
+  const livePoint = {
+    date: liveDate,
+    open: round2(open) ?? cmp,
+    high: round2(Math.max(open, cmp)) ?? cmp,
+    low: round2(Math.min(open, cmp)) ?? cmp,
+    close: round2(cmp) ?? cmp,
+    volume: Number.isFinite(Number(last?.volume)) ? Number(last.volume) : 0,
+  };
+
+  if (!history.length && previousClose !== null && previousClose > 0 && previousClose !== cmp) {
+    history.push({
+      date: previousCalendarDate(today),
+      open: previousClose,
+      high: previousClose,
+      low: previousClose,
+      close: previousClose,
+      volume: 0,
+    });
+  }
+
+  if (!history.length) {
+    history.push(livePoint);
+  } else if (String(history[history.length - 1]?.date || "") === livePoint.date) {
+    history[history.length - 1] = { ...history[history.length - 1], ...livePoint };
+  } else if (lastClose === null || Math.abs(lastClose - cmp) > 0.005) {
+    history.push(livePoint);
+  }
+
+  price.history = history;
+  const lows = history.map((row) => num(row?.low) ?? candleClose(row)).filter((value): value is number => value !== null && value > 0);
+  const highs = history.map((row) => num(row?.high) ?? candleClose(row)).filter((value): value is number => value !== null && value > 0);
+  if (lows.length) {
+    const computedLow = round2(Math.min(...lows));
+    if (computedLow !== null) price.fiftyTwoWeekLow = computedLow;
+  }
+  if (highs.length) {
+    const computedHigh = round2(Math.max(...highs));
+    if (computedHigh !== null) price.fiftyTwoWeekHigh = computedHigh;
+  }
+}
+
 const POS_WORDS = ["surge", "jump", "gain", "rise", "profit", "beat", "growth", "record", "upgrade", "bullish", "high", "strong", "rally", "soar", "outperform"];
 const NEG_WORDS = ["fall", "drop", "loss", "decline", "miss", "downgrade", "bearish", "low", "weak", "slump", "plunge", "fraud", "probe", "cut", "concern", "lawsuit"];
 
@@ -151,7 +225,7 @@ export async function buildDashboard(symbol: string, options: BuildOptions = {})
     safeCall(() => getNseCorporateEvents(base), 8000, "nseEvents"),
     safeCall(() => getNseQuarterlyResults(base), 8000, "nseQuarterly"),
     safeCall(() => getYahooQuote(marketSymbol), 6000, "yahooQuote"),
-    safeCall(() => getYahooCandles(base, historyDays), 8000, "yahooCandles"),
+    safeCall(() => getYahooCandles(marketSymbol, historyDays), 8000, "yahooCandles"),
     safeCall(() => getYahooBundle(marketSymbol, historyDays), 11000, "yahooBundle"),
     safeCall(() => getFmpQuote(marketSymbol), 6000, "fmpQuote"),
     safeCall(() => getFmpCandles(marketSymbol, "5Y"), 8000, "fmpCandles"),
@@ -164,11 +238,8 @@ export async function buildDashboard(symbol: string, options: BuildOptions = {})
 
   const bundle: any = yahooBundle || {};
 
-  // ---- Candle selection + price history (FMP -> yahooBundle -> yahooCandles) ----
-  const selectedCandles: any[] = (fmpCandles && fmpCandles.length ? fmpCandles : null)
-    || (bundle.candles && bundle.candles.length ? bundle.candles : null)
-    || (yahooCandles && yahooCandles.length ? yahooCandles : null)
-    || [];
+  // ---- Candle selection + price history (Yahoo/exchange first, FMP fallback) ----
+  const selectedCandles = selectCandleRows(bundle.candles, yahooCandles, fmpCandles);
 
   if (bundle.intraday && bundle.intraday.length) data.price.intraday = bundle.intraday;
 
@@ -279,6 +350,10 @@ export async function buildDashboard(symbol: string, options: BuildOptions = {})
   }
   if (fmpGrowth && fmpGrowth.length) data.fmpFinancialGrowth = fmpGrowth;
   if (fmpEstimates && fmpEstimates.length) data.analystEstimates = fmpEstimates;
+
+  // Keep the visual chart, returns, heatmap, and technicals aligned with the
+  // current live quote even when historical providers lag by a few sessions.
+  syncHistoryWithLiveQuote(data.price);
 
   // ---- Company news ----
   const rssNews = (await safeCall(() => fetchSymbolNews(data.companyName || base, base), 7000, "symbolNews")) || [];

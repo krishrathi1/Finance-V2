@@ -6,7 +6,7 @@ import { TrendingDown, TrendingUp } from "lucide-react";
 
 import { fetchTickerTape } from "@/lib/api";
 
-type TickerRow = { symbol: string; cmp: number; change: number; changePercent: number };
+type TickerRow = { symbol: string; cmp: number; change: number; changePercent: number; exchange?: "NSE" | "BSE" };
 
 function formatSigned(value: number) {
   return `${value >= 0 ? "+" : ""}${value.toFixed(2)}`;
@@ -73,7 +73,9 @@ export function TopMovers() {
       <div className="mt-3 space-y-1.5">
         {items.map((item, idx) => {
           const isStock = !item.symbol.includes(" ");
-          const symbolPath = item.symbol.replace(/\s+/g, "");
+          const symbolPath = encodeURIComponent(item.symbol.replace(/\s+/g, ""));
+          const key = `${item.exchange || "NSE"}-${item.symbol}-${idx}`;
+          const href = `/stocks/${symbolPath}${item.exchange === "BSE" ? "?exchange=BSE" : ""}`;
           const content = (
             <div className="flex items-center justify-between rounded-xl px-3 py-2.5 transition hover:bg-bg/80 active:scale-[0.98]">
               <div className="flex items-center gap-3">
@@ -81,7 +83,14 @@ export function TopMovers() {
                   {idx + 1}
                 </span>
                 <div>
-                  <p className="density-copy text-sm font-semibold">{item.symbol}</p>
+                  <div className="flex items-center gap-1.5">
+                    <p className="density-copy text-sm font-semibold">{item.symbol}</p>
+                    {item.exchange ? (
+                      <span className="rounded border border-border/50 bg-bg/45 px-1 py-0.5 text-[9px] font-bold text-muted">
+                        {item.exchange}
+                      </span>
+                    ) : null}
+                  </div>
                   <p className="density-copy text-[11px] text-muted">
                     Rs {item.cmp.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
                   </p>
@@ -98,9 +107,9 @@ export function TopMovers() {
             </div>
           );
 
-          if (!isStock) return <div key={item.symbol}>{content}</div>;
+          if (!isStock) return <div key={key}>{content}</div>;
           return (
-            <Link key={item.symbol} href={`/stocks/${symbolPath}`}>
+            <Link key={key} href={href}>
               {content}
             </Link>
           );

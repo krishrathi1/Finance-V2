@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { newsProvider } from '@/lib/providers/news';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: NextRequest) {
   try {
     const refresh = request.nextUrl.searchParams.get('refresh') === 'true';

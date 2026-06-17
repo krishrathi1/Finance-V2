@@ -10,6 +10,7 @@ type TickerRow = {
   cmp: number;
   change: number;
   changePercent: number;
+  exchange?: "NSE" | "BSE";
   high?: number;
   low?: number;
 };
@@ -66,9 +67,9 @@ export function MarketTicker() {
   }, [rows]);
 
   const durationSeconds = useMemo(() => {
-    const minDuration = 212;
-    const maxDuration = 3600;
-    const secondsPerItem = 2.2;
+    const minDuration = 280;
+    const maxDuration = 4800;
+    const secondsPerItem = 3;
     return Math.max(minDuration, Math.min(maxDuration, Math.round(tape.length * secondsPerItem)));
   }, [tape.length]);
 
@@ -82,12 +83,18 @@ export function MarketTicker() {
         {tape.map((item, idx) => {
           const up = item.change >= 0;
           const color = up ? "text-success" : "text-danger";
-          const symbolPath = item.symbol.replace(/\s+/g, "");
+          const symbolPath = encodeURIComponent(item.symbol.replace(/\s+/g, ""));
+          const stockHref = `/stocks/${symbolPath}${item.exchange === "BSE" ? "?exchange=BSE" : ""}`;
           const isStockSymbol = !item.symbol.includes(" ");
           const content = (
             <span className="inline-flex items-center gap-2 sm:gap-2.5">
               <TrendMarker up={up} />
               <span className="font-bold tracking-wide text-text">{item.symbol}</span>
+              {item.exchange ? (
+                <span className="rounded border border-border/50 bg-bg/45 px-1.5 py-0.5 text-[9px] font-bold text-muted">
+                  {item.exchange}
+                </span>
+              ) : null}
               <span className="font-semibold text-text/95">
                 Rs {item.cmp.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
@@ -116,7 +123,7 @@ export function MarketTicker() {
           return (
             <Link
               key={`${item.symbol}-${idx}`}
-              href={`/stocks/${symbolPath}`}
+              href={stockHref}
               prefetch={false}
               className="ticker-item inline-flex items-center gap-1.5 px-3 text-xs font-semibold hover:opacity-90 active:scale-[0.98] sm:gap-2 sm:px-5 sm:text-sm"
             >

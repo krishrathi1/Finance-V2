@@ -11,6 +11,7 @@ type HeatmapRow = {
   cmp: number;
   change: number;
   changePercent: number;
+  exchange?: "NSE" | "BSE";
 };
 
 type HeatmapGroupTone = "success" | "danger" | "neutral";
@@ -45,6 +46,17 @@ function formatPrice(value: number) {
   return `Rs ${value.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 }
 
+function formatSourceLabel(source: string) {
+  if (!source) return "";
+  if (source === "provider-unavailable") return "provider unavailable";
+  if (source === "bse-official") return "BSE live heatmap";
+  if (source.startsWith("nse-official")) {
+    const quoteSource = source.split("/")[1];
+    return quoteSource ? `NSE official list + ${quoteSource} quotes` : "NSE official list";
+  }
+  return source.replace(/-/g, " ");
+}
+
 function HeatmapTile({
   row,
   activeSymbol,
@@ -54,22 +66,29 @@ function HeatmapTile({
   activeSymbol: string | null;
   setActiveSymbol: (symbol: string | null) => void;
 }) {
+  const symbolPath = encodeURIComponent(row.symbol.replace(/\s+/g, ""));
+  const href = `/stocks/${symbolPath}${row.exchange === "BSE" ? "?exchange=BSE" : ""}`;
+  const activeKey = `${row.exchange || "NSE"}-${row.symbol}`;
+
   return (
     <Link
-      href={`/stocks/${row.symbol}`}
-      onMouseEnter={() => setActiveSymbol(row.symbol)}
+      href={href}
+      onMouseEnter={() => setActiveSymbol(activeKey)}
       onMouseLeave={() => setActiveSymbol(null)}
-      onFocus={() => setActiveSymbol(row.symbol)}
+      onFocus={() => setActiveSymbol(activeKey)}
       onBlur={() => setActiveSymbol(null)}
       className={cn(
         "group flex min-h-[88px] flex-col justify-between overflow-hidden rounded-xl border p-3 transition duration-200 active:scale-[0.98] sm:min-h-[96px] sm:rounded-2xl",
         tileStyle(row.changePercent),
-        activeSymbol && activeSymbol !== row.symbol && "opacity-45",
-        activeSymbol === row.symbol && "-translate-y-1 shadow-xl ring-2 ring-white/20"
+        activeSymbol && activeSymbol !== activeKey && "opacity-45",
+        activeSymbol === activeKey && "-translate-y-1 shadow-xl ring-2 ring-white/20"
       )}
     >
       <div className="flex items-start justify-between gap-1">
-        <p className="min-w-0 truncate text-[11px] font-bold tracking-wide sm:text-xs">{row.symbol}</p>
+        <div className="min-w-0">
+          <p className="truncate text-[11px] font-bold tracking-wide sm:text-xs">{row.symbol}</p>
+          {row.exchange ? <p className="text-[9px] font-bold uppercase opacity-80">{row.exchange}</p> : null}
+        </div>
         <p className="shrink-0 text-sm font-black leading-none sm:text-base">{formatSigned(row.changePercent)}%</p>
       </div>
       <div className="flex items-end justify-between gap-1">
@@ -112,10 +131,10 @@ function HeatmapGroup({
       </div>
 
       {rows.length ? (
-        <div className="grid [grid-template-columns:repeat(auto-fit,minmax(150px,1fr))] gap-2 sm:gap-3">
-          {rows.map((row) => (
+        <div className="grid justify-start gap-2 [grid-template-columns:repeat(auto-fill,minmax(150px,180px))] sm:gap-3 sm:[grid-template-columns:repeat(auto-fill,minmax(165px,190px))]">
+          {rows.map((row, index) => (
             <HeatmapTile
-              key={row.symbol}
+              key={`${row.exchange || "NSE"}-${row.symbol}-${index}`}
               row={row}
               activeSymbol={activeSymbol}
               setActiveSymbol={setActiveSymbol}
@@ -269,7 +288,7 @@ export function MarketHeatmap() {
           <span>{selectedLabel}</span>
           <span>Last update: {new Date(updatedAt).toLocaleTimeString()}</span>
           {constituentCount ? <span>{constituentCount} constituents</span> : null}
-          {source ? <span>{source === "official" ? "official index list" : "fallback index list"}</span> : null}
+          {source ? <span>{formatSourceLabel(source)}</span> : null}
           <span>Avg move: {formatSigned(groupedRows.averageChange)}%</span>
         </div>
       ) : null}
@@ -291,24 +310,22 @@ export function MarketHeatmap() {
         </div>
       ) : rows.length ? (
         <div className="space-y-5">
-          <div className="grid gap-4 xl:grid-cols-2">
-            <HeatmapGroup
-              title="Gainers"
-              count={groupedRows.gainers.length}
-              tone="success"
-              rows={groupedRows.gainers}
-              activeSymbol={activeSymbol}
-              setActiveSymbol={setActiveSymbol}
-            />
-            <HeatmapGroup
-              title="Losers"
-              count={groupedRows.losers.length}
-              tone="danger"
-              rows={groupedRows.losers}
-              activeSymbol={activeSymbol}
-              setActiveSymbol={setActiveSymbol}
-            />
-          </div>
+          <HeatmapGroup
+            title="Gainers"
+            count={groupedRows.gainers.length}
+            tone="success"
+            rows={groupedRows.gainers}
+            activeSymbol={activeSymbol}
+            setActiveSymbol={setActiveSymbol}
+          />
+          <HeatmapGroup
+            title="Losers"
+            count={groupedRows.losers.length}
+            tone="danger"
+            rows={groupedRows.losers}
+            activeSymbol={activeSymbol}
+            setActiveSymbol={setActiveSymbol}
+          />
 
           {groupedRows.unchanged.length ? (
             <HeatmapGroup

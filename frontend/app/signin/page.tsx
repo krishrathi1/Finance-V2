@@ -2,10 +2,10 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 
-export default function SignInPage() {
+function SignInContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { signIn, loading } = useAuth();
@@ -127,5 +127,25 @@ export default function SignInPage() {
         </p>
       </div>
     </section>
+  );
+}
+
+export default function SignInPage() {
+  return (
+    <Suspense fallback={
+      <section className="mx-auto max-w-md">
+        <div className="rounded-2xl border border-border/60 bg-panel/70 p-6 shadow-xl backdrop-blur-sm sm:p-7">
+          <div className="shimmer h-4 w-28 rounded-full" />
+          <div className="shimmer mt-4 h-8 w-32 rounded-full" />
+          <div className="mt-6 space-y-3.5">
+            <div className="shimmer h-11 rounded-xl" />
+            <div className="shimmer h-11 rounded-xl" />
+            <div className="shimmer h-11 rounded-xl" />
+          </div>
+        </div>
+      </section>
+    }>
+      <SignInContent />
+    </Suspense>
   );
 }

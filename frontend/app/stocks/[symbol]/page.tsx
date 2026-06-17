@@ -499,7 +499,12 @@ export default async function StockDetailsPage({ params, searchParams }: Props) 
               ipoDate={data.profile.ipoDate}
               country={data.profile.country}
             />
-            <MetricsGridLive symbol={symbol} dashboardMetrics={data.metrics} keyRatioTrends={data.financials.keyRatioTrends} />
+            <MetricsGridLive
+              symbol={symbol}
+              exchange={data.exchange}
+              dashboardMetrics={data.metrics}
+              keyRatioTrends={data.financials.keyRatioTrends}
+            />
           </section>
 
           <StockAuthWall>

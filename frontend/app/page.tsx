@@ -16,7 +16,6 @@ import { MarketStatusBadge } from "@/components/market-status-badge";
 import { MarketMoodIndex } from "@/components/market-mood-index";
 import { MarketNews } from "@/components/market-news";
 import { MarketStatsBar } from "@/components/market-stats-bar";
-import { PopularStocks } from "@/components/popular-stocks";
 import { FaqSection } from "@/components/seo/faq-section";
 import { StockSearch } from "@/components/stock-search";
 import { TopMovers } from "@/components/top-movers";
@@ -279,8 +278,6 @@ export default function HomePage() {
           </div>
         </div>
       </ViewportMotionSection>
-
-      <PopularStocks />
 
       <section className="sticky top-[5.4rem] z-20 rounded-2xl border border-border/40 bg-bg/75 p-2 backdrop-blur-xl sm:top-[6.2rem]">
         <MarketStatsBar />

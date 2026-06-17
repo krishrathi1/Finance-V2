@@ -3,18 +3,9 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { MarketStatusBadge } from "@/components/market-status-badge";
-import { fetchTickerTape } from "@/lib/api";
+import { fetchMarketMood, type MarketMoodPayload } from "@/lib/api";
 
 type MoodLevel = "Extreme Fear" | "Fear" | "Neutral" | "Greed" | "Extreme Greed";
-
-function getMoodFromData(rows: Array<{ changePercent: number }>): number {
-  if (!rows.length) return 50;
-  const positiveCount = rows.filter((r) => r.changePercent > 0).length;
-  const avgChange = rows.reduce((sum, r) => sum + r.changePercent, 0) / rows.length;
-  const breadthScore = (positiveCount / rows.length) * 100;
-  const momentumScore = Math.max(0, Math.min(100, 50 + avgChange * 15));
-  return Math.round(breadthScore * 0.6 + momentumScore * 0.4);
-}
 
 function getMoodLevel(value: number): MoodLevel {
   if (value <= 20) return "Extreme Fear";
@@ -32,52 +23,85 @@ function getMoodColor(value: number): string {
   return "#22c55e";
 }
 
-function getMoodEmoji(level: MoodLevel): string {
-  switch (level) {
-    case "Extreme Fear": return "";
-    case "Fear": return "";
-    case "Neutral": return "";
-    case "Greed": return "";
-    case "Extreme Greed": return "";
-  }
+function formatSigned(value: number) {
+  return `${value >= 0 ? "+" : ""}${value.toFixed(2)}%`;
+}
+
+function formatSourceLabel(source?: string, quoteSource?: string) {
+  const parts = [source, quoteSource].filter(Boolean);
+  return parts.length ? parts.join(" / ").replace(/-/g, " ") : "live feed";
+}
+
+function formatUpdatedAt(value?: string) {
+  if (!value) return "";
+  return new Date(value).toLocaleTimeString("en-IN", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 export function MarketMoodIndex() {
-  const [moodValue, setMoodValue] = useState(50);
+  const [mood, setMood] = useState<MarketMoodPayload | null>(null);
   const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     let alive = true;
-    const load = async () => {
+
+    const load = async (force = false) => {
       try {
-        const data = await fetchTickerTape([], { force: false });
-        if (alive && data.length) {
-          setMoodValue(getMoodFromData(data));
+        const data = await fetchMarketMood({ force });
+        if (alive && typeof data.value === "number") {
+          setMood(data);
+          setFailed(false);
         }
       } catch {
-        /* keep default */
+        if (alive) setFailed(true);
       } finally {
         if (alive) setLoading(false);
       }
     };
-    load();
+
+    void load(false);
     const timer = setInterval(() => {
-      void fetchTickerTape([], { force: true }).then((data) => {
-        if (alive && data.length) setMoodValue(getMoodFromData(data));
-      }).catch(() => {});
+      void load(true);
     }, 30_000);
-    return () => { alive = false; clearInterval(timer); };
+
+    return () => {
+      alive = false;
+      clearInterval(timer);
+    };
   }, []);
 
-  const level = useMemo(() => getMoodLevel(moodValue), [moodValue]);
-  const color = useMemo(() => getMoodColor(moodValue), [moodValue]);
-  const emoji = useMemo(() => getMoodEmoji(level), [level]);
+  const moodValue = typeof mood?.value === "number" ? mood.value : null;
+  const liveMood = mood;
+  const level = useMemo(() => (moodValue === null ? "Neutral" : getMoodLevel(moodValue)), [moodValue]);
+  const color = useMemo(() => getMoodColor(moodValue ?? 50), [moodValue]);
 
-  const needleAngle = -90 + (moodValue / 100) * 180;
+  const needleAngle = -90 + ((moodValue ?? 50) / 100) * 180;
 
-  if (loading) {
+  if (loading && !mood) {
     return (
       <div className="shimmer h-[200px] rounded-2xl border border-border/70" />
+    );
+  }
+
+  if (moodValue === null || !liveMood) {
+    return (
+      <div className="glow-card density-panel-lg rounded-2xl border border-border/70 bg-panel/70">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="density-copy font-[var(--font-space)] text-sm font-bold uppercase tracking-wider text-muted">
+              Market Mood Index
+            </h3>
+            <p className="density-copy mt-0.5 text-[11px] text-muted">Based on live NSE/BSE breadth & momentum</p>
+          </div>
+          <MarketStatusBadge />
+        </div>
+        <div className="mt-8 rounded-xl border border-border/70 bg-bg/50 p-4 text-sm text-muted">
+          Waiting for live market breadth data. The score will appear as soon as the quote feed responds.
+        </div>
+      </div>
     );
   }
 
@@ -88,7 +112,7 @@ export function MarketMoodIndex() {
           <h3 className="density-copy font-[var(--font-space)] text-sm font-bold uppercase tracking-wider text-muted">
             Market Mood Index
           </h3>
-          <p className="density-copy mt-0.5 text-[11px] text-muted">Based on market breadth & momentum</p>
+          <p className="density-copy mt-0.5 text-[11px] text-muted">Based on live NSE/BSE breadth & momentum</p>
         </div>
         <MarketStatusBadge />
       </div>
@@ -135,9 +159,32 @@ export function MarketMoodIndex() {
         <div className="mt-2 text-center">
           <p className="text-3xl font-bold" style={{ color }}>{moodValue}</p>
           <p className="mt-1 text-sm font-semibold" style={{ color }}>
-            {emoji} {level}
+            {liveMood.level || level}
           </p>
         </div>
+
+        <div className="mt-3 flex flex-wrap justify-center gap-2 text-[10px] font-semibold text-muted">
+          <span className="rounded-full border border-border/60 bg-bg/50 px-2 py-1">
+            Adv {liveMood.advancing?.toLocaleString("en-IN") ?? "--"} / Dec {liveMood.declining?.toLocaleString("en-IN") ?? "--"}
+          </span>
+          <span className="rounded-full border border-border/60 bg-bg/50 px-2 py-1">
+            {(liveMood.quotedCount || 0).toLocaleString("en-IN")} live quotes
+          </span>
+          {typeof liveMood.averageChange === "number" ? (
+            <span className="rounded-full border border-border/60 bg-bg/50 px-2 py-1">
+              Avg {formatSigned(liveMood.averageChange)}
+            </span>
+          ) : null}
+          {liveMood.updatedAt ? (
+            <span className="rounded-full border border-border/60 bg-bg/50 px-2 py-1">
+              Updated {formatUpdatedAt(liveMood.updatedAt)}
+            </span>
+          ) : null}
+        </div>
+        <p className="mt-2 max-w-[260px] text-center text-[10px] text-muted">
+          {failed ? "Using last good snapshot from " : "Source: "}
+          {formatSourceLabel(liveMood.source, liveMood.quoteSource)}
+        </p>
       </div>
     </div>
   );
