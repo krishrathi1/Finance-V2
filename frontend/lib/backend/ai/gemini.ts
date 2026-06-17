@@ -10,18 +10,23 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const DEFAULT_TIMEOUT_MS = 12000;
-const DEFAULT_MODEL = "gemini-2.0-flash";
+// Tried in order. The env-configured model is preferred; the rest are robust
+// fallbacks so the layer keeps working even if the configured id is wrong/retired.
+const FALLBACK_MODELS = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"];
 
 /** The configured API key, or empty string if unset. */
 function apiKey(): string {
   return (process.env.GEMINI_API_KEY || "").trim();
 }
 
-/** The configured model name, defaulting to gemini-2.0-flash when unset/empty. */
-function modelName(): string {
-  const m = (process.env.GEMINI_MODEL || "").trim();
-  return m || DEFAULT_MODEL;
+/** Ordered, de-duped list of model ids to try (configured first). */
+function modelCandidates(): string[] {
+  const configured = (process.env.GEMINI_MODEL || "").trim();
+  return Array.from(new Set([configured, ...FALLBACK_MODELS].filter(Boolean)));
 }
+
+/** The first model id confirmed working this process, to skip dead candidates. */
+let workingModel: string | null = null;
 
 /** Whether a Gemini API key is present in the environment. */
 export function isGeminiConfigured(): boolean {
@@ -56,11 +61,24 @@ export async function generateText(
 
   return withTimeout(async () => {
     const client = new GoogleGenerativeAI(apiKey());
-    const model = client.getGenerativeModel({ model: modelName() });
-    const result = await model.generateContent(prompt);
-    const text = result.response.text();
-    const trimmed = (text || "").trim();
-    return trimmed.length > 0 ? trimmed : null;
+    const candidates = workingModel ? [workingModel, ...modelCandidates().filter((m) => m !== workingModel)] : modelCandidates();
+    let lastErr: unknown = null;
+    for (const id of candidates) {
+      try {
+        const model = client.getGenerativeModel({ model: id });
+        const result = await model.generateContent(prompt);
+        const text = (result.response.text() || "").trim();
+        if (text.length > 0) {
+          workingModel = id; // cache the first model that works for this process
+          return text;
+        }
+      } catch (err) {
+        lastErr = err;
+        // Try the next candidate (model-not-found / invalid-model errors fail fast).
+      }
+    }
+    if (lastErr) console.warn(`[gemini] all models failed: ${String(lastErr)}`);
+    return null;
   }, timeoutMs);
 }
 

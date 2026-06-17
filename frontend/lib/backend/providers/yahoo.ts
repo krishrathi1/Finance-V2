@@ -63,6 +63,26 @@ function rawNum(value: unknown): number | null {
   return toFloat(value);
 }
 
+function previousCloseFromChart(result: any, currentPrice: number | null): number | null {
+  const closes: unknown[] = Array.isArray(result?.indicators?.quote?.[0]?.close)
+    ? result.indicators.quote[0].close
+    : [];
+  const parsed = closes.map((value) => toFloat(value));
+  const numeric = parsed.filter((value): value is number => value !== null);
+  if (!numeric.length) return null;
+
+  const lastNonNull = numeric[numeric.length - 1];
+  if (numeric.length === 1 && currentPrice !== null && Math.abs(lastNonNull - currentPrice) < 0.005) {
+    return null;
+  }
+  const rawLast = parsed[parsed.length - 1];
+  if (rawLast === null) return lastNonNull;
+  if (currentPrice !== null && Math.abs(lastNonNull - currentPrice) < 0.005 && numeric.length >= 2) {
+    return numeric[numeric.length - 2];
+  }
+  return lastNonNull;
+}
+
 /** Extract the human-readable string from a `{ raw, fmt }` object or a plain value. */
 function rawStr(value: unknown): string | null {
   if (value === null || value === undefined) return null;
@@ -210,7 +230,11 @@ export async function getYahooQuote(marketSymbol: string): Promise<RawQuote | nu
       if (!meta) continue;
 
       const price = rawNum(meta.regularMarketPrice);
-      const prevClose = rawNum(meta.chartPreviousClose) ?? rawNum(meta.previousClose);
+      const prevClose =
+        rawNum(meta.regularMarketPreviousClose) ??
+        rawNum(meta.previousClose) ??
+        previousCloseFromChart(result, price) ??
+        rawNum(meta.chartPreviousClose);
       if (price === null) continue;
 
       let change: number | null = null;

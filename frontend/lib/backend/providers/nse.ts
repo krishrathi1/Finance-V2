@@ -84,7 +84,7 @@ async function ensureCookies(): Promise<string> {
  * GET an NSE `/api/*` endpoint as JSON with cookie priming + a single
  * re-prime/retry on 401/403. Returns parsed JSON or `null` (never throws).
  */
-async function nseGetJson<T = any>(url: string, timeoutMs = 6000): Promise<T | null> {
+export async function nseGetJson<T = any>(url: string, timeoutMs = 6000): Promise<T | null> {
   try {
     let cookies = await ensureCookies();
     let res = await fetchWithTimeout(url, {

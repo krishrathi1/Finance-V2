@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
-import { fetchIndexHeatmap } from "@/lib/api";
+import { fetchIndexHeatmap, fetchMarketIndexOptions, type MarketIndexOption } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 type HeatmapRow = {
@@ -13,14 +13,9 @@ type HeatmapRow = {
   changePercent: number;
 };
 
-const INDEX_OPTIONS = [
-  "NIFTY 50",
-  "NIFTY BANK",
-  "NIFTY FINANCIAL SERVICES",
-  "NIFTY MIDCAP 100",
-  "BSE SENSEX",
-  "S&P BSE BANKEX"
-];
+type HeatmapGroupTone = "success" | "danger" | "neutral";
+
+const LIVE_REFRESH_MS = 30_000;
 
 const LEGEND = [
   { label: "Above +5%", className: "border-success/50 bg-success text-white" },
@@ -29,7 +24,7 @@ const LEGEND = [
   { label: "0%", className: "border-border/80 bg-panel/90 text-text" },
   { label: "-2 to 0%", className: "border-danger/20 bg-danger/60 text-white" },
   { label: "-5 to -2%", className: "border-danger/30 bg-danger/80 text-white" },
-  { label: "Below -5%", className: "border-danger/40 bg-danger text-white" }
+  { label: "Below -5%", className: "border-danger/40 bg-danger text-white" },
 ];
 
 function tileStyle(changePercent: number) {
@@ -46,81 +41,243 @@ function formatSigned(value: number) {
   return `${value >= 0 ? "+" : ""}${value.toFixed(2)}`;
 }
 
+function formatPrice(value: number) {
+  return `Rs ${value.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
+}
+
+function HeatmapTile({
+  row,
+  activeSymbol,
+  setActiveSymbol,
+}: {
+  row: HeatmapRow;
+  activeSymbol: string | null;
+  setActiveSymbol: (symbol: string | null) => void;
+}) {
+  return (
+    <Link
+      href={`/stocks/${row.symbol}`}
+      onMouseEnter={() => setActiveSymbol(row.symbol)}
+      onMouseLeave={() => setActiveSymbol(null)}
+      onFocus={() => setActiveSymbol(row.symbol)}
+      onBlur={() => setActiveSymbol(null)}
+      className={cn(
+        "group flex min-h-[88px] flex-col justify-between overflow-hidden rounded-xl border p-3 transition duration-200 active:scale-[0.98] sm:min-h-[96px] sm:rounded-2xl",
+        tileStyle(row.changePercent),
+        activeSymbol && activeSymbol !== row.symbol && "opacity-45",
+        activeSymbol === row.symbol && "-translate-y-1 shadow-xl ring-2 ring-white/20"
+      )}
+    >
+      <div className="flex items-start justify-between gap-1">
+        <p className="min-w-0 truncate text-[11px] font-bold tracking-wide sm:text-xs">{row.symbol}</p>
+        <p className="shrink-0 text-sm font-black leading-none sm:text-base">{formatSigned(row.changePercent)}%</p>
+      </div>
+      <div className="flex items-end justify-between gap-1">
+        <p className="min-w-0 truncate text-[10px] font-semibold sm:text-[11px]">{formatPrice(row.cmp)}</p>
+        <p className="shrink-0 text-[10px] font-semibold opacity-90">{formatSigned(row.change)}</p>
+      </div>
+    </Link>
+  );
+}
+
+function HeatmapGroup({
+  title,
+  count,
+  tone,
+  rows,
+  activeSymbol,
+  setActiveSymbol,
+}: {
+  title: string;
+  count: number;
+  tone: HeatmapGroupTone;
+  rows: HeatmapRow[];
+  activeSymbol: string | null;
+  setActiveSymbol: (symbol: string | null) => void;
+}) {
+  const toneClass =
+    tone === "success"
+      ? "border-success/30 bg-success/10 text-success"
+      : tone === "danger"
+        ? "border-danger/30 bg-danger/10 text-danger"
+        : "border-border/60 bg-panel/60 text-muted";
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="text-xs font-bold uppercase tracking-[0.16em] text-muted">{title}</h3>
+        <span className={cn("rounded-full border px-2.5 py-1 text-[11px] font-semibold", toneClass)}>
+          {count}
+        </span>
+      </div>
+
+      {rows.length ? (
+        <div className="grid [grid-template-columns:repeat(auto-fit,minmax(150px,1fr))] gap-2 sm:gap-3">
+          {rows.map((row) => (
+            <HeatmapTile
+              key={row.symbol}
+              row={row}
+              activeSymbol={activeSymbol}
+              setActiveSymbol={setActiveSymbol}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="rounded-2xl border border-border/60 bg-panel/50 p-4 text-sm text-muted">
+          No stocks in this group right now.
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function MarketHeatmap() {
-  const [selectedIndex, setSelectedIndex] = useState<string>("NIFTY 50");
+  const [indexOptions, setIndexOptions] = useState<MarketIndexOption[]>([]);
+  const [selectedIndex, setSelectedIndex] = useState<string>("");
   const [rows, setRows] = useState<HeatmapRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [optionsLoading, setOptionsLoading] = useState(true);
   const [updatedAt, setUpdatedAt] = useState<string>("");
+  const [source, setSource] = useState<string>("");
+  const [constituentCount, setConstituentCount] = useState<number>(0);
   const [activeSymbol, setActiveSymbol] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
 
-    const load = async (forceRefresh = false) => {
+    fetchMarketIndexOptions()
+      .then((options) => {
+        if (!alive) return;
+        setIndexOptions(options);
+        setSelectedIndex((current) => current || options[0]?.value || "");
+      })
+      .catch(() => {
+        if (alive) setIndexOptions([]);
+      })
+      .finally(() => {
+        if (alive) setOptionsLoading(false);
+      });
+
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!selectedIndex) {
+      setLoading(false);
+      return;
+    }
+
+    let alive = true;
+
+    const load = async () => {
+      setRefreshing(true);
       try {
-        const payload = await fetchIndexHeatmap(selectedIndex, { force: forceRefresh });
+        const payload = await fetchIndexHeatmap(selectedIndex, { force: true });
         if (!alive) return;
         setRows(payload.rows);
         setUpdatedAt(payload.updatedAt || "");
+        setSource(typeof payload.source === "string" ? payload.source : "");
+        setConstituentCount(
+          typeof payload.constituentCount === "number" ? payload.constituentCount : payload.rows.length
+        );
       } catch {
         if (!alive) return;
         setRows([]);
+        setSource("");
+        setConstituentCount(0);
       } finally {
-        if (alive) setLoading(false);
+        if (alive) {
+          setLoading(false);
+          setRefreshing(false);
+        }
       }
     };
 
     setLoading(true);
-    load(false);
+    void load();
     const timer = setInterval(() => {
-      void load(false);
-    }, 180_000);
+      void load();
+    }, LIVE_REFRESH_MS);
+
     return () => {
       alive = false;
       clearInterval(timer);
     };
   }, [selectedIndex]);
 
-  const sortedRows = useMemo(() => {
-    return [...rows].sort((a, b) => b.changePercent - a.changePercent);
+  const groupedRows = useMemo(() => {
+    const sorted = [...rows].sort((a, b) => b.changePercent - a.changePercent);
+    const gainers = sorted.filter((row) => row.changePercent > 0);
+    const unchanged = sorted.filter((row) => row.changePercent === 0);
+    const losers = sorted.filter((row) => row.changePercent < 0).sort((a, b) => a.changePercent - b.changePercent);
+    const averageChange = rows.length
+      ? rows.reduce((sum, row) => sum + row.changePercent, 0) / rows.length
+      : 0;
+
+    return { gainers, losers, unchanged, averageChange };
   }, [rows]);
+
+  const selectedLabel = indexOptions.find((option) => option.value === selectedIndex)?.label || selectedIndex;
 
   return (
     <section className="space-y-4">
       <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <label htmlFor="heatmap-index" className="density-copy text-xs uppercase tracking-[0.2em] text-muted">
             Index
           </label>
           <select
             id="heatmap-index"
             value={selectedIndex}
-            onChange={(e) => setSelectedIndex(e.target.value)}
+            onChange={(event) => setSelectedIndex(event.target.value)}
+            disabled={optionsLoading || !indexOptions.length}
             className="rounded-xl border border-border/70 bg-panel px-3 py-2 text-sm font-semibold outline-none transition-colors focus:border-accent"
           >
-            {INDEX_OPTIONS.map((option) => (
-              <option key={option} value={option}>
-                {option}
+            {indexOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
               </option>
             ))}
           </select>
+          <span
+            className={cn(
+              "rounded-full border px-2.5 py-1 text-[11px] font-semibold",
+              refreshing ? "border-accent/40 bg-accent/10 text-accent" : "border-border/60 bg-panel/60 text-muted"
+            )}
+          >
+            {refreshing ? "Refreshing live prices" : "Auto refresh 30s"}
+          </span>
         </div>
 
         <div className="flex flex-wrap gap-1.5 sm:gap-2">
           {LEGEND.map((item) => (
-            <span key={item.label} className={cn("rounded-full border px-2 py-0.5 text-[10px] font-semibold sm:px-3 sm:py-1 sm:text-xs", item.className)}>
+            <span
+              key={item.label}
+              className={cn("rounded-full border px-2 py-0.5 text-[10px] font-semibold sm:px-3 sm:py-1 sm:text-xs", item.className)}
+            >
               {item.label}
             </span>
           ))}
         </div>
       </div>
 
-      {updatedAt ? <p className="text-xs text-muted">Last update: {new Date(updatedAt).toLocaleTimeString()}</p> : null}
+      {updatedAt ? (
+        <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
+          <span>{selectedLabel}</span>
+          <span>Last update: {new Date(updatedAt).toLocaleTimeString()}</span>
+          {constituentCount ? <span>{constituentCount} constituents</span> : null}
+          {source ? <span>{source === "official" ? "official index list" : "fallback index list"}</span> : null}
+          <span>Avg move: {formatSigned(groupedRows.averageChange)}%</span>
+        </div>
+      ) : null}
 
       {loading ? (
         <div className="grid [grid-template-columns:repeat(auto-fit,minmax(150px,1fr))] gap-2 sm:gap-3">
-          {Array.from({ length: 18 }).map((_, idx) => (
-            <div key={idx} className="rounded-xl border border-border/60 bg-panel/60 p-[var(--panel-padding)] sm:rounded-2xl">
+          {Array.from({ length: 18 }).map((_, index) => (
+            <div key={index} className="rounded-xl border border-border/60 bg-panel/60 p-[var(--panel-padding)] sm:rounded-2xl">
               <div className="flex items-start justify-between">
                 <div className="shimmer h-4 w-16 rounded-full" />
                 <div className="shimmer h-5 w-14 rounded-full" />
@@ -132,34 +289,41 @@ export function MarketHeatmap() {
             </div>
           ))}
         </div>
+      ) : rows.length ? (
+        <div className="space-y-5">
+          <div className="grid gap-4 xl:grid-cols-2">
+            <HeatmapGroup
+              title="Gainers"
+              count={groupedRows.gainers.length}
+              tone="success"
+              rows={groupedRows.gainers}
+              activeSymbol={activeSymbol}
+              setActiveSymbol={setActiveSymbol}
+            />
+            <HeatmapGroup
+              title="Losers"
+              count={groupedRows.losers.length}
+              tone="danger"
+              rows={groupedRows.losers}
+              activeSymbol={activeSymbol}
+              setActiveSymbol={setActiveSymbol}
+            />
+          </div>
+
+          {groupedRows.unchanged.length ? (
+            <HeatmapGroup
+              title="Unchanged"
+              count={groupedRows.unchanged.length}
+              tone="neutral"
+              rows={groupedRows.unchanged}
+              activeSymbol={activeSymbol}
+              setActiveSymbol={setActiveSymbol}
+            />
+          ) : null}
+        </div>
       ) : (
-        <div className="grid [grid-template-columns:repeat(auto-fit,minmax(150px,1fr))] gap-2 sm:gap-3">
-          {sortedRows.map((row) => (
-            <Link
-              key={row.symbol}
-              href={`/stocks/${row.symbol}`}
-              onMouseEnter={() => setActiveSymbol(row.symbol)}
-              onMouseLeave={() => setActiveSymbol(null)}
-              onFocus={() => setActiveSymbol(row.symbol)}
-              onBlur={() => setActiveSymbol(null)}
-              className={cn(
-                "group flex min-h-[88px] flex-col justify-between overflow-hidden rounded-xl border p-3 transition duration-200 active:scale-[0.98] sm:min-h-[96px] sm:rounded-2xl",
-                tileStyle(row.changePercent)
-                ,
-                activeSymbol && activeSymbol !== row.symbol && "opacity-45",
-                activeSymbol === row.symbol && "-translate-y-1 shadow-xl ring-2 ring-white/20"
-              )}
-            >
-              <div className="flex items-start justify-between gap-1">
-                <p className="min-w-0 truncate text-[11px] font-bold tracking-wide sm:text-xs">{row.symbol}</p>
-                <p className="shrink-0 text-sm font-black leading-none sm:text-base">{formatSigned(row.changePercent)}%</p>
-              </div>
-              <div className="flex items-end justify-between gap-1">
-                <p className="min-w-0 truncate text-[10px] font-semibold sm:text-[11px]">₹{row.cmp.toLocaleString("en-IN", { maximumFractionDigits: 2 })}</p>
-                <p className="shrink-0 text-[10px] font-semibold opacity-90">{formatSigned(row.change)}</p>
-              </div>
-            </Link>
-          ))}
+        <div className="rounded-2xl border border-border/60 bg-panel/70 p-6 text-sm text-muted">
+          Live heatmap data is unavailable right now. Please try another index or refresh shortly.
         </div>
       )}
     </section>

@@ -53,8 +53,8 @@ export function MarketTicker() {
 
     load(false);
     const timer = setInterval(() => {
-      void load(false);
-    }, 120_000);
+      void load(true);
+    }, 30_000);
     return () => {
       alive = false;
       clearInterval(timer);
@@ -66,9 +66,9 @@ export function MarketTicker() {
   }, [rows]);
 
   const durationSeconds = useMemo(() => {
-    const minDuration = 212; // 360 / 1.7
-    const maxDuration = 1882; // 3200 / 1.7
-    const secondsPerItem = 5.88; // 10 / 1.7
+    const minDuration = 212;
+    const maxDuration = 3600;
+    const secondsPerItem = 2.2;
     return Math.max(minDuration, Math.min(maxDuration, Math.round(tape.length * secondsPerItem)));
   }, [tape.length]);
 
@@ -117,6 +117,7 @@ export function MarketTicker() {
             <Link
               key={`${item.symbol}-${idx}`}
               href={`/stocks/${symbolPath}`}
+              prefetch={false}
               className="ticker-item inline-flex items-center gap-1.5 px-3 text-xs font-semibold hover:opacity-90 active:scale-[0.98] sm:gap-2 sm:px-5 sm:text-sm"
             >
               {content}

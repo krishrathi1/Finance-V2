@@ -26,9 +26,18 @@ export class NSEProvider {
         headers: NSE_HEADERS,
         next: { revalidate: 3600 } // Cache cookies for an hour
       });
-      
-      const setCookie = response.headers.get('set-cookie');
-      this.cookies = setCookie || '';
+
+      // undici's Headers.get('set-cookie') returns null for multi-cookie responses;
+      // use getSetCookie() and keep only the name=value part of each cookie.
+      const headersAny = response.headers as Headers & { getSetCookie?: () => string[] };
+      let parts: string[] = [];
+      if (typeof headersAny.getSetCookie === 'function') {
+        parts = headersAny.getSetCookie();
+      } else {
+        const raw = response.headers.get('set-cookie');
+        if (raw) parts = [raw];
+      }
+      this.cookies = parts.map((c) => c.split(';')[0].trim()).filter((c) => c.includes('=')).join('; ');
       return this.cookies;
     } catch (error) {
       console.error('NSE Cookie fetch failed:', error);

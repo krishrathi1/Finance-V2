@@ -13,7 +13,7 @@ type NewsArticle = {
   imageUrl: string | null;
 };
 
-const MARKET_PLACEHOLDER = 'https://images.unsplash.com/photo-1611974717482-98aa003745fc?auto=format&fit=crop&q=80&w=800';
+const MARKET_PLACEHOLDER = "/api/v1/stocks/proxy-image?placeholder=market";
 
 function countImages(rows: NewsArticle[]) {
   return rows.reduce((total, row) => total + (hasUsableImage(row.imageUrl) ? 1 : 0), 0);

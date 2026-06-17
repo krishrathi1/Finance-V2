@@ -260,7 +260,8 @@ export async function fetchTickerTape(symbols: string[] = [], options: { force?:
 
   const stale = getStaleCache<Array<{ symbol: string; cmp: number; change: number; changePercent: number }>>(key);
   try {
-    const res = await fetchWithTimeout(getApiUrl(`/ticker${query}`), { cache: "no-store" }, force ? 7000 : 4500);
+    const timeoutMs = symbols.length ? (force ? 7000 : 4500) : (force ? 35_000 : 25_000);
+    const res = await fetchWithTimeout(getApiUrl(`/ticker${query}`), { cache: "no-store" }, timeoutMs);
     if (!res.ok) {
       throw new Error(`Ticker request failed: ${res.status}`);
     }
@@ -274,24 +275,24 @@ export async function fetchTickerTape(symbols: string[] = [], options: { force?:
   }
 }
 
+type IndexHeatmapPayload = {
+  indexName: string;
+  updatedAt: string;
+  rows: Array<{ symbol: string; cmp: number; change: number; changePercent: number }>;
+  source: string;
+  constituentCount: number;
+};
+
 export async function fetchIndexHeatmap(indexName: string, options: { force?: boolean } = {}) {
   const force = Boolean(options.force);
   const query = `?index=${encodeURIComponent(indexName)}${force ? "&refresh=true" : ""}`;
   const key = `heatmap:${indexName.toUpperCase()}`;
   const fresh = force
     ? null
-    : getFreshCache<{
-      indexName: string;
-      updatedAt: string;
-      rows: Array<{ symbol: string; cmp: number; change: number; changePercent: number }>;
-    }>(key, 15_000);
+    : getFreshCache<IndexHeatmapPayload>(key, 15_000);
   if (fresh) return fresh;
 
-  const stale = getStaleCache<{
-    indexName: string;
-    updatedAt: string;
-    rows: Array<{ symbol: string; cmp: number; change: number; changePercent: number }>;
-  }>(key);
+  const stale = getStaleCache<IndexHeatmapPayload>(key);
 
   try {
     const res = await fetchWithTimeout(getApiUrl(`/index-heatmap${query}`), { cache: "no-store" }, force ? 9000 : 6000);
@@ -299,10 +300,12 @@ export async function fetchIndexHeatmap(indexName: string, options: { force?: bo
       throw new Error(`Index heatmap request failed: ${res.status}`);
     }
     const payload = await res.json();
-    const data = {
+    const data: IndexHeatmapPayload = {
       indexName: (payload.indexName || indexName) as string,
       updatedAt: (payload.updatedAt || "") as string,
-      rows: (payload.rows || []) as Array<{ symbol: string; cmp: number; change: number; changePercent: number }>
+      rows: (payload.rows || []) as Array<{ symbol: string; cmp: number; change: number; changePercent: number }>,
+      source: typeof payload.source === "string" ? payload.source : "",
+      constituentCount: typeof payload.constituentCount === "number" ? payload.constituentCount : 0,
     };
     setCache(key, data);
     return data;
@@ -310,6 +313,26 @@ export async function fetchIndexHeatmap(indexName: string, options: { force?: bo
     if (stale) return stale;
     throw err;
   }
+}
+
+export type MarketIndexOption = {
+  value: string;
+  label: string;
+  exchange: "NSE" | "BSE";
+};
+
+export async function fetchMarketIndexOptions(): Promise<MarketIndexOption[]> {
+  const fresh = getFreshCache<MarketIndexOption[]>("market-index-options", 10 * 60_000);
+  if (fresh) return fresh;
+
+  const res = await fetchWithTimeout(getApiUrl("/indices"), { cache: "no-store" }, 7000);
+  if (!res.ok) {
+    throw new Error(`Index options request failed: ${res.status}`);
+  }
+  const payload = await res.json();
+  const rows = (payload.data || []) as MarketIndexOption[];
+  setCache("market-index-options", rows);
+  return rows;
 }
 
 export async function fetchSwotAnalysis(symbol: string, options: { refresh?: boolean } = {}): Promise<{

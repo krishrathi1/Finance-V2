@@ -1,134 +1,31 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getJson, toFloat, round2 } from "@/lib/backend/http";
-import type { ScreenerResult } from "@/lib/types";
+import { toFloat } from "@/lib/backend/http";
+import { screenUniverse, type UniverseFilters } from "@/lib/backend/providers/universe";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-const FMP_HOST = "https://financialmodelingprep.com";
-
-/** Filters accepted by the FMP stock screener (already parsed/numeric). */
-type FmpScreenerFilters = {
-  exchange?: string;
-  sector?: string;
-  industry?: string;
-  market_cap_min?: number;
-  market_cap_max?: number;
-  pe_min?: number;
-  pe_max?: number;
-  price_min?: number;
-  price_max?: number;
-  dividend_min?: number;
-  volume_min?: number;
-  limit?: number;
-};
-
-function num(value: unknown): number {
-  return toFloat(value) ?? 0;
-}
-
-function nullableNum(value: unknown): number | null {
-  return toFloat(value);
-}
-
-/** Strip the .NS/.BO exchange suffix from a displayed symbol. */
-function stripSuffix(symbol: string): string {
-  return String(symbol || "")
-    .trim()
-    .toUpperCase()
-    .replace(/\.(NS|BO)$/i, "");
-}
-
-/** Map a raw FMP screener row to a ScreenerResult. */
-function mapRow(row: any): ScreenerResult {
-  const price = num(row?.price);
-  const lastDividend = nullableNum(row?.lastAnnualDividend);
-  // Derive dividend yield (%) from the last annual dividend when present.
-  const dividendYield =
-    lastDividend !== null && price > 0 ? round2((lastDividend / price) * 100) : null;
-
-  return {
-    symbol: stripSuffix(String(row?.symbol || "")),
-    companyName: String(row?.companyName || row?.symbol || ""),
-    exchange: String(row?.exchangeShortName || row?.exchange || "NSE") || "NSE",
-    marketCap: num(row?.marketCap),
-    price,
-    change: 0,
-    changePercent: 0,
-    volume: num(row?.volume),
-    sector: String(row?.sector || ""),
-    industry: String(row?.industry || ""),
-    pe: nullableNum(row?.pe),
-    pb: nullableNum(row?.pb ?? row?.priceToBook),
-    roe: nullableNum(row?.roe ?? row?.returnOnEquity),
-    dividendYield,
-    beta: nullableNum(row?.beta),
-  };
-}
-
-/**
- * Run the FMP stock screener (exchange pinned to NSE) and map to ScreenerResult[].
- * Returns [] on any failure. Shared by the GET route and the AI screener route.
- */
-async function runFmpScreener(
-  filters: FmpScreenerFilters,
-): Promise<ScreenerResult[]> {
-  const key = process.env.FMP_API_KEY || "";
-  if (!key) return [];
-
-  const limit = filters.limit && filters.limit > 0 ? Math.floor(filters.limit) : 50;
-
-  const params = new URLSearchParams();
-  params.set("exchange", filters.exchange || "NSE");
-  if (filters.sector) params.set("sector", filters.sector);
-  if (filters.industry) params.set("industry", filters.industry);
-  if (filters.market_cap_min) params.set("marketCapMoreThan", String(filters.market_cap_min));
-  if (filters.market_cap_max) params.set("marketCapLowerThan", String(filters.market_cap_max));
-  if (filters.price_min) params.set("priceMoreThan", String(filters.price_min));
-  if (filters.price_max) params.set("priceLowerThan", String(filters.price_max));
-  if (filters.dividend_min) params.set("dividendMoreThan", String(filters.dividend_min));
-  if (filters.volume_min) params.set("volumeMoreThan", String(filters.volume_min));
-  if (filters.pe_min) params.set("peMoreThan", String(filters.pe_min));
-  if (filters.pe_max) params.set("peLowerThan", String(filters.pe_max));
-  // Pull a deeper pool so post-filtering/limit still yields results.
-  params.set("limit", String(Math.max(limit, 100)));
-  params.set("apikey", key);
-
-  const url = `${FMP_HOST}/api/v3/stock-screener?${params.toString()}`;
-  const payload = await getJson<any[]>(url, { timeoutMs: 12_000 });
-  if (!Array.isArray(payload)) return [];
-
-  const mapped = payload
-    .filter((row) => row && typeof row === "object" && row.symbol)
-    .map(mapRow)
-    .filter((row) => Boolean(row.symbol));
-
-  return mapped.slice(0, limit);
-}
-
 export async function GET(request: NextRequest) {
   try {
     const sp = request.nextUrl.searchParams;
-    const filters: FmpScreenerFilters = {
-      exchange: sp.get("exchange") || "NSE",
+    const n = (k: string) => toFloat(sp.get(k)) ?? undefined;
+    const filters: UniverseFilters = {
       sector: sp.get("sector") || undefined,
       industry: sp.get("industry") || undefined,
-      market_cap_min: nullableNum(sp.get("market_cap_min")) ?? undefined,
-      market_cap_max: nullableNum(sp.get("market_cap_max")) ?? undefined,
-      pe_min: nullableNum(sp.get("pe_min")) ?? undefined,
-      pe_max: nullableNum(sp.get("pe_max")) ?? undefined,
-      price_min: nullableNum(sp.get("price_min")) ?? undefined,
-      price_max: nullableNum(sp.get("price_max")) ?? undefined,
-      dividend_min: nullableNum(sp.get("dividend_min")) ?? undefined,
-      volume_min: nullableNum(sp.get("volume_min")) ?? undefined,
-      limit: nullableNum(sp.get("limit")) ?? undefined,
+      market_cap_min: n("market_cap_min"),
+      market_cap_max: n("market_cap_max"),
+      pe_min: n("pe_min"),
+      pe_max: n("pe_max"),
+      price_min: n("price_min"),
+      price_max: n("price_max"),
+      dividend_min: n("dividend_min"),
+      volume_min: n("volume_min"),
+      limit: n("limit"),
     };
-
-    const results = await runFmpScreener(filters);
+    const results = await screenUniverse(filters);
     return NextResponse.json({ results, count: results.length, cached: false });
   } catch (error) {
     console.error("Screener error:", error);
-    // Golden rule: never 500 — return an empty but valid payload.
     return NextResponse.json({ results: [], count: 0 });
   }
 }

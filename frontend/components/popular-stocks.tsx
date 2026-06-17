@@ -5,27 +5,14 @@ import { useEffect, useState } from "react";
 
 import { fetchTickerTape } from "@/lib/api";
 
-const POPULAR_SYMBOLS = [
-  "RELIANCE",
-  "TCS",
-  "HDFCBANK",
-  "INFOSYS",
-  "ICICIBANK",
-  "SBIN",
-  "BAJFINANCE",
-  "ASIANPAINT",
-  "MARUTI",
-  "LT",
-];
-
 type TickerRow = { symbol: string; cmp: number; change: number; changePercent: number };
 
 function ShimmerChips() {
   return (
     <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
-      {POPULAR_SYMBOLS.map((sym) => (
+      {Array.from({ length: 12 }).map((_, index) => (
         <div
-          key={sym}
+          key={index}
           className="shimmer h-9 w-28 shrink-0 rounded-full border border-border/70"
         />
       ))}
@@ -42,17 +29,10 @@ export function PopularStocks() {
 
     const load = async (force = false) => {
       try {
-        const data = await fetchTickerTape(POPULAR_SYMBOLS, { force });
-        if (alive) {
-          // Keep only the popular symbols in the order defined
-          const map = new Map(data.map((r) => [r.symbol, r]));
-          const ordered = POPULAR_SYMBOLS
-            .map((sym) => map.get(sym))
-            .filter((r): r is TickerRow => r !== undefined);
-          setRows(ordered);
-        }
+        const data = await fetchTickerTape([], { force });
+        if (alive) setRows(data.slice(0, 16));
       } catch {
-        /* silently ignore — page still renders */
+        if (alive) setRows([]);
       } finally {
         if (alive) setLoading(false);
       }
@@ -60,7 +40,6 @@ export function PopularStocks() {
 
     void load(false);
 
-    // Refresh every 20 seconds
     const timer = setInterval(() => void load(true), 20_000);
     return () => {
       alive = false;
@@ -74,10 +53,10 @@ export function PopularStocks() {
         <div className="h-6 w-1 rounded-full bg-gradient-to-b from-accent to-amber-400" />
         <div>
           <h2 className="font-[var(--font-space)] text-base font-bold sm:text-lg">
-            Popular Stocks
+            Live Stocks
           </h2>
           <p className="text-[11px] text-muted sm:text-xs">
-            Quick access to top Indian equities — live prices
+            Quick access to Indian equities with live prices
           </p>
         </div>
       </div>
@@ -85,17 +64,8 @@ export function PopularStocks() {
       {loading ? (
         <ShimmerChips />
       ) : rows.length === 0 ? (
-        /* Fallback: show plain symbol links when prices are unavailable */
-        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
-          {POPULAR_SYMBOLS.map((sym) => (
-              <Link
-                key={sym}
-                href={`/stocks/${sym}`}
-                className="shrink-0 rounded-full border border-border/70 bg-panel/60 px-4 py-2 text-xs font-semibold text-muted backdrop-blur transition hover:border-accent/50 hover:text-text active:scale-[0.98]"
-              >
-                {sym}
-              </Link>
-          ))}
+        <div className="rounded-2xl border border-border/60 bg-panel/70 p-4 text-sm text-muted">
+          Live stock prices are unavailable right now.
         </div>
       ) : (
         <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
