@@ -15,6 +15,11 @@ type TickerRow = {
   low?: number;
 };
 
+// The ticker source (fetchTickerTape([])) returns the entire listed Indian
+// universe (~7,000 symbols). The marquee must only render a small bounded
+// slice — rendering all of them produced ~190k DOM nodes and froze the page.
+const TICKER_LIMIT = 30;
+
 function formatSigned(value: number) {
   return `${value >= 0 ? "+" : ""}${value.toFixed(2)}`;
 }
@@ -63,13 +68,15 @@ export function MarketTicker() {
   }, []);
 
   const tape = useMemo(() => {
-    return rows.length ? [...rows, ...rows] : [];
+    // Only render a bounded slice; duplicate it for a seamless scrolling loop.
+    const visible = rows.slice(0, TICKER_LIMIT);
+    return visible.length ? [...visible, ...visible] : [];
   }, [rows]);
 
   const durationSeconds = useMemo(() => {
-    const minDuration = 280;
-    const maxDuration = 4800;
-    const secondsPerItem = 3;
+    const minDuration = 40;
+    const maxDuration = 240;
+    const secondsPerItem = 1.8;
     return Math.max(minDuration, Math.min(maxDuration, Math.round(tape.length * secondsPerItem)));
   }, [tape.length]);
 
