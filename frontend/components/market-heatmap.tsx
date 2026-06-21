@@ -78,7 +78,7 @@ function HeatmapTile({
       onFocus={() => setActiveSymbol(activeKey)}
       onBlur={() => setActiveSymbol(null)}
       className={cn(
-        "group flex min-h-[88px] flex-col justify-between overflow-hidden rounded-xl border p-3 transition duration-200 active:scale-[0.98] sm:min-h-[96px] sm:rounded-2xl",
+        "group flex flex-col gap-2 overflow-hidden rounded-xl border p-3 transition duration-200 active:scale-[0.98] sm:rounded-2xl",
         tileStyle(row.changePercent),
         activeSymbol && activeSymbol !== activeKey && "opacity-45",
         activeSymbol === activeKey && "-translate-y-1 shadow-xl ring-2 ring-white/20"
