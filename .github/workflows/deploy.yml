@@ -1,12 +1,17 @@
 name: Deploy to VPS
 
 on:
-  push:
+  workflow_run:
+    workflows: ["CI"]
+    types:
+      - completed
     branches:
       - main
 
 jobs:
   deploy:
+    # Only deploy when CI passed — broken commits never reach production.
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
 
     steps:

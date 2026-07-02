@@ -1,5 +1,14 @@
+"""Validate smart-score model quality across multiple symbols.
+
+Exits non-zero when quality thresholds fail, so this can gate CI/deploys:
+  - at least MIN_SYMBOLS_OK symbols must return a scored dashboard
+  - average ML confidence must be >= MIN_AVG_CONFIDENCE
+  - walk-forward hit rate (when history is available) must be >= MIN_HIT_RATE
+"""
+
 import argparse
 import asyncio
+import sys
 from typing import Any
 
 import httpx
@@ -23,6 +32,11 @@ DEFAULT_SYMBOLS = [
     "ADANIPORTS",
 ]
 
+# Quality gate thresholds — tune deliberately, not to make a red build green.
+MIN_SYMBOLS_OK = 10
+MIN_AVG_CONFIDENCE = 0.35
+MIN_HIT_RATE = 0.50
+
 
 async def fetch_dashboard(client: httpx.AsyncClient, base_url: str, symbol: str) -> dict[str, Any] | None:
     url = f"{base_url.rstrip('/')}/api/v1/stocks/{symbol}/dashboard?timeframe=5Y&refresh=true"
@@ -30,8 +44,12 @@ async def fetch_dashboard(client: httpx.AsyncClient, base_url: str, symbol: str)
         response = await client.get(url, timeout=90.0)
         response.raise_for_status()
         payload = response.json()
+        if payload.get("fallback"):
+            print(f"[warn] {symbol}: synthetic fallback payload (all providers failed)", file=sys.stderr)
+            return None
         return payload.get("data", {})
-    except Exception:
+    except Exception as exc:
+        print(f"[warn] {symbol}: fetch failed: {type(exc).__name__}: {exc}", file=sys.stderr)
         return None
 
 
@@ -46,7 +64,7 @@ def metric_line(row: dict[str, Any]) -> str:
     )
 
 
-async def main(base_url: str, symbols: list[str]) -> None:
+async def main(base_url: str, symbols: list[str]) -> int:
     rows: list[dict[str, Any]] = []
     async with httpx.AsyncClient() as client:
         tasks = [fetch_dashboard(client, base_url, symbol) for symbol in symbols]
@@ -71,8 +89,8 @@ async def main(base_url: str, symbols: list[str]) -> None:
         )
 
     if not rows:
-        print("No rows fetched. Ensure backend is running and symbols are valid.")
-        return
+        print("FAIL: no rows fetched. Ensure the app is running and symbols are valid.")
+        return 1
 
     rows.sort(key=lambda item: item["score"], reverse=True)
     print("\nTop Smart Scores")
@@ -98,6 +116,24 @@ async def main(base_url: str, symbols: list[str]) -> None:
     else:
         print(f"walk_forward_hit_rate={weighted_hit_rate:.3f} (weighted by sample count)")
 
+    # Quality gate
+    failures: list[str] = []
+    if len(rows) < MIN_SYMBOLS_OK:
+        failures.append(f"only {len(rows)}/{len(symbols)} symbols returned scored data (need >= {MIN_SYMBOLS_OK})")
+    if avg_conf < MIN_AVG_CONFIDENCE:
+        failures.append(f"avg_ml_confidence {avg_conf:.2f} < {MIN_AVG_CONFIDENCE}")
+    if weighted_hit_rate is not None and weighted_hit_rate < MIN_HIT_RATE:
+        failures.append(f"walk_forward_hit_rate {weighted_hit_rate:.3f} < {MIN_HIT_RATE}")
+
+    if failures:
+        print("\nRESULT: FAIL")
+        for failure in failures:
+            print(f"  - {failure}")
+        return 1
+
+    print("\nRESULT: PASS")
+    return 0
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Validate smart-score model quality across multiple symbols.")
@@ -113,4 +149,4 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
     symbols = [item.strip().upper() for item in args.symbols.split(",") if item.strip()]
-    asyncio.run(main(args.base_url, symbols))
+    sys.exit(asyncio.run(main(args.base_url, symbols)))

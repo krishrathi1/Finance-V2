@@ -40,3 +40,9 @@ scratch/test_*.py
 
 # Local scratch workspace — never track
 scratch/
+
+# Personal tooling / local artifacts
+.obsidian/
+project/
+frontend/scratch/
+Untitled.md
