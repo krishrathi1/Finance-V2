@@ -103,8 +103,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Validate smart-score model quality across multiple symbols.")
     parser.add_argument(
         "--base-url",
-        default="http://127.0.0.1:8000",
-        help="Backend base URL. Example: http://127.0.0.1:8000",
+        default="http://127.0.0.1:3000",
+        help="App base URL (Next.js). Example: http://127.0.0.1:3000",
     )
     parser.add_argument(
         "--symbols",

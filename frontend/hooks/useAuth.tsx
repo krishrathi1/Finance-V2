@@ -34,9 +34,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Initialize auth state
+  // Restore the session from the httpOnly cookie on page load.
   useEffect(() => {
-    setLoading(false);
+    let cancelled = false;
+
+    const restoreSession = async () => {
+      try {
+        const res = await fetch("/api/v1/auth/me", { credentials: "include" });
+        if (!cancelled && res.ok) {
+          setUser(await res.json());
+        }
+      } catch {
+        // Not signed in or backend unreachable — stay logged out.
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    restoreSession();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const signIn = async (email: string, password: string) => {

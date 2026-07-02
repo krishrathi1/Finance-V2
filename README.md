@@ -4,101 +4,91 @@ A professional-grade quantitative trading platform and AI-powered Indian stock r
 
 ## 🚀 Features
 
-- **Modern Trading Dashboard**: Stunning, professional-grade UI featuring glassmorphism, neon accents, and responsive design.
+- **Modern Trading Dashboard**: Professional-grade UI featuring glassmorphism, neon accents, and responsive design.
 - **Advanced Charting**: Integrated with the official TradingView Advanced Chart Widget for live, interactive market analysis.
-- **Quantitative Trading Model**: Quant-grade system forecasting daily price movements with high accuracy using historical market data and advanced mathematical modeling.
-- **AI-Powered Insights**: AI-generated research reports, interactive chat assistants (powered by Gemini & Groq), and intelligent Smart/Risk scoring with transparent explanations.
-- **Comprehensive Financial Data**: Supports real-time quote feeds, detailed financial statements (income, balance sheet, cash flow), corporate actions, insider trades, and more.
-- **Global & Indian Markets**: Primary focus on NSE/BSE stock analysis with broad global stock search capabilities.
+- **Quantitative Scoring**: Smart Score and Risk Score computed locally from historical market data with AI-generated explanations.
+- **AI-Powered Insights**: AI research reports, interactive chat assistant, SWOT analysis, earnings TL;DRs, and screeners (powered by Gemini).
+- **Comprehensive Financial Data**: Real-time quotes, financial statements, corporate actions, shareholding patterns, IPO tracking, and news.
+- **Accounts & Premium**: Email/password auth with JWT cookies, email verification, password reset via OTP, and a premium-request flow.
+- **Indian Markets Focus**: NSE/BSE stock analysis with broad global stock search.
 
 ## 🛠 Tech Stack
 
-### Frontend Architecture
-- **Framework**: Next.js 14 (App Router)
-- **Styling**: Tailwind CSS, PostCSS, Framer Motion, Radix UI
-- **Data Visualization**: Recharts, TradingView Widget
-- **Deployment**: Supports Cloudflare Pages & Vercel (Supabase CORS optimized)
+Single application: **Next.js 14 (App Router)** serves both the UI and the entire API (`app/api/v1/**` route handlers).
 
-### Backend Services
-- **Framework**: FastAPI (Python)
-- **Database Architecture**: PostgreSQL (asyncpg), Redis (caching), SQLite (fallback/local)
-- **ORM**: SQLAlchemy
-- **Data Providers**: yFinance, FMP, NewsAPI, Trendlyne, NSE India, Google News RSS
-
-### AI Engine & Pipelines
-- **Models**: Gemini API, Groq (fallback and alternative verification)
-- **Pipelines**: Scheduled Python scripts for market data ingestion (`fetch_market_data.py`), web scraping (`scrape_nse_bse.py`), and Google News mapping.
+- **UI**: Tailwind CSS, Framer Motion, Radix UI, Recharts, TradingView Widget
+- **API/backend logic**: Next.js route handlers + `frontend/lib/backend/` (dashboard assembly, scoring engine, provider fetchers, AI features)
+- **Database**: MySQL 8 (`mysql2` pool) — users, sessions, premium requests, watchlists, portfolios
+- **AI**: Gemini API (chat, explanations, reports) with rule-based fallbacks
+- **Data providers**: NSE India, Trendlyne, Financial Modeling Prep, Yahoo Finance, Google News RSS, NewsAPI
+- **Email**: SMTP via nodemailer (verification + password-reset OTP)
 
 ## 📂 Monorepo Structure
 
 ```text
-financial-forensics-ai/
-├── frontend/             # Next.js 14 frontend application
-├── backend/              # FastAPI server handling API routes and business logic
-├── ai-engine/            # LLM orchestration (Gemini/Groq) and prompt generation
-├── data-pipeline/        # Data ingestion scripts and SQL schemas
-├── project/              # Documentation and planning models
-└── deploy/               # Deployment configurations and scripts
+Finance-V2/
+├── frontend/             # The entire application (Next.js UI + API + backend logic)
+│   ├── app/api/v1/       # All API endpoints (auth, stocks, portfolio)
+│   ├── lib/backend/      # Dashboard assembly, scoring, providers, AI
+│   └── scripts/init-db.js# Idempotent MySQL schema setup
+├── data-pipeline/        # Standalone data ingestion/validation scripts + SQL schemas
+├── database/             # DB schema documentation
+├── deploy/               # VPS deployment scripts and nginx config
+└── docs/                 # Design specs
 ```
+
+> The legacy Python FastAPI backend (`backend/`) and `ai-engine/` were removed
+> after the migration to Next.js-only architecture (see
+> `docs/superpowers/specs/2026-07-02-nextjs-migration-completion-design.md`).
+> Their history is preserved in git.
 
 ## 🏁 Getting Started
 
 ### Prerequisites
-- [Docker](https://www.docker.com/) & Docker Compose
 - [Node.js](https://nodejs.org/) 18+
-- [Python](https://www.python.org/) 3.10+
-- API Keys: FMP, NewsAPI, Gemini, Groq, Supabase (optional if fully self-hosting)
+- [MySQL](https://dev.mysql.com/) 8 (or Docker)
+- API keys: FMP, NewsAPI, Gemini (optional — features degrade gracefully)
 
-### Running with Docker (Recommended)
+### Local development
 
-1. Clone the repository and navigate to the root directory.
-2. Initialize environment variables from templates:
-   ```bash
-   cp backend/.env.example backend/.env
-   cp frontend/.env.example frontend/.env.local
-   ```
-3. Inject your API keys into the respective `.env` files.
-4. Spin up the containers:
-   ```bash
-   docker-compose up --build
-   ```
-5. Access the application:
-   - **Frontend**: `http://localhost:3000`
-   - **Backend API Docs**: `http://localhost:8000/docs`
-
-### Running Locally (Without Docker)
-
-**Backend Setup**
-```bash
-cd backend
-python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-uvicorn main:app --reload --port 8000
-```
-
-**Frontend Setup**
 ```bash
 cd frontend
+cp .env.example .env.local     # fill in JWT_SECRET_KEY, MYSQL_*, API keys
 npm install
+npm run init-db                # creates MySQL tables (idempotent)
 npm run dev
 ```
 
+App runs at `http://localhost:3000` (UI and API on the same port).
+
+### Running with Docker
+
+```bash
+docker compose up --build      # MySQL + Next.js dev server
+```
+
+### Production (VPS)
+
+```bash
+cp .env.prod.example .env                          # set MYSQL_ROOT_PASSWORD
+cp frontend/.env.prod.example frontend/.env.prod   # set JWT/SMTP/API keys
+docker compose -f docker-compose.prod.yml up -d --build
+```
+
+nginx terminates TLS and proxies everything to the Next.js app on port 3000
+(`deploy/nginx/mystockvision.conf`). Health check: `GET /api/health`.
+
 ## 🏗 Architecture & Data Flow
 
-This application is built for resilience. The API heavily relies on a multi-tiered fallback mechanism to ensure data is always available:
-- **Live Quotes**: `NSE -> Yahoo/yfinance -> FMP`
-- **Charting**: `FMP -> yfinance -> Yahoo`
-- **Scores**: Calculated locally via `scoring.py` with AI-generated explainers on the fly.
-- **Caching**: Redis caches costly dashboard payloads and AI responses to drastically improve rendering times and reduce latency.
+The API relies on multi-tiered provider fallbacks so data stays available:
+- **Live quotes**: `NSE → Yahoo/yfinance → FMP`
+- **Charting**: `FMP → Yahoo`
+- **Scores**: computed locally in `frontend/lib/backend/scoring.ts`, with AI explanations generated on the fly.
+- **Caching**: in-memory per-instance caches with TTL + stale-while-revalidate for dashboard payloads.
 
-## 🤝 Contributing
-
-Pull requests and code reviews are welcome. Please ensure your code passes all type checks (Pyre2) and ESLint warnings before merging.
-
-To validate your quantitative trading changes, run the scoring quality validation script:
+To validate scoring changes:
 ```bash
-python data-pipeline/scripts/validate_scoring_engine.py
+python data-pipeline/scripts/validate_scoring_engine.py --base-url http://127.0.0.1:3000
 ```
 
 ---

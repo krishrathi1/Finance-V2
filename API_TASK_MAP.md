@@ -1,84 +1,77 @@
 # API Task Map
 
-Updated: 2026-03-13
+Updated: 2026-07-02
 
-This document maps the current app sections to the actual backend endpoints and third-party providers used in this repo.
+All endpoints are Next.js route handlers under `frontend/app/api/v1/`. There is
+no separate backend server — the UI and API share one Next.js app.
 
-## 1) Internal API endpoints used by the frontend
+## 1) API endpoints
 
-Base path: `/api/v1/stocks/*`
+Base path: `/api/v1`
 
-| Endpoint | Frontend use | What it returns |
-|---|---|---|
-| `GET /search?q=` | `searchStocks` | Indian stock symbol/name search results |
-| `GET /ticker` | `fetchTickerTape` | Navbar ticker tape rows |
-| `GET /index-heatmap?index=` | `fetchIndexHeatmap` | Index constituent heatmap rows |
-| `GET /market-news` | `fetchMarketNews` | Market-wide news cards |
-| `GET /{symbol}/dashboard` | `fetchDashboard` | Full stock dashboard payload |
-| `POST /{symbol}/chat` | `sendAiQuestion` | Chat answer plus `source: gemini|fallback` |
-| `GET /{symbol}/research-report` | backend-only endpoint currently available | Markdown research report |
-| `GET /{symbol}/returns-projection` | `fetchReturnsProjection` | ROI projection series and future value |
-| `GET /{symbol}/health-check` | debugging only | Minimal per-symbol health response |
+### Auth (`app/api/v1/auth/*`)
+
+| Endpoint | Purpose |
+|---|---|
+| `POST /auth/register` | Create account, set JWT cookies, send verification email |
+| `POST /auth/login` | Authenticate, set JWT cookies |
+| `POST /auth/refresh` | Rotate refresh token, new access token |
+| `POST /auth/logout` | Invalidate refresh token, clear cookies |
+| `GET /auth/me` | Current user profile (session restore) |
+| `GET/POST /auth/premium-request` | Premium upgrade request status / submission |
+| `GET /auth/verify-email?token=` | Email verification |
+| `POST /auth/forgot-password` | Send password-reset OTP |
+| `POST /auth/verify-otp` | Check OTP |
+| `POST /auth/reset-password` | Set new password |
+
+### Stocks (`app/api/v1/stocks/*`)
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /stocks/search?q=` | Symbol/name search |
+| `GET /stocks/ticker` | Navbar ticker tape |
+| `GET /stocks/indices`, `/index-heatmap` | Index data and constituent heatmap |
+| `GET /stocks/market-news`, `/market-mood` | Market-wide news and mood index |
+| `GET /stocks/screener`, `POST /stocks/screener/ai` | Screener (filter + AI) |
+| `GET /stocks/ipo`, `/ipo/{symbol}/ai-analysis` | IPO tracking + AI analysis |
+| `GET /stocks/{symbol}/dashboard` | Full stock dashboard payload |
+| `GET /stocks/{symbol}/quote`, `/chart`, `/news`, `/quarterly-results` | Individual data slices |
+| `POST /stocks/{symbol}/chat` | AI chat (answers include `source: gemini\|fallback`) |
+| `GET /stocks/{symbol}/research-report` | Markdown research report |
+| `GET /stocks/{symbol}/returns-projection` | ROI projection |
+| `GET /stocks/{symbol}/swot`, `/earnings-tldr`, `/competitor-verdict`, `/news-analysis`, `/watchlist-analysis` | AI feature endpoints |
+| `POST /stocks/compare-analysis`, `/portfolio-risk`, `/portfolio-roast` | Multi-symbol AI analysis |
+| `GET /stocks/proxy-image` | Image proxy for news thumbnails |
+| `GET /stocks/{symbol}/health-check` | Per-symbol debug health |
+| `POST /portfolio/parse-document` | Portfolio statement parsing (PDF/DOCX) |
+
+### Ops
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /api/health` | Container/LB health check |
 
 ## 2) Which provider does what
 
-| Provider | Current task in this app |
+| Provider | Task |
 |---|---|
-| `NSE India` | Live quote, ticker feed, index data, quarterly results, corporate actions, insider trades, NSE-side bulk/block fallback |
-| `Trendlyne` | Search universe, brokerage reports, financial statements, ratio trends, shareholding pattern, top shareholders, document library, bulk/block deals |
-| `Financial Modeling Prep` | Historical candles, quote fallback, quarterly results fallback |
-| `Yahoo Finance HTTP` | Quote fallback and chart fallback |
-| `yfinance` | Extended fallback bundle: profile, metrics, statements, candles, intraday, news, shareholding |
+| `NSE India` | Live quotes, ticker feed, index data, corporate actions |
+| `Trendlyne` | Search universe, financial statements, ratio trends, shareholding |
+| `Financial Modeling Prep` | Historical candles, quote fallback |
+| `Yahoo Finance` | Quote and chart fallback, profile/metrics |
 | `Google News RSS` | Primary market-wide news feed |
 | `NewsAPI` | Symbol-level news and market-news fallback |
-| `Gemini API` | Chat, Smart Score explanation, Risk Score explanation, profile enrichment, research report generation |
+| `Gemini API` | Chat, score explanations, research reports, AI features |
 
-## 3) Dashboard section to data-source mapping
+Provider priority: quotes `NSE → Yahoo → FMP`; history `FMP → Yahoo`;
+market news `Google News RSS → NewsAPI`; AI `Gemini → rule-based fallback text`.
 
-| UI section | Primary source | Fallback / enrichment |
-|---|---|---|
-| Price CMP / change / 52W | NSE quote | Yahoo, yfinance, FMP |
-| Price chart / range chart | FMP candles | yfinance, Yahoo |
-| Company overview / profile | yfinance profile | Gemini fills missing incorporation/headquarters/chairman/previous name only when needed |
-| Essentials metric cards | NSE + yfinance metrics | Trendlyne ratio trends used to fill bank-specific gaps like CASA/NIM |
-| Smart Score | Local backend scoring in `scoring.py` | Gemini explanation if runtime call succeeds |
-| Risk Score | Local backend scoring in `scoring.py` | Gemini explanation if runtime call succeeds |
-| ROI calculator | Local projection endpoint | Uses score/technical context and backend projection logic |
-| Brokerage summary | Trendlyne research-reports pages | None |
-| Corporate actions | NSE corporate APIs | Trendlyne bulk/block deal merge |
-| Quarterly results | Trendlyne financials page | NSE quarterly results, then FMP quarterly fallback |
-| Financial statements / CAGR snapshot | Trendlyne financials | yfinance annual statements where needed |
-| Shareholding pattern / top holders | Trendlyne share-holding page | yfinance fallback data |
-| Key ratio trends | Trendlyne annual ratio dump | Backend-derived fallback series where necessary |
-| Documents | Trendlyne documents and filings pages | None |
-| News | NewsAPI for symbol news | yfinance news items if needed |
-| Search panel | Trendlyne stock sitemap | No hardcoded runtime symbol list in current path |
+## 3) Code reference starting points
 
-## 4) Provider priority order in code
-
-- Live quote fields: `NSE -> Yahoo/yfinance -> FMP`
-- Price history: `FMP -> yfinance -> Yahoo`
-- Quarterly results: `Trendlyne -> NSE -> FMP`
-- Corporate actions: `NSE -> Trendlyne merge for deals`
-- Shareholding: `Trendlyne -> yfinance`
-- Market news: `Google News RSS -> NewsAPI`
-- AI explanation layer: `Gemini -> backend fallback text`
-
-## 5) Current configuration status from `backend/.env`
-
-| Key | Status |
-|---|---|
-| `FMP_API_KEY` | set |
-| `NEWS_API_KEY` | set |
-| `GEMINI_API_KEY` | set |
-## 5) Important runtime note
-
-`GEMINI_API_KEY` is configured, but Gemini can still fall back at runtime if the request is blocked, rate-limited, or rejected. The chatbot now exposes `AI Source: Gemini` or `AI Source: Fallback` in the UI so you can see the actual source used for each reply.
-
-## 6) Code reference starting points
-
-- Backend endpoint router: [stocks.py](/c:/Users/KRISH/Desktop/Finance/backend/app/api/v1/endpoints/stocks.py)
-- Dashboard assembly: [dashboard.py](/c:/Users/KRISH/Desktop/Finance/backend/app/services/dashboard.py)
-- Provider fetchers/parsers: [providers.py](/c:/Users/KRISH/Desktop/Finance/backend/app/services/providers.py)
-- AI adapter: [ai_adapter.py](/c:/Users/KRISH/Desktop/Finance/backend/app/services/ai_adapter.py)
-- Gemini client: [gemini_service.py](/c:/Users/KRISH/Desktop/Finance/ai-engine/src/ai_engine/gemini_service.py)
+- Route handlers: [frontend/app/api/v1/](frontend/app/api/v1/)
+- Dashboard assembly: [frontend/lib/backend/dashboard.ts](frontend/lib/backend/dashboard.ts)
+- Scoring engine: [frontend/lib/backend/scoring.ts](frontend/lib/backend/scoring.ts)
+- Provider fetchers: [frontend/lib/backend/providers/](frontend/lib/backend/providers/)
+- AI features: [frontend/lib/backend/ai/features.ts](frontend/lib/backend/ai/features.ts)
+- MySQL pool: [frontend/lib/db.ts](frontend/lib/db.ts)
+- Auth utilities: [frontend/lib/auth-utils.ts](frontend/lib/auth-utils.ts)

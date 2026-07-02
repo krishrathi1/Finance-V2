@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
-import { hashPassword, createAccessToken, createRefreshToken } from '@/lib/auth-utils';
+import {
+  hashPassword,
+  createAccessToken,
+  createRefreshToken,
+  createVerificationToken,
+} from '@/lib/auth-utils';
+import { sendWelcomeEmail } from '@/lib/email';
 
 export async function POST(request: NextRequest) {
   try {
@@ -33,6 +39,17 @@ export async function POST(request: NextRequest) {
     );
 
     const userId = (result as any).insertId;
+
+    // Send the verification email in the background — registration must not
+    // fail or stall because SMTP is slow/down.
+    try {
+      const verificationToken = await createVerificationToken(userId);
+      const origin = request.headers.get('origin') || request.nextUrl.origin;
+      const verificationLink = `${origin}/verify-email?token=${verificationToken}`;
+      void sendWelcomeEmail(email, name, verificationLink);
+    } catch (emailError) {
+      console.error('Failed to prepare verification email:', emailError);
+    }
 
     // Create tokens
     const accessToken = await createAccessToken(userId, false, 'free');
