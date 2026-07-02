@@ -1,6 +1,8 @@
+import secrets
 from functools import lru_cache
 from pathlib import Path
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -40,6 +42,18 @@ class Settings(BaseSettings):
     smtp_password: str = ""
 
     frontend_url: str = "http://localhost:3000"
+
+    @field_validator("jwt_secret_key")
+    @classmethod
+    def _require_jwt_secret_in_production(cls, value: str, info) -> str:
+        if value:
+            return value
+        if info.data.get("app_env") == "production":
+            raise ValueError(
+                "JWT_SECRET_KEY must be set in production — refusing to start with an empty secret."
+            )
+        # Dev convenience only: ephemeral secret, invalidated on every restart.
+        return secrets.token_urlsafe(32)
 
 
 @lru_cache

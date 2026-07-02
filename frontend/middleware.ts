@@ -30,10 +30,16 @@ export async function middleware(request: NextRequest) {
 
   // For admin routes, verify is_admin claim
   if (isAdminRoute && accessToken) {
+    const jwtSecretKey = process.env.JWT_SECRET_KEY;
+    if (!jwtSecretKey) {
+      // Fail closed: without a real secret we cannot safely verify the admin claim.
+      const url = request.nextUrl.clone();
+      url.pathname = "/signin";
+      url.searchParams.set("next", pathname);
+      return NextResponse.redirect(url);
+    }
     try {
-      const secret = new TextEncoder().encode(
-        process.env.JWT_SECRET_KEY || "CHANGE_ME_IN_PRODUCTION_32_CHARS_MIN"
-      );
+      const secret = new TextEncoder().encode(jwtSecretKey);
       const { payload } = await jwtVerify(accessToken, secret);
 
       // Check if user is admin

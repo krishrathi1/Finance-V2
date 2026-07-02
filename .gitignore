@@ -18,6 +18,11 @@ backend/.pytest_cache
 # Env
 *.env
 *.env.local
+*.env.prod
+letsgoenvironment.txt
+
+# DB dumps / local secrets
+database/*.sql
 
 # OS
 .DS_Store
