@@ -1,4 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+
+import { useVisibilityPolling } from '@/hooks/useVisibilityPolling';
 
 interface ChartDataResponse {
   identifier: string;
@@ -12,6 +14,8 @@ export function useChartData(symbol: string, days: string = '1W', exchange = 'NS
   const [data, setData] = useState<ChartDataResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const pollRef = useRef<() => void>(() => {});
 
   useEffect(() => {
     let cancelled = false;
@@ -41,19 +45,23 @@ export function useChartData(symbol: string, days: string = '1W', exchange = 'NS
       }
     };
 
+    pollRef.current = () => {
+      if (symbol) void fetchChartData(true);
+    };
+
     if (symbol) {
       fetchChartData();
     }
 
-    const timer = window.setInterval(() => {
-      if (symbol) fetchChartData(true);
-    }, 30_000);
-
     return () => {
       cancelled = true;
-      window.clearInterval(timer);
     };
   }, [symbol, days, exchange]);
+
+  useVisibilityPolling((initial) => {
+    // Initial load (and reloads on symbol/days/exchange change) are handled by the effect above.
+    if (!initial) pollRef.current();
+  }, 30_000);
 
   return { data, loading, error };
 }

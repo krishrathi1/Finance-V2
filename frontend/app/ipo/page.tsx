@@ -30,6 +30,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FeatureAuthWall } from "@/components/sections/feature-auth-wall";
 import { MarketStatusBadge } from "@/components/market-status-badge";
 import { FaqSection } from "@/components/seo/faq-section";
+import { useVisibilityPolling } from "@/hooks/useVisibilityPolling";
 import { fetchIpoAiAnalysis, fetchIpoData } from "@/lib/api";
 import type { IpoAiAnalysis, IpoItem } from "@/lib/api";
 
@@ -656,28 +657,10 @@ export default function IpoPage() {
 
   useEffect(() => { load(tab); }, [tab, load]);
 
-  useEffect(() => {
-    const refresh = () => {
-      void load(tab, true);
-    };
-
-    const intervalId = window.setInterval(refresh, 30_000);
-    const handleFocus = () => refresh();
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        refresh();
-      }
-    };
-
-    window.addEventListener("focus", handleFocus);
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-
-    return () => {
-      window.clearInterval(intervalId);
-      window.removeEventListener("focus", handleFocus);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-    };
-  }, [tab, load]);
+  useVisibilityPolling((initial) => {
+    // Initial load (and reloads on tab change) are handled by the effect above.
+    if (!initial) void load(tab, true);
+  }, 30_000);
 
   const stats = useMemo(() => ({
     total: data.length,

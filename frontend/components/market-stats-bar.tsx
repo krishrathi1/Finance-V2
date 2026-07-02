@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Activity, BarChart3, CandlestickChart, ShieldCheck, Waves } from "lucide-react";
 
+import { useVisibilityPolling } from "@/hooks/useVisibilityPolling";
 import { fetchTickerTape } from "@/lib/api";
 
 type TickerRow = { symbol: string; cmp: number; change: number; changePercent: number };
@@ -20,37 +21,23 @@ export function MarketStatsBar() {
   const [indexRows, setIndexRows] = useState<TickerRow[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    let alive = true;
+  const load = async (force = false) => {
+    try {
+      const [market, indexes] = await Promise.all([
+        fetchTickerTape([], { force }),
+        fetchTickerTape(["NIFTY 50", "BSE SENSEX"], { force }),
+      ]);
 
-    const load = async (force = false) => {
-      try {
-        const [market, indexes] = await Promise.all([
-          fetchTickerTape([], { force }),
-          fetchTickerTape(["NIFTY 50", "BSE SENSEX"], { force }),
-        ]);
+      setMarketRows(market);
+      setIndexRows(indexes);
+    } catch {
+      // Keep the last good snapshot on refresh failures.
+    } finally {
+      setLoading(false);
+    }
+  };
 
-        if (alive) {
-          setMarketRows(market);
-          setIndexRows(indexes);
-        }
-      } catch {
-        // Keep the last good snapshot on refresh failures.
-      } finally {
-        if (alive) setLoading(false);
-      }
-    };
-
-    void load(false);
-    const timer = setInterval(() => {
-      void load(true);
-    }, 20_000);
-
-    return () => {
-      alive = false;
-      clearInterval(timer);
-    };
-  }, []);
+  useVisibilityPolling((initial) => void load(!initial), 20_000);
 
   const stats = useMemo(() => {
     const advancing = marketRows.filter((row) => row.changePercent > 0).length;

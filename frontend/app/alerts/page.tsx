@@ -2,10 +2,11 @@
 
 import { Bell, BellOff, TrendingDown, TrendingUp, Trash2 } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 
 import { FeatureAuthWall } from "@/components/sections/feature-auth-wall";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useVisibilityPolling } from "@/hooks/useVisibilityPolling";
 import { fetchTickerTape } from "@/lib/api";
 import { checkAlerts, getAlerts, removeAlert } from "@/lib/alerts";
 import type { PriceAlert } from "@/lib/alerts";
@@ -53,34 +54,14 @@ export default function AlertsPage() {
     setLoading(false);
   }, []);
 
-  useEffect(() => {
-    loadAlerts();
-  }, [loadAlerts]);
-
-  useEffect(() => {
+  useVisibilityPolling((initial) => {
+    if (initial) {
+      void loadAlerts();
+      return;
+    }
     if (rows.length === 0) return;
-
-    const refresh = () => {
-      void loadAlerts({ force: true, keepLoading: false });
-    };
-
-    const intervalId = window.setInterval(refresh, 20_000);
-    const handleFocus = () => refresh();
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        refresh();
-      }
-    };
-
-    window.addEventListener("focus", handleFocus);
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-
-    return () => {
-      window.clearInterval(intervalId);
-      window.removeEventListener("focus", handleFocus);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-    };
-  }, [rows.length, loadAlerts]);
+    void loadAlerts({ force: true, keepLoading: false });
+  }, 20_000);
 
   const handleRemove = useCallback(
     (id: string) => {

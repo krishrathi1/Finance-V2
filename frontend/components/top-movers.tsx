@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { TrendingDown, TrendingUp } from "lucide-react";
 
+import { useVisibilityPolling } from "@/hooks/useVisibilityPolling";
 import { fetchTickerTape } from "@/lib/api";
 
 type TickerRow = { symbol: string; cmp: number; change: number; changePercent: number; exchange?: "NSE" | "BSE" };
@@ -16,26 +17,26 @@ export function TopMovers() {
   const [rows, setRows] = useState<TickerRow[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    let alive = true;
-    const load = async () => {
-      try {
-        const data = await fetchTickerTape([], { force: false });
-        if (alive) setRows(data);
-      } catch {
-        /* ignore */
-      } finally {
-        if (alive) setLoading(false);
-      }
-    };
-    load();
-    const timer = setInterval(() => {
-      void fetchTickerTape([], { force: true }).then((data) => {
-        if (alive) setRows(data);
-      }).catch(() => {});
-    }, 20_000);
-    return () => { alive = false; clearInterval(timer); };
-  }, []);
+  const load = async () => {
+    try {
+      const data = await fetchTickerTape([], { force: false });
+      setRows(data);
+    } catch {
+      /* ignore */
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useVisibilityPolling((initial) => {
+    if (initial) {
+      void load();
+      return;
+    }
+    void fetchTickerTape([], { force: true }).then((data) => {
+      setRows(data);
+    }).catch(() => {});
+  }, 20_000);
 
   const { gainers, losers } = useMemo(() => {
     const sorted = [...rows].filter((r) => r.cmp > 0);

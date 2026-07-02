@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { AnalystEstimatesSection } from "@/components/sections/analyst-estimates-section";
 import { BeginnerSnapshot } from "@/components/sections/beginner-snapshot";
@@ -22,6 +22,7 @@ import { SmartScore } from "@/components/sections/smart-score";
 import { StockAuthWall } from "@/components/sections/stock-auth-wall";
 import { SwotAnalysis } from "@/components/sections/swot-analysis";
 import { TechnicalsSection } from "@/components/sections/technicals-section";
+import { useVisibilityPolling } from "@/hooks/useVisibilityPolling";
 import { fetchDashboardEnvelope } from "@/lib/api";
 import type { DashboardData } from "@/lib/types";
 
@@ -60,6 +61,8 @@ function hasMeaningfulDashboard(data: DashboardData) {
 export function LiveStockDetails({ initialData, symbol, exchange }: { initialData: DashboardData; symbol: string; exchange: string }) {
   const [data, setData] = useState(initialData);
 
+  const refreshRef = useRef<() => void>(() => {});
+
   useEffect(() => {
     let alive = true;
 
@@ -74,13 +77,18 @@ export function LiveStockDetails({ initialData, symbol, exchange }: { initialDat
       }
     };
 
+    refreshRef.current = () => void refresh();
     refresh();
-    const timer = window.setInterval(refresh, LIVE_REFRESH_MS);
+
     return () => {
       alive = false;
-      window.clearInterval(timer);
     };
   }, [exchange, symbol]);
+
+  useVisibilityPolling((initial) => {
+    // Initial load (and reloads on symbol/exchange change) are handled by the effect above.
+    if (!initial) refreshRef.current();
+  }, LIVE_REFRESH_MS);
 
   const smartScore = useMemo(
     () =>

@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
+import { useVisibilityPolling } from "@/hooks/useVisibilityPolling";
 import { fetchMarketNews } from "@/lib/api";
 
 type NewsArticle = {
@@ -39,43 +40,33 @@ export function MarketNews() {
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<string>("");
 
-  useEffect(() => {
-    let alive = true;
-    const load = async (forceRefresh = false) => {
-      try {
-        const data = await fetchMarketNews({ force: forceRefresh });
-        if (alive) {
-          if (data.length || !forceRefresh) {
-            setArticles((current) => {
-              if (!forceRefresh) {
-                return data;
-              }
-              return countImages(data) >= countImages(current) ? data : current;
-            });
-            setLastUpdated(new Date().toLocaleTimeString());
+  const load = async (forceRefresh = false) => {
+    try {
+      const data = await fetchMarketNews({ force: forceRefresh });
+      if (data.length || !forceRefresh) {
+        setArticles((current) => {
+          if (!forceRefresh) {
+            return data;
           }
-        }
-      } catch {
-        if (alive && !forceRefresh) setArticles([]);
-      } finally {
-        if (alive) setLoading(false);
+          return countImages(data) >= countImages(current) ? data : current;
+        });
+        setLastUpdated(new Date().toLocaleTimeString());
       }
-    };
+    } catch {
+      if (!forceRefresh) setArticles([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    void (async () => {
+  useVisibilityPolling(async (initial) => {
+    if (initial) {
       await load(false);
-      if (alive) {
-        await load(true);
-      }
-    })();
-    const timer = setInterval(() => {
-      void load(true);
-    }, 2 * 60_000);
-    return () => {
-      alive = false;
-      clearInterval(timer);
-    };
-  }, []);
+      await load(true);
+      return;
+    }
+    await load(true);
+  }, 2 * 60_000);
 
   if (loading) {
     return (

@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
+import { useVisibilityPolling } from "@/hooks/useVisibilityPolling";
 import { fetchTickerTape } from "@/lib/api";
 
 type TickerRow = {
@@ -46,26 +47,16 @@ function TrendMarker({ up }: { up: boolean }) {
 export function MarketTicker() {
   const [rows, setRows] = useState<TickerRow[]>([]);
 
-  useEffect(() => {
-    let alive = true;
-    const load = async (forceRefresh = false) => {
-      try {
-        const data = await fetchTickerTape([], { force: forceRefresh });
-        if (alive && data.length) setRows(data);
-      } catch {
-        if (alive) setRows([]);
-      }
-    };
+  const load = async (forceRefresh = false) => {
+    try {
+      const data = await fetchTickerTape([], { force: forceRefresh });
+      if (data.length) setRows(data);
+    } catch {
+      setRows([]);
+    }
+  };
 
-    load(false);
-    const timer = setInterval(() => {
-      void load(true);
-    }, 30_000);
-    return () => {
-      alive = false;
-      clearInterval(timer);
-    };
-  }, []);
+  useVisibilityPolling((initial) => void load(!initial), 30_000);
 
   const tape = useMemo(() => {
     // Only render a bounded slice; duplicate it for a seamless scrolling loop.

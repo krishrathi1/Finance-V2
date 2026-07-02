@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
+import { useVisibilityPolling } from "@/hooks/useVisibilityPolling";
 import { fetchTickerTape } from "@/lib/api";
 
 type TickerRow = { symbol: string; cmp: number; change: number; changePercent: number; exchange?: "NSE" | "BSE" };
@@ -29,28 +30,18 @@ export function PopularStocks() {
   const [rows, setRows] = useState<TickerRow[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    let alive = true;
+  const load = async (force = false) => {
+    try {
+      const data = await fetchTickerTape([], { force });
+      setRows(data.slice(0, 16));
+    } catch {
+      setRows([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    const load = async (force = false) => {
-      try {
-        const data = await fetchTickerTape([], { force });
-        if (alive) setRows(data.slice(0, 16));
-      } catch {
-        if (alive) setRows([]);
-      } finally {
-        if (alive) setLoading(false);
-      }
-    };
-
-    void load(false);
-
-    const timer = setInterval(() => void load(true), 20_000);
-    return () => {
-      alive = false;
-      clearInterval(timer);
-    };
-  }, []);
+  useVisibilityPolling((initial) => void load(!initial), 20_000);
 
   return (
     <section>

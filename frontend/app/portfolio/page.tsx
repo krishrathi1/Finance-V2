@@ -29,6 +29,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FaqSection } from "@/components/seo/faq-section";
 import { FeatureAuthWall } from "@/components/sections/feature-auth-wall";
 import { PortfolioDoctor } from "@/components/sections/portfolio-doctor";
+import { useVisibilityPolling } from "@/hooks/useVisibilityPolling";
 import { fetchAIScreenerResults, fetchTickerTape, fetchPortfolioRiskAssessment, searchStocks, parsePortfolioDocument } from "@/lib/api";
 import { addAlert, getAlertsForSymbol, removeAlert } from "@/lib/alerts";
 import { ImportModal } from "@/components/modals/import-modal";
@@ -793,34 +794,14 @@ export default function PortfolioPage() {
     setLoading(false);
   }, []);
 
-  useEffect(() => {
-    loadPortfolio();
-  }, [loadPortfolio]);
-
-  useEffect(() => {
+  useVisibilityPolling((initial) => {
+    if (initial) {
+      void loadPortfolio();
+      return;
+    }
     if (holdings.length === 0) return;
-
-    const refresh = () => {
-      void loadPortfolio({ force: true, keepLoading: false });
-    };
-
-    const intervalId = window.setInterval(refresh, 20_000);
-    const handleFocus = () => refresh();
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        refresh();
-      }
-    };
-
-    window.addEventListener("focus", handleFocus);
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-
-    return () => {
-      window.clearInterval(intervalId);
-      window.removeEventListener("focus", handleFocus);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-    };
-  }, [holdings.length, loadPortfolio]);
+    void loadPortfolio({ force: true, keepLoading: false });
+  }, 20_000);
 
   const summary = useMemo(() => portfolioSummary(holdings), [holdings]);
 

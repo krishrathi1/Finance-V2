@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
+import { useVisibilityPolling } from "@/hooks/useVisibilityPolling";
 import { fetchIndexHeatmap, fetchMarketIndexOptions, type MarketIndexOption } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -183,9 +184,12 @@ export function MarketHeatmap() {
     };
   }, []);
 
+  const loadRef = useRef<() => void>(() => {});
+
   useEffect(() => {
     if (!selectedIndex) {
       setLoading(false);
+      loadRef.current = () => {};
       return;
     }
 
@@ -215,17 +219,19 @@ export function MarketHeatmap() {
       }
     };
 
+    loadRef.current = () => void load();
     setLoading(true);
     void load();
-    const timer = setInterval(() => {
-      void load();
-    }, LIVE_REFRESH_MS);
 
     return () => {
       alive = false;
-      clearInterval(timer);
     };
   }, [selectedIndex]);
+
+  useVisibilityPolling((initial) => {
+    // Initial load (and reloads on index change) are handled by the effect above.
+    if (!initial) loadRef.current();
+  }, LIVE_REFRESH_MS);
 
   const groupedRows = useMemo(() => {
     const sorted = [...rows].sort((a, b) => b.changePercent - a.changePercent);

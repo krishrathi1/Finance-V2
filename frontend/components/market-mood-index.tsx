@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import { MarketStatusBadge } from "@/components/market-status-badge";
+import { useVisibilityPolling } from "@/hooks/useVisibilityPolling";
 import { fetchMarketMood, type MarketMoodPayload } from "@/lib/api";
 
 type MoodLevel = "Extreme Fear" | "Fear" | "Neutral" | "Greed" | "Extreme Greed";
@@ -45,33 +46,21 @@ export function MarketMoodIndex() {
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
 
-  useEffect(() => {
-    let alive = true;
-
-    const load = async (force = false) => {
-      try {
-        const data = await fetchMarketMood({ force });
-        if (alive && typeof data.value === "number") {
-          setMood(data);
-          setFailed(false);
-        }
-      } catch {
-        if (alive) setFailed(true);
-      } finally {
-        if (alive) setLoading(false);
+  const load = async (force = false) => {
+    try {
+      const data = await fetchMarketMood({ force });
+      if (typeof data.value === "number") {
+        setMood(data);
+        setFailed(false);
       }
-    };
+    } catch {
+      setFailed(true);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    void load(false);
-    const timer = setInterval(() => {
-      void load(true);
-    }, 30_000);
-
-    return () => {
-      alive = false;
-      clearInterval(timer);
-    };
-  }, []);
+  useVisibilityPolling((initial) => void load(!initial), 30_000);
 
   const moodValue = typeof mood?.value === "number" ? mood.value : null;
   const liveMood = mood;

@@ -1,4 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+
+import { useVisibilityPolling } from '@/hooks/useVisibilityPolling';
 
 export interface StockQuote {
   symbol: string;
@@ -76,6 +78,8 @@ export function useStockQuote(symbol: string, exchange = 'NSE') {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const pollRef = useRef<() => void>(() => {});
+
   useEffect(() => {
     let cancelled = false;
 
@@ -104,19 +108,23 @@ export function useStockQuote(symbol: string, exchange = 'NSE') {
       }
     };
 
+    pollRef.current = () => {
+      if (symbol) void fetchQuote(true);
+    };
+
     if (symbol) {
       fetchQuote();
     }
 
-    const timer = window.setInterval(() => {
-      if (symbol) fetchQuote(true);
-    }, 30_000);
-
     return () => {
       cancelled = true;
-      window.clearInterval(timer);
     };
   }, [symbol, exchange]);
+
+  useVisibilityPolling((initial) => {
+    // Initial load (and reloads on symbol/exchange change) are handled by the effect above.
+    if (!initial) pollRef.current();
+  }, 30_000);
 
   return { data, loading, error };
 }
