@@ -31,15 +31,42 @@ function placeholderSvg() {
   );
 }
 
+function isPrivateIp(host: string): boolean {
+  // IPv4 literals in private/reserved ranges (SSRF guard).
+  const m = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (m) {
+    const [a, b] = [Number(m[1]), Number(m[2])];
+    return (
+      a === 0 ||
+      a === 10 ||
+      a === 127 ||
+      (a === 100 && b >= 64 && b <= 127) ||
+      (a === 169 && b === 254) ||
+      (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && b === 168) ||
+      a >= 224
+    );
+  }
+  // IPv6 loopback / link-local / unique-local literals.
+  if (host.includes(":")) {
+    const h = host.replace(/^\[|\]$/g, "");
+    return h === "::1" || h === "::" || /^f[cde]/i.test(h) || /^fe[89ab]/i.test(h);
+  }
+  return false;
+}
+
 function isPublicHttpUrl(url: URL) {
   if (!["http:", "https:"].includes(url.protocol)) return false;
   const host = url.hostname.toLowerCase();
-  return !(
+  if (
     host === "localhost" ||
-    host === "127.0.0.1" ||
     host === "0.0.0.0" ||
-    host.endsWith(".local")
-  );
+    host.endsWith(".local") ||
+    host.endsWith(".internal")
+  ) {
+    return false;
+  }
+  return !isPrivateIp(host);
 }
 
 export async function GET(request: NextRequest) {

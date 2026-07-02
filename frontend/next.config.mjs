@@ -45,12 +45,9 @@ const nextConfig = {
     });
     return config;
   },
-  images: {
-    remotePatterns: [
-      { protocol: "https", hostname: "**" },
-      { protocol: "http", hostname: "**" }
-    ]
-  }
+  // next/image is only used for local assets; external images (news
+  // thumbnails) go through /api/v1/stocks/proxy-image with its own guards.
+  // No remotePatterns — keeping /_next/image from acting as an open proxy.
 };
 
 export default nextConfig;
