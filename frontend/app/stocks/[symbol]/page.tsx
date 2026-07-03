@@ -461,7 +461,13 @@ export default async function StockDetailsPage({ params, searchParams }: Props) 
         <section className="min-w-0 space-y-4">
           <StockSectionTabs />
 
-          <LiveStockDetails initialData={data} symbol={symbol} exchange={data.exchange || exchange} />
+          {/* key={symbol} forces a full remount on navigation between stocks —
+              LiveStockDetails and its children (SWOT, earnings TL;DR,
+              competitor verdict, news, AI chat) all seed local state from
+              props via useState with no resync effect, so without this they
+              silently keep showing the previous symbol's content/AI answers
+              after a client-side navigation. */}
+          <LiveStockDetails key={symbol} initialData={data} symbol={symbol} exchange={data.exchange || exchange} />
         </section>
       </div>
     </div>

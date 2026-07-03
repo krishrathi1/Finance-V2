@@ -18,7 +18,10 @@ export function AIChat({ symbol }: { symbol: string }) {
   ]);
 
   async function submit() {
-    if (!input.trim()) return;
+    // Guard against firing a second question before the first resolves —
+    // answers are appended in resolution order, so an overlapping request
+    // could otherwise land out of order relative to the questions asked.
+    if (!input.trim() || loading) return;
     const question = input.trim();
     setInput("");
     setMessages((prev) => [...prev, { role: "user", text: question }]);
@@ -79,10 +82,15 @@ export function AIChat({ symbol }: { symbol: string }) {
                 value={input}
                 onChange={(event) => setInput(event.target.value)}
                 onKeyDown={(event) => event.key === "Enter" && submit()}
-                className="w-full bg-transparent text-sm outline-none focus:shadow-none focus-visible:shadow-none"
+                disabled={loading}
+                className="w-full bg-transparent text-sm outline-none focus:shadow-none focus-visible:shadow-none disabled:opacity-60"
                 placeholder="Ask about valuation, risk, or statements"
               />
-              <button onClick={submit} className="rounded-lg bg-accent p-2 text-white outline-none focus:shadow-none focus-visible:shadow-none">
+              <button
+                onClick={submit}
+                disabled={loading}
+                className="rounded-lg bg-accent p-2 text-white outline-none focus:shadow-none focus-visible:shadow-none disabled:opacity-60"
+              >
                 <Send className="h-4 w-4" />
               </button>
             </div>
