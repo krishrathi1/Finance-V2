@@ -543,7 +543,6 @@ async function getLiveStockRows(securities: ListedSecurity[]) {
 export async function getLiveTickerSnapshot(refresh = false): Promise<LiveTickerSnapshot> {
   const cacheFresh = liveTickerCache && Date.now() - liveTickerCache.at < MARKET_TICKER_CACHE_MS;
   if (!refresh && cacheFresh) return liveTickerCache!.data;
-  if (refresh && cacheFresh) return liveTickerCache!.data;
   if (liveTickerPending) return liveTickerPending;
 
   liveTickerPending = (async () => {
