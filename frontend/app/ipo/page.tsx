@@ -639,19 +639,29 @@ export default function IpoPage() {
 
   useEffect(() => setMounted(true), []);
 
+  const loadRequestId = useRef(0);
+
   const load = useCallback(async (t: Tab, force = false) => {
+    const requestId = ++loadRequestId.current;
     if (force) setRefreshing(true);
     else setLoading(true);
     setError(null);
     try {
       const rows = await fetchIpoData(t, { force });
+      // The user may have switched tabs while this fetch was in flight — a
+      // slower response for the previous tab must not replace the grid
+      // that's now showing the newly-selected tab's (faster) data.
+      if (requestId !== loadRequestId.current) return;
       setData(rows);
     } catch {
+      if (requestId !== loadRequestId.current) return;
       setError("Unable to load IPO data. Please try again.");
       setData([]);
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (requestId === loadRequestId.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   }, []);
 
