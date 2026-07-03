@@ -48,8 +48,14 @@ export async function POST(request: NextRequest) {
         throw new Error('Invalid user ID in token');
       }
 
-      // Check if token is still valid (5 minutes)
-      const issuedTime = parseInt(timestamp);
+      // Check if token is still valid (5 minutes). A malformed/tampered
+      // timestamp must fail closed (reject), not silently pass the expiry
+      // check — `NaN > x` is always false, which previously let a bad
+      // timestamp bypass expiry entirely.
+      const issuedTime = parseInt(timestamp, 10);
+      if (!Number.isFinite(issuedTime)) {
+        throw new Error('Invalid timestamp in token');
+      }
       const currentTime = Date.now();
       if (currentTime - issuedTime > 5 * 60 * 1000) {
         return NextResponse.json(
