@@ -71,6 +71,11 @@ let listedUniverseCache: { at: number; data: ListedUniverseSnapshot } | null = n
 let liveTickerCache: { at: number; data: LiveTickerSnapshot } | null = null;
 let liveTickerPending: Promise<LiveTickerSnapshot> | null = null;
 let bseIndexCache: { at: number; data: MarketIndexDefinition[] } | null = null;
+// Last-known-good constituent list per index, keyed by index value. Index
+// membership barely changes intraday, so a transient niftyindices.com
+// failure should fall back to this instead of returning an empty heatmap.
+const officialSymbolsCache = new Map<string, { at: number; symbols: string[] }>();
+const OFFICIAL_SYMBOLS_STALE_MS = 24 * 60 * 60_000;
 
 const NSE_INDEXES: MarketIndexDefinition[] = [
   {
@@ -572,6 +577,9 @@ export async function getLiveTickerSnapshot(refresh = false): Promise<LiveTicker
 }
 
 async function fetchOfficialSymbols(definition: MarketIndexDefinition) {
+  const cacheKey = definition.value;
+  const cached = officialSymbolsCache.get(cacheKey);
+
   for (const url of definition.officialConstituentUrls || []) {
     try {
       const response = await fetch(url, {
@@ -585,10 +593,19 @@ async function fetchOfficialSymbols(definition: MarketIndexDefinition) {
       });
       if (!response.ok) continue;
       const symbols = parseConstituentCsv(await response.text());
-      if (symbols.length) return symbols;
+      if (symbols.length) {
+        officialSymbolsCache.set(cacheKey, { at: Date.now(), symbols });
+        return symbols;
+      }
     } catch {
       /* try next source */
     }
+  }
+
+  // Every source failed this call — fall back to the last-known-good list
+  // rather than returning empty (constituents rarely change intraday).
+  if (cached && Date.now() - cached.at < OFFICIAL_SYMBOLS_STALE_MS) {
+    return cached.symbols;
   }
   return [];
 }
