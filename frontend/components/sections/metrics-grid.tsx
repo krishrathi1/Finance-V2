@@ -16,13 +16,16 @@ const metricConfig: Array<{ key: string; label: string; formula: string; type: "
   { key: "roce", label: "ROCE", formula: "(EBIT / Capital Employed) x 100", type: "percent" },
   { key: "roa", label: "ROA", formula: "(Net Income / Total Assets) x 100", type: "percent" },
   { key: "ebitdaMargin", label: "Ebitda Margin", formula: "(EBITDA / Revenue) x 100", type: "percent" },
+  { key: "profitMargin", label: "Net Profit Margin", formula: "(Net Profit / Revenue) x 100", type: "percent" },
   { key: "casaRatio", label: "CASA Ratio", formula: "(Current + Savings Deposits / Total Deposits) x 100", type: "number" },
   { key: "dividendYield", label: "Dividend Yield", formula: "(Dividend Per Share / Current Price) x 100", type: "percent" },
   { key: "eps", label: "EPS", formula: "(Net Profit - Preferred Dividend) / Average Shares", type: "currency" },
   { key: "faceValue", label: "Face Value", formula: "Nominal value per share", type: "number" },
   { key: "outstandingShares", label: "Outstanding Shares (Cr)", formula: "Total issued shares currently outstanding", type: "number" },
   { key: "netInterestMargin", label: "Net Interest Margin", formula: "(Net Interest Income / Average Earning Assets) x 100", type: "percent" },
-  { key: "evToSales", label: "EV to Sales", formula: "Enterprise Value / Revenue", type: "number" }
+  { key: "evToSales", label: "EV to Sales", formula: "Enterprise Value / Revenue", type: "number" },
+  { key: "debtToEquity", label: "Debt / Equity", formula: "Total Debt / Shareholders' Equity", type: "number" },
+  { key: "currentRatio", label: "Current Ratio", formula: "Current Assets / Current Liabilities", type: "number" }
 ];
 
 function isValid(value: MetricValue) {

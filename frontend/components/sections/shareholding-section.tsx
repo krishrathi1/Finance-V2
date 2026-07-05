@@ -31,6 +31,11 @@ export function ShareholdingSection({
     return [{ quarter, promoters, fii, dii, public: publicHolding }];
   }, [history, quarter, promoters, fii, dii, publicHolding]);
 
+  // Only offer a quarter picker when there's real multi-quarter trend data
+  // with actual labels — otherwise there's exactly one (label-less) point
+  // and the dropdown rendered a single blank option, which looked broken.
+  const hasQuarterHistory = points.length > 1 && points.every((item) => Boolean(item.quarter));
+
   const [selectedQuarter, setSelectedQuarter] = useState(points[0]?.quarter || quarter);
 
   useEffect(() => {
@@ -51,25 +56,31 @@ export function ShareholdingSection({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h3 className="text-lg font-semibold">Shareholding Pattern</h3>
-          <p className="text-sm text-muted">Choose a quarter to see how promoter, FII, DII, and public holdings changed.</p>
+          <p className="text-sm text-muted">
+            {hasQuarterHistory
+              ? "Choose a quarter to see how promoter, FII, DII, and public holdings changed."
+              : "Latest available shareholding pattern."}
+          </p>
         </div>
-        <div className="min-w-[180px]">
-          <label htmlFor="shareholding-quarter" className="mb-1 block text-xs font-medium uppercase tracking-wide text-muted">
-            Quarter
-          </label>
-          <select
-            id="shareholding-quarter"
-            value={activePoint?.quarter || ""}
-            onChange={(event) => setSelectedQuarter(event.target.value)}
-            className="w-full rounded-xl border border-border/70 bg-bg px-3 py-2 text-sm text-text outline-none transition focus:border-primary"
-          >
-            {points.map((item) => (
-              <option key={item.quarter} value={item.quarter}>
-                {item.quarter}
-              </option>
-            ))}
-          </select>
-        </div>
+        {hasQuarterHistory ? (
+          <div className="min-w-[180px]">
+            <label htmlFor="shareholding-quarter" className="mb-1 block text-xs font-medium uppercase tracking-wide text-muted">
+              Quarter
+            </label>
+            <select
+              id="shareholding-quarter"
+              value={activePoint?.quarter || ""}
+              onChange={(event) => setSelectedQuarter(event.target.value)}
+              className="w-full rounded-xl border border-border/70 bg-bg px-3 py-2 text-sm text-text outline-none transition focus:border-primary"
+            >
+              {points.map((item) => (
+                <option key={item.quarter} value={item.quarter}>
+                  {item.quarter}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : null}
       </div>
 
       <div className="mt-4 grid items-center gap-4 md:grid-cols-2">

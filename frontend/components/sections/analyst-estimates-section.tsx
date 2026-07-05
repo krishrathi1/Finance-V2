@@ -58,7 +58,7 @@ export function AnalystEstimatesSection({ estimates }: { estimates: EstimateRow[
                   <td className="py-2.5 text-right">
                     <div className="text-xs">
                       <span className="font-semibold">{fmt(row.estimatedRevenueAvg as number | null, true)}</span>
-                      {row.estimatedRevenueLow !== null && row.estimatedRevenueHigh !== null && (
+                      {row.estimatedRevenueLow != null && row.estimatedRevenueHigh != null && (
                         <div className="text-muted">
                           {fmt(row.estimatedRevenueLow as number | null, true)} – {fmt(row.estimatedRevenueHigh as number | null, true)}
                         </div>
@@ -68,7 +68,7 @@ export function AnalystEstimatesSection({ estimates }: { estimates: EstimateRow[
                   <td className="py-2.5 text-right">
                     <div className="text-xs">
                       <span className="font-semibold">{fmt(row.estimatedEpsAvg as number | null)}</span>
-                      {row.estimatedEpsLow !== null && row.estimatedEpsHigh !== null && (
+                      {row.estimatedEpsLow != null && row.estimatedEpsHigh != null && (
                         <div className="text-muted">
                           {fmt(row.estimatedEpsLow as number | null)} – {fmt(row.estimatedEpsHigh as number | null)}
                         </div>

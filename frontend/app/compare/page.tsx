@@ -38,6 +38,13 @@ function fmtCr(v: number | null | undefined): string {
   return `₹${v.toFixed(2)} Cr`;
 }
 
+// Pulls a named metric (e.g. "Revenue Growth") from the 1Y CAGR growth snapshot.
+function growthMetric(d: any, label: string): number | null {
+  const period = d?.financials?.growthSnapshot?.periods?.[0];
+  const m = period?.metrics?.find((x: any) => x?.label === label);
+  return typeof m?.value === "number" ? m.value : null;
+}
+
 function better(
   a: number | null | undefined,
   b: number | null | undefined,
@@ -159,17 +166,30 @@ function CompRow({
   valA,
   valB,
   higherIsBetter = true,
+  rawA,
+  rawB,
 }: {
   label: string;
   valA: string;
   valB: string;
   higherIsBetter?: boolean;
+  /**
+   * Underlying numeric values to compare, when the displayed strings use a
+   * magnitude-dependent unit suffix (e.g. fmtCr's L Cr / K Cr / Cr) that
+   * can't be reversed by stripping unit characters — stripping "L Cr" from
+   * "₹15.00L Cr" and "K Cr" from "₹500.00K Cr" both leave a plain number,
+   * but those numbers are on different scales (lakh vs thousand crore) and
+   * comparing them directly picks the wrong winner. Falls back to
+   * reverse-parsing valA/valB when omitted (fine for same-unit values).
+   */
+  rawA?: number | null;
+  rawB?: number | null;
 }) {
-  const numA = parseFloat(valA.replace(/[₹%LCrKN/A\s]/g, "").replace(/,/g, ""));
-  const numB = parseFloat(valB.replace(/[₹%LCrKN/A\s]/g, "").replace(/,/g, ""));
+  const numA = rawA !== undefined ? rawA : parseFloat(valA.replace(/[₹%LCrKN/A\s]/g, "").replace(/,/g, ""));
+  const numB = rawB !== undefined ? rawB : parseFloat(valB.replace(/[₹%LCrKN/A\s]/g, "").replace(/,/g, ""));
   const win = better(
-    isNaN(numA) ? null : numA,
-    isNaN(numB) ? null : numB,
+    numA === null || Number.isNaN(numA) ? null : numA,
+    numB === null || Number.isNaN(numB) ? null : numB,
     higherIsBetter
   );
 
@@ -342,6 +362,8 @@ function ComparePageContent() {
   const [analysisLoading, setAnalysisLoading] = useState(false);
   const [analysis, setAnalysis] = useState<{ answer: string; source: "gemini" | "fallback" } | null>(null);
   const [error, setError] = useState("");
+  const compareRequestId = useRef(0);
+  const analysisRequestId = useRef(0);
 
   const handleCompare = useCallback(async () => {
     const a = symbolA.trim().toUpperCase();
@@ -354,6 +376,7 @@ function ComparePageContent() {
       setError("Please enter two different stock symbols.");
       return;
     }
+    const requestId = ++compareRequestId.current;
     setError("");
     setLoading(true);
     setDataA(null);
@@ -364,14 +387,19 @@ function ComparePageContent() {
         fetchDashboard(a),
         fetchDashboard(b),
       ]);
+      // A newer comparison may have been kicked off (different symbols)
+      // while this one was in flight — don't let a slower, now-stale
+      // response overwrite what the user is currently looking at.
+      if (requestId !== compareRequestId.current) return;
       setDataA(resA);
       setDataB(resB);
     } catch (err) {
+      if (requestId !== compareRequestId.current) return;
       setError(
         `Failed to fetch data. ${err instanceof Error ? err.message : "Please try again."}`
       );
     } finally {
-      setLoading(false);
+      if (requestId === compareRequestId.current) setLoading(false);
     }
   }, [symbolA, symbolB]);
 
@@ -379,12 +407,14 @@ function ComparePageContent() {
     const a = symbolA.trim().toUpperCase();
     const b = symbolB.trim().toUpperCase();
     if (!a || !b || a === b) return;
+    const requestId = ++analysisRequestId.current;
     setAnalysisLoading(true);
     try {
       const result = await fetchCompareAnalysis(a, b);
+      if (requestId !== analysisRequestId.current) return;
       setAnalysis(result);
     } finally {
-      setAnalysisLoading(false);
+      if (requestId === analysisRequestId.current) setAnalysisLoading(false);
     }
   }, [symbolA, symbolB]);
 
@@ -645,20 +675,22 @@ function ComparePageContent() {
           >
             <CompRow
               label="PE Ratio"
-              valA={fmt(dataA.metrics.pe)}
-              valB={fmt(dataB.metrics.pe)}
+              valA={fmt(dataA.metrics.peRatio)}
+              valB={fmt(dataB.metrics.peRatio)}
               higherIsBetter={false}
             />
             <CompRow
               label="PB Ratio"
-              valA={fmt(dataA.metrics.pb)}
-              valB={fmt(dataB.metrics.pb)}
+              valA={fmt(dataA.metrics.pbRatio)}
+              valB={fmt(dataB.metrics.pbRatio)}
               higherIsBetter={false}
             />
             <CompRow
               label="Market Cap"
               valA={fmtCr(dataA.metrics.marketCap)}
               valB={fmtCr(dataB.metrics.marketCap)}
+              rawA={dataA.metrics.marketCap}
+              rawB={dataB.metrics.marketCap}
               higherIsBetter={true}
             />
             <CompRow
@@ -701,27 +733,27 @@ function ComparePageContent() {
               higherIsBetter={true}
             />
             <CompRow
-              label="Operating Margin"
-              valA={fmt(dataA.metrics.operatingMargin, { suffix: "%" })}
-              valB={fmt(dataB.metrics.operatingMargin, { suffix: "%" })}
+              label="EBITDA Margin"
+              valA={fmt(dataA.metrics.ebitdaMargin, { suffix: "%" })}
+              valB={fmt(dataB.metrics.ebitdaMargin, { suffix: "%" })}
               higherIsBetter={true}
             />
             <CompRow
               label="Net Margin"
-              valA={fmt(dataA.metrics.netMargin, { suffix: "%" })}
-              valB={fmt(dataB.metrics.netMargin, { suffix: "%" })}
+              valA={fmt(dataA.metrics.profitMargin, { suffix: "%" })}
+              valB={fmt(dataB.metrics.profitMargin, { suffix: "%" })}
               higherIsBetter={true}
             />
             <CompRow
-              label="Revenue Growth"
-              valA={fmt(dataA.metrics.revenueGrowth, { suffix: "%" })}
-              valB={fmt(dataB.metrics.revenueGrowth, { suffix: "%" })}
+              label="Revenue Growth (1Y)"
+              valA={fmt(growthMetric(dataA, "Revenue Growth"), { suffix: "%" })}
+              valB={fmt(growthMetric(dataB, "Revenue Growth"), { suffix: "%" })}
               higherIsBetter={true}
             />
             <CompRow
-              label="Profit Growth"
-              valA={fmt(dataA.metrics.profitGrowth, { suffix: "%" })}
-              valB={fmt(dataB.metrics.profitGrowth, { suffix: "%" })}
+              label="Profit Growth (1Y)"
+              valA={fmt(growthMetric(dataA, "Net Profit Growth"), { suffix: "%" })}
+              valB={fmt(growthMetric(dataB, "Net Profit Growth"), { suffix: "%" })}
               higherIsBetter={true}
             />
           </Section>

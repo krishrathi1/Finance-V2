@@ -83,10 +83,16 @@ function normalizeSector(q: string): string {
 }
 
 // ---- Yahoo crumb + batch quote ----
-let crumbCache: { crumb: string; cookie: string } | null = null;
+let crumbCache: { crumb: string; cookie: string; at: number } | null = null;
+const CRUMB_CACHE_MS = 30 * 60_000;
+
+/** Drop the cached crumb so the next getCrumb() call re-authenticates. */
+function invalidateCrumb(): void {
+  crumbCache = null;
+}
 
 async function getCrumb(): Promise<{ crumb: string; cookie: string } | null> {
-  if (crumbCache) return crumbCache;
+  if (crumbCache && Date.now() - crumbCache.at < CRUMB_CACHE_MS) return crumbCache;
   try {
     const r = await fetch("https://fc.yahoo.com", { headers: { "user-agent": DESKTOP_UA }, cache: "no-store" });
     const h = r.headers as Headers & { getSetCookie?: () => string[] };
@@ -97,7 +103,7 @@ async function getCrumb(): Promise<{ crumb: string; cookie: string } | null> {
     });
     const crumb = (await cr.text()).trim();
     if (!crumb || crumb.length > 40) return null;
-    crumbCache = { crumb, cookie };
+    crumbCache = { crumb, cookie, at: Date.now() };
     return crumbCache;
   } catch {
     return null;
@@ -133,7 +139,12 @@ export async function getBatchQuotes(symbols: string[]): Promise<Map<string, Uni
       const url = `https://query2.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(syms)}&crumb=${encodeURIComponent(auth.crumb)}`;
       try {
         const res = await fetch(url, { headers: { "user-agent": DESKTOP_UA, cookie: auth.cookie }, cache: "no-store" });
-        if (!res.ok) return;
+        if (!res.ok) {
+          // 401/403 means the crumb/cookie pair is no longer valid — drop it
+          // so the next call re-authenticates instead of failing forever.
+          if (res.status === 401 || res.status === 403) invalidateCrumb();
+          return;
+        }
         const json = await res.json();
         const results: any[] = json?.quoteResponse?.result || [];
         for (const q of results) {

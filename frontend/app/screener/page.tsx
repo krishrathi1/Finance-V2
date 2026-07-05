@@ -217,8 +217,13 @@ export default function ScreenerPage() {
   const [aiParsedFilters, setAiParsedFilters] = useState<Record<string, unknown> | null>(null);
   const [aiMode, setAiMode] = useState(false);
   const aiInputRef = useRef<HTMLInputElement>(null);
+  // Shared across applyFilters and handleAISearch — both write the same
+  // `results`/`aiMode` state, so a slower request from either one must not
+  // overwrite a faster, more recent request from either.
+  const resultsRequestId = useRef(0);
 
   const applyFilters = useCallback(async () => {
+    const requestId = ++resultsRequestId.current;
     setLoading(true);
     setError(null);
     setHasSearched(true);
@@ -226,12 +231,14 @@ export default function ScreenerPage() {
     setAiParsedFilters(null);
     try {
       const data = await fetchScreenerResults(filters);
+      if (requestId !== resultsRequestId.current) return;
       setResults(data);
     } catch (err) {
+      if (requestId !== resultsRequestId.current) return;
       setError(err instanceof Error ? err.message : "Failed to fetch results");
       setResults([]);
     } finally {
-      setLoading(false);
+      if (requestId === resultsRequestId.current) setLoading(false);
     }
   }, [filters]);
 
@@ -239,19 +246,22 @@ export default function ScreenerPage() {
     async (query?: string) => {
       const q = (query ?? aiQuery).trim();
       if (!q) return;
+      const requestId = ++resultsRequestId.current;
       setAiLoading(true);
       setAiError(null);
       setAiMode(true);
       setHasSearched(true);
       try {
         const { results: aiResults, parsedFilters } = await fetchAIScreenerResults(q);
+        if (requestId !== resultsRequestId.current) return;
         setResults(aiResults);
         setAiParsedFilters(parsedFilters);
       } catch {
+        if (requestId !== resultsRequestId.current) return;
         setAiError("AI screener unavailable. Try using manual filters.");
         setAiMode(false);
       } finally {
-        setAiLoading(false);
+        if (requestId === resultsRequestId.current) setAiLoading(false);
       }
     },
     [aiQuery]

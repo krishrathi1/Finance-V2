@@ -269,13 +269,33 @@ export async function getYahooQuote(marketSymbol: string): Promise<RawQuote | nu
 // Crumb + cookie flow for quoteSummary.
 // ---------------------------------------------------------------------------
 
+let yahooCrumbCache: { cookie: string; crumb: string; at: number } | null = null;
+let yahooCrumbPending: Promise<{ cookie: string; crumb: string } | null> | null = null;
+const YAHOO_CRUMB_CACHE_MS = 10 * 60_000;
+
 /**
  * Obtain a (cookie, crumb) pair required by the v10 quoteSummary endpoint.
  *  1. GET https://fc.yahoo.com (capture set-cookie).
  *  2. GET query2/v1/test/getcrumb with that cookie to obtain the crumb.
  * Returns null if either step fails.
+ *
+ * Cached for YAHOO_CRUMB_CACHE_MS and de-duped across concurrent callers —
+ * every dashboard build was previously paying two extra sequential Yahoo
+ * round trips for a crumb that barely changes.
  */
 async function getYahooCrumb(): Promise<{ cookie: string; crumb: string } | null> {
+  if (yahooCrumbCache && Date.now() - yahooCrumbCache.at < YAHOO_CRUMB_CACHE_MS) {
+    return yahooCrumbCache;
+  }
+  if (yahooCrumbPending) return yahooCrumbPending;
+
+  yahooCrumbPending = fetchYahooCrumb().finally(() => {
+    yahooCrumbPending = null;
+  });
+  return yahooCrumbPending;
+}
+
+async function fetchYahooCrumb(): Promise<{ cookie: string; crumb: string } | null> {
   try {
     // Step 1: hit fc.yahoo.com to receive an identity cookie. This endpoint
     // typically returns a non-2xx status but still sets the cookie header.
@@ -307,7 +327,8 @@ async function getYahooCrumb(): Promise<{ cookie: string; crumb: string } | null
     if (!crumbRes.ok) return null;
     const crumb = (await crumbRes.text()).trim();
     if (!crumb || crumb.includes("<") || crumb.toLowerCase().includes("error")) return null;
-    return { cookie, crumb };
+    yahooCrumbCache = { cookie, crumb, at: Date.now() };
+    return yahooCrumbCache;
   } catch (err) {
     console.warn(`[yahoo] getYahooCrumb failed: ${String(err)}`);
     return null;
@@ -444,10 +465,18 @@ function mapFinancials(qs: any): ProviderBundle["financials"] {
   const balanceSheet = balanceAnnual.map((r) => ({
     period: periodLabel(r?.endDate?.raw ?? r?.endDate),
     totalAssets: rowVal(r, "totalAssets"),
+    // NOTE: "totalDebt" here is Yahoo's `totalLiab` (Total Liabilities), an
+    // existing naming quirk kept as-is since other code already reads it.
+    // `totalLiabilities` is added as its own explicit key below so
+    // scoring.ts's generic substring matcher finds the real total-liabilities
+    // figure instead of falling through to currentLiabilities (the only
+    // other key whose normalized name contains "liabilities").
     totalDebt: rowVal(r, "totalLiab"),
+    totalLiabilities: rowVal(r, "totalLiab"),
     equity: rowVal(r, "totalStockholderEquity"),
     currentAssets: rowVal(r, "totalCurrentAssets"),
     currentLiabilities: rowVal(r, "totalCurrentLiabilities"),
+    retainedEarnings: rowVal(r, "retainedEarnings"),
   }));
 
   const cashFlow = cashAnnual.map((r) => ({

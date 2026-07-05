@@ -103,16 +103,50 @@ function buildChatPrompt(symbol: string, question: string, context: AnyObj): str
 }
 
 /**
- * Extract the first JSON value from raw model text using a regex, then parse.
- * `pattern` mirrors the per-feature regex used in the Python (greedy object,
- * non-nested object, or list). Returns null on no match / parse failure.
+ * Find the first balanced `{...}` object in `text`, honoring string literals
+ * (so a `}` inside a quoted value doesn't end the match early). Unlike a
+ * greedy `/\{[\s\S]*\}/` regex, this stops at the object's real end instead
+ * of spanning to the last `}` in the whole response — a model that appends
+ * any trailing text containing a stray `}` (a closing remark, a nested
+ * example) no longer breaks parsing of an otherwise-valid JSON reply.
  */
-function extractJson(raw: string, pattern: RegExp): any {
+function extractBalancedJsonText(text: string): string | null {
+  const start = text.indexOf("{");
+  if (start === -1) return null;
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === "\\") escaped = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') inString = true;
+    else if (ch === "{") depth++;
+    else if (ch === "}") {
+      depth--;
+      if (depth === 0) return text.slice(start, i + 1);
+    }
+  }
+  return null;
+}
+
+/**
+ * Extract the first JSON value from raw model text, then parse.
+ * Without `pattern`, uses the balanced-brace scan above (the common case —
+ * a single possibly-nested JSON object). `pattern` is only for the one
+ * feature that intentionally expects a flat, non-nested object. Returns
+ * null on no match / parse failure.
+ */
+function extractJson(raw: string, pattern?: RegExp): any {
   if (!raw) return null;
-  const match = raw.match(pattern);
-  if (!match) return null;
+  const candidate = pattern ? raw.match(pattern)?.[0] : extractBalancedJsonText(raw);
+  if (!candidate) return null;
   try {
-    return JSON.parse(match[0]);
+    return JSON.parse(candidate);
   } catch {
     return null;
   }
@@ -241,8 +275,7 @@ function parseSwotJson(raw: string):
   | null {
   const text = String(raw ?? "").trim();
   if (!text) return null;
-  const match = text.match(/\{[\s\S]*\}/);
-  const candidate = match ? match[0] : text;
+  const candidate = extractBalancedJsonText(text) ?? text;
   let parsed: any;
   try {
     parsed = JSON.parse(candidate);
@@ -655,8 +688,7 @@ function buildNewsAnalysisPrompt(symbol: string, article: AnyObj, context: AnyOb
 function parseNewsAnalysis(raw: string): { overview: string; market_impact: string; watchpoint: string } | null {
   const text = String(raw ?? "").trim();
   if (!text) return null;
-  const match = text.match(/\{[\s\S]*\}/);
-  const candidate = match ? match[0] : text;
+  const candidate = extractBalancedJsonText(text) ?? text;
   let parsed: any;
   try {
     parsed = JSON.parse(candidate);
@@ -741,7 +773,7 @@ export async function competitorVerdict(
   if (isGeminiConfigured()) {
     const raw = await generateText(buildChatPrompt(symbol, question, {}));
     if (raw) {
-      const parsed = extractJson(raw, /\{[\s\S]*\}/);
+      const parsed = extractJson(raw);
       if (parsed && typeof parsed === "object" && !Array.isArray(parsed) && parsed.verdict) {
         return { verdict: String(parsed.verdict), analysis: parsed, source: "gemini" };
       }
@@ -828,7 +860,7 @@ export async function earningsTldr(
   if (isGeminiConfigured()) {
     const raw = await generateText(buildChatPrompt(symbol, question, {}));
     if (raw) {
-      const parsed = extractJson(raw, /\{[\s\S]*\}/);
+      const parsed = extractJson(raw);
       if (parsed && typeof parsed === "object" && !Array.isArray(parsed) && parsed.bullets) {
         const highlights = asArr(parsed.bullets).map((b: any) => String(b));
         return { summary: String(parsed.headline ?? ""), highlights, source: "gemini" };
@@ -1187,7 +1219,7 @@ export async function portfolioRisk(
   if (isGeminiConfigured()) {
     const raw = await generateText(buildChatPrompt("PORTFOLIO", prompt, {}));
     if (raw) {
-      const parsed = extractJson(raw, /\{[\s\S]*\}/);
+      const parsed = extractJson(raw);
       if (parsed && typeof parsed === "object" && !Array.isArray(parsed) && parsed.summary) {
         return {
           overallRisk: String(parsed.overallRisk ?? ""),
@@ -1322,7 +1354,7 @@ export async function portfolioRoast(
   if (isGeminiConfigured()) {
     const raw = await generateText(buildChatPrompt("PORTFOLIO", prompt, {}));
     if (raw) {
-      const parsed = extractJson(raw, /\{[\s\S]*\}/);
+      const parsed = extractJson(raw);
       if (parsed && typeof parsed === "object" && !Array.isArray(parsed) && parsed.roast) {
         return {
           analysis: String(parsed.roast ?? ""),
@@ -1389,8 +1421,7 @@ export async function extractProfileDetails(
     if (raw) {
       // Mirror Python: extract_profile_details returns the RAW string; caller
       // parses. Here we parse leniently and emit the typed fields.
-      const match = raw.match(/\{[\s\S]*\}/);
-      const candidate = match ? match[0] : raw;
+      const candidate = extractBalancedJsonText(raw) ?? raw;
       try {
         const parsed = JSON.parse(candidate);
         if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
@@ -1490,7 +1521,7 @@ export async function ipoAiAnalysis(
   if (isGeminiConfigured()) {
     const raw = await generateText(buildChatPrompt(symbol, prompt, {}));
     if (raw) {
-      const parsed = extractJson(raw, /\{[\s\S]*\}/);
+      const parsed = extractJson(raw);
       const required = ["verdict", "summary", "keyStrengths", "keyRisks", "listingOutlook", "quickTake"];
       if (parsed && typeof parsed === "object" && !Array.isArray(parsed) && required.every((k) => k in parsed)) {
         return {

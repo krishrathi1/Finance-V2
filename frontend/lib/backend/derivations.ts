@@ -976,6 +976,9 @@ export function backfillQuarterlyFinancials(financials: DashboardData["financial
   if (!financials || typeof financials !== "object") return;
   const f = financials as any;
 
+  // Keep 5 trailing quarters, not 4: scoring.ts's extractGrowthFeatures needs
+  // quarterly[len-1] vs quarterly[len-5] (a trailing-4-quarter YoY comparison)
+  // and silently falls back to annual growth if fewer than 5 are present.
   const cleanSummary = (rows: any[]): any[] => {
     const cleaned: any[] = [];
     for (const row of Array.isArray(rows) ? rows : []) {
@@ -986,7 +989,7 @@ export function backfillQuarterlyFinancials(financials: DashboardData["financial
       if (!period || (revenue === null && profit === null)) continue;
       cleaned.push({ period, revenue, profit });
     }
-    return cleaned.slice(-4);
+    return cleaned.slice(-5);
   };
 
   const summaryFromDetails = (rows: any[]): any[] => {
@@ -1003,7 +1006,7 @@ export function backfillQuarterlyFinancials(financials: DashboardData["financial
         profit: profit !== null ? round(profit, 2) : null,
       });
     }
-    return summary.slice(-4);
+    return summary.slice(-5);
   };
 
   f.quarterlyConsolidated = cleanSummary(f.quarterlyConsolidated || []);

@@ -43,14 +43,21 @@ export function StockSearch({ className = "" }: { className?: string }) {
     };
   }, []);
 
+  const searchRequestId = useRef(0);
+
   async function onSearch(value: string) {
     setQuery(value);
     if (value.trim().length < 1) {
+      searchRequestId.current += 1;
       setResults([]);
       setOpen(false);
       return;
     }
+    const requestId = ++searchRequestId.current;
     const nextResults = await searchStocks(value);
+    // A newer keystroke may have started its own search while this one was
+    // in flight — only apply the response if it's still the latest request.
+    if (requestId !== searchRequestId.current) return;
     setResults(nextResults);
     setOpen(true);
   }

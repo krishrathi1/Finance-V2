@@ -37,6 +37,7 @@ frontend/debug_*.js
 frontend/test_*.js
 frontend/test_*.ts
 scratch/test_*.py
+*_out.json
 
 # Local scratch workspace — never track
 scratch/

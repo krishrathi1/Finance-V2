@@ -81,7 +81,7 @@ export async function POST(request: NextRequest) {
 
     response.cookies.set('access_token', newAccessToken, {
       httpOnly: true,
-      secure: true,
+      secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
       maxAge: 30 * 60,
       path: '/',
@@ -89,7 +89,7 @@ export async function POST(request: NextRequest) {
 
     response.cookies.set('refresh_token', rawRefresh, {
       httpOnly: true,
-      secure: true,
+      secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
       maxAge: 30 * 24 * 60 * 60,
       path: '/api/v1/auth/refresh',

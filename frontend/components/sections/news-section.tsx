@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import { Brain, ExternalLink, Loader2, X } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -23,13 +23,19 @@ export function NewsSection({ symbol, news }: { symbol: string; news: NewsItem[]
   const [selectedTitle, setSelectedTitle] = useState<string | null>(null);
   const [analysis, setAnalysis] = useState<AnalysisState | null>(null);
   const [loading, setLoading] = useState(false);
+  const analyzeRequestId = useRef(0);
 
   async function handleAnalyze(item: NewsItem) {
+    const requestId = ++analyzeRequestId.current;
     setSelectedTitle(item.title);
     setLoading(true);
     setAnalysis(null);
 
     const response = await analyzeNewsItem(symbol, item);
+    // Ignore this response if a different article was analyzed afterward —
+    // otherwise a slow response for article A can overwrite the panel for
+    // article B, which resolved faster and is what's currently shown.
+    if (requestId !== analyzeRequestId.current) return;
     setAnalysis({
       title: item.title,
       overview: response.overview,

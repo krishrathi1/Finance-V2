@@ -352,6 +352,14 @@ export async function fetchIndexHeatmap(indexName: string, options: { force?: bo
       source: typeof payload.source === "string" ? payload.source : "",
       constituentCount: typeof payload.constituentCount === "number" ? payload.constituentCount : 0,
     };
+
+    // A 200 response with no rows means every upstream provider failed this
+    // call (soft failure, not an HTTP error) — prefer showing the last good
+    // data over blanking the heatmap, same as the network-error path below.
+    if (!data.rows.length && stale?.rows.length) {
+      return stale;
+    }
+
     setCache(key, data);
     return data;
   } catch (err) {

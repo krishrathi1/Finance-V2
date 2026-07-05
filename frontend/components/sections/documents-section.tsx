@@ -7,7 +7,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { DocRow } from "@/lib/types";
 
 function DocumentList({ docs }: { docs: DocRow[] }) {
-  if (!docs.length) return <p className="py-4 text-sm text-muted">No documents available.</p>;
+  if (!docs.length)
+    return (
+      <p className="py-4 text-sm text-muted">
+        Filings for this category aren&apos;t available from our current data providers yet.
+      </p>
+    );
   return (
     <div className="overflow-auto rounded-xl border border-border/70">
       <table className="w-full text-sm">

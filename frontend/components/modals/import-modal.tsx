@@ -10,6 +10,12 @@ function today() {
   return new Date().toISOString().slice(0, 10);
 }
 
+/** A valid extracted quantity/price must be a finite, positive number. */
+function parsePositive(value: unknown): number | null {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
 export function ImportModal({ onClose, onSave }: { onClose: () => void; onSave: () => void }) {
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
@@ -42,20 +48,22 @@ export function ImportModal({ onClose, onSave }: { onClose: () => void; onSave: 
   };
 
   const handleConfirm = () => {
+    // Rows where the AI failed to extract a usable quantity/price are
+    // skipped rather than defaulted to fabricated values (1 share, ₹0) —
+    // those looked like real positions but silently corrupted portfolio
+    // P&L. The review list below flags these before the user confirms.
     extracted.forEach((h) => {
-      if (h.symbol) {
-        addHolding(
-          h.symbol.toUpperCase(),
-          h.companyName || h.symbol,
-          Number(h.quantity) || 1,
-          Number(h.buyPrice) || 0,
-          h.buyDate || today()
-        );
+      const quantity = parsePositive(h.quantity);
+      const buyPrice = parsePositive(h.buyPrice);
+      if (h.symbol && quantity !== null && buyPrice !== null) {
+        addHolding(h.symbol.toUpperCase(), h.companyName || h.symbol, quantity, buyPrice, h.buyDate || today());
       }
     });
     onSave();
     onClose();
   };
+
+  const validCount = extracted.filter((h) => h.symbol && parsePositive(h.quantity) !== null && parsePositive(h.buyPrice) !== null).length;
 
   return createPortal(
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-bg/70 p-4 backdrop-blur-md">
@@ -112,37 +120,53 @@ export function ImportModal({ onClose, onSave }: { onClose: () => void; onSave: 
             </div>
             <div className="max-h-72 overflow-y-auto rounded-2xl border border-border/40 bg-bg/40 p-2 scrollbar-thin scrollbar-thumb-accent/20">
               <div className="grid gap-2">
-                {extracted.map((h, i) => (
-                  <div key={i} className="flex items-center justify-between rounded-xl bg-panel/60 p-3 text-sm border border-border/20 transition-all hover:border-accent/30">
-                    <div className="flex items-center gap-3 overflow-hidden">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-accent/10 text-[10px] font-bold text-accent">
-                        {h.symbol?.slice(0, 2).toUpperCase() || "??"}
+                {extracted.map((h, i) => {
+                  const quantity = parsePositive(h.quantity);
+                  const buyPrice = parsePositive(h.buyPrice);
+                  const rowValid = Boolean(h.symbol) && quantity !== null && buyPrice !== null;
+                  return (
+                    <div
+                      key={i}
+                      className={`flex items-center justify-between rounded-xl bg-panel/60 p-3 text-sm border transition-all ${
+                        rowValid ? "border-border/20 hover:border-accent/30" : "border-danger/40 bg-danger/5"
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 overflow-hidden">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-accent/10 text-[10px] font-bold text-accent">
+                          {h.symbol?.slice(0, 2).toUpperCase() || "??"}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-bold truncate">{h.symbol}</p>
+                          <p className="text-[10px] text-muted">{h.buyDate || "No date"}</p>
+                          {!rowValid && (
+                            <p className="text-[10px] font-semibold text-danger">
+                              Skipped — couldn&apos;t read a valid quantity/price
+                            </p>
+                          )}
+                        </div>
                       </div>
-                      <div className="min-w-0">
-                        <p className="font-bold truncate">{h.symbol}</p>
-                        <p className="text-[10px] text-muted">{h.buyDate || "No date"}</p>
+                      <div className="text-right shrink-0">
+                        <p className="font-bold">{buyPrice !== null ? `₹${buyPrice.toLocaleString("en-IN")}` : "—"}</p>
+                        <p className="text-[10px] text-muted">{quantity !== null ? `${quantity} shares` : "—"}</p>
                       </div>
                     </div>
-                    <div className="text-right shrink-0">
-                      <p className="font-bold">₹{(Number(h.buyPrice) || 0).toLocaleString("en-IN")}</p>
-                      <p className="text-[10px] text-muted">{h.quantity} shares</p>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
             <div className="flex gap-3 pt-2">
-              <button 
-                onClick={() => setExtracted([])} 
+              <button
+                onClick={() => setExtracted([])}
                 className="flex-1 rounded-xl border border-border/60 py-3 text-sm font-bold text-muted transition hover:bg-bg hover:text-text"
               >
                 Back
               </button>
-              <button 
-                onClick={handleConfirm} 
-                className="flex-1 rounded-xl bg-accent py-3 text-sm font-bold text-white transition hover:shadow-lg"
+              <button
+                onClick={handleConfirm}
+                disabled={validCount === 0}
+                className="flex-1 rounded-xl bg-accent py-3 text-sm font-bold text-white transition hover:shadow-lg disabled:opacity-50"
               >
-                Confirm & Add All
+                {validCount === extracted.length ? "Confirm & Add All" : `Confirm & Add ${validCount} of ${extracted.length}`}
               </button>
             </div>
           </div>

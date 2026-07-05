@@ -41,6 +41,7 @@ const NSE_BASE = "https://www.nseindia.com";
 
 /** Shared cookie jar (the equivalent of the reused `requests.Session()`). */
 let cachedCookies: string | null = null;
+let primeCookiesPending: Promise<string> | null = null;
 
 /**
  * Prime NSE cookies by hitting the homepage and capturing `set-cookie`.
@@ -77,7 +78,15 @@ async function primeCookies(): Promise<string> {
 
 async function ensureCookies(): Promise<string> {
   if (cachedCookies) return cachedCookies;
-  return primeCookies();
+  // A cold dashboard load fires several NSE calls concurrently (quote,
+  // corporate events, quarterly results); without this dedup each one
+  // independently primes cookies, tripling load on the exact request that
+  // most needs to succeed. Share one in-flight prime across all callers.
+  if (primeCookiesPending) return primeCookiesPending;
+  primeCookiesPending = primeCookies().finally(() => {
+    primeCookiesPending = null;
+  });
+  return primeCookiesPending;
 }
 
 /**
