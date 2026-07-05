@@ -101,6 +101,22 @@ export function PriceSidebar({ data }: { data: DashboardData }) {
   const bearish = typeof sentimentComponent === "number" ? Math.round((sentimentComponent / 5) * 100) : null;
   const bullish = bearish === null ? null : 100 - bearish;
 
+  const cur = data.price.currency;
+  const money = (v: number | null | undefined) =>
+    typeof v === "number" && Number.isFinite(v) && v > 0 ? formatCurrency(v, cur) : null;
+  const bandStr = (lo: number | null | undefined, hi: number | null | undefined) => {
+    const l = money(lo);
+    const h = money(hi);
+    return l && h ? `${l} – ${h}` : null;
+  };
+  const todayStats = [
+    { label: "Open", value: money(quoteData?.open) },
+    { label: "Prev Close", value: money(quoteData?.previousClose) },
+    { label: "VWAP", value: money(quoteData?.vwap) },
+    { label: "Day Range", value: bandStr(quoteData?.intraDayLow, quoteData?.intraDayHigh) },
+    { label: "Circuit", value: bandStr(quoteData?.lowerCP, quoteData?.upperCP) },
+  ].filter((s) => s.value);
+
   const rangeSelector = (
     <div className="mt-3 grid grid-cols-5 gap-1 sm:gap-1.5">
       {ranges.map((item) => (
@@ -175,6 +191,20 @@ export function PriceSidebar({ data }: { data: DashboardData }) {
             />
           </div>
         </div>
+
+        {todayStats.length > 0 ? (
+          <div className="mt-4 rounded-xl border border-border/70 p-3">
+            <p className="text-sm font-semibold">Today</p>
+            <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-2">
+              {todayStats.map((stat) => (
+                <div key={stat.label} className="flex items-center justify-between gap-2 text-xs">
+                  <span className="text-muted">{stat.label}</span>
+                  <span className="font-medium tabular-nums">{stat.value}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
 
         <div className="mt-4 rounded-xl border border-border/70 p-3">
           <div className="flex items-start justify-between gap-2">

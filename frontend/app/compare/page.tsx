@@ -38,6 +38,13 @@ function fmtCr(v: number | null | undefined): string {
   return `₹${v.toFixed(2)} Cr`;
 }
 
+// Pulls a named metric (e.g. "Revenue Growth") from the 1Y CAGR growth snapshot.
+function growthMetric(d: any, label: string): number | null {
+  const period = d?.financials?.growthSnapshot?.periods?.[0];
+  const m = period?.metrics?.find((x: any) => x?.label === label);
+  return typeof m?.value === "number" ? m.value : null;
+}
+
 function better(
   a: number | null | undefined,
   b: number | null | undefined,
@@ -668,14 +675,14 @@ function ComparePageContent() {
           >
             <CompRow
               label="PE Ratio"
-              valA={fmt(dataA.metrics.pe)}
-              valB={fmt(dataB.metrics.pe)}
+              valA={fmt(dataA.metrics.peRatio)}
+              valB={fmt(dataB.metrics.peRatio)}
               higherIsBetter={false}
             />
             <CompRow
               label="PB Ratio"
-              valA={fmt(dataA.metrics.pb)}
-              valB={fmt(dataB.metrics.pb)}
+              valA={fmt(dataA.metrics.pbRatio)}
+              valB={fmt(dataB.metrics.pbRatio)}
               higherIsBetter={false}
             />
             <CompRow
@@ -726,27 +733,27 @@ function ComparePageContent() {
               higherIsBetter={true}
             />
             <CompRow
-              label="Operating Margin"
-              valA={fmt(dataA.metrics.operatingMargin, { suffix: "%" })}
-              valB={fmt(dataB.metrics.operatingMargin, { suffix: "%" })}
+              label="EBITDA Margin"
+              valA={fmt(dataA.metrics.ebitdaMargin, { suffix: "%" })}
+              valB={fmt(dataB.metrics.ebitdaMargin, { suffix: "%" })}
               higherIsBetter={true}
             />
             <CompRow
               label="Net Margin"
-              valA={fmt(dataA.metrics.netMargin, { suffix: "%" })}
-              valB={fmt(dataB.metrics.netMargin, { suffix: "%" })}
+              valA={fmt(dataA.metrics.profitMargin, { suffix: "%" })}
+              valB={fmt(dataB.metrics.profitMargin, { suffix: "%" })}
               higherIsBetter={true}
             />
             <CompRow
-              label="Revenue Growth"
-              valA={fmt(dataA.metrics.revenueGrowth, { suffix: "%" })}
-              valB={fmt(dataB.metrics.revenueGrowth, { suffix: "%" })}
+              label="Revenue Growth (1Y)"
+              valA={fmt(growthMetric(dataA, "Revenue Growth"), { suffix: "%" })}
+              valB={fmt(growthMetric(dataB, "Revenue Growth"), { suffix: "%" })}
               higherIsBetter={true}
             />
             <CompRow
-              label="Profit Growth"
-              valA={fmt(dataA.metrics.profitGrowth, { suffix: "%" })}
-              valB={fmt(dataB.metrics.profitGrowth, { suffix: "%" })}
+              label="Profit Growth (1Y)"
+              valA={fmt(growthMetric(dataA, "Net Profit Growth"), { suffix: "%" })}
+              valB={fmt(growthMetric(dataB, "Net Profit Growth"), { suffix: "%" })}
               higherIsBetter={true}
             />
           </Section>

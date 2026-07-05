@@ -4,8 +4,6 @@ import { Manrope, Space_Grotesk } from "next/font/google";
 import { Suspense } from "react";
 
 import { AuthProvider } from "@/hooks/useAuth";
-import { DisplaySettingsProvider } from "@/components/display-settings-provider";
-import { DisplaySettingsToggle } from "@/components/display-settings-toggle";
 import { FloatingAuth } from "@/components/floating-auth";
 import { MarketStatusBadge } from "@/components/market-status-badge";
 import { MarketTicker } from "@/components/market-ticker";
@@ -194,7 +192,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className={`${manrope.variable} ${space.variable} min-h-screen font-[var(--font-manrope)]`}>
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
           <AuthProvider>
-            <DisplaySettingsProvider>
             <ScrollProgress />
             <Suspense fallback={null}>
               <SmoothExperience />
@@ -228,7 +225,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 <div className="flex items-center gap-1.5 sm:gap-2.5">
                   <NavLinks />
                   <div className="hidden h-4 w-px bg-border/60 sm:block" />
-                  <DisplaySettingsToggle />
                   <ModeToggle />
                 </div>
               </div>
@@ -329,7 +325,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 </div>
               </div>
             </footer>
-            </DisplaySettingsProvider>
           </AuthProvider>
         </ThemeProvider>
       </body>
