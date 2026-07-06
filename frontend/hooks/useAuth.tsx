@@ -3,10 +3,16 @@
 import {
   createContext,
   useContext,
+  useCallback,
   useEffect,
   useState,
   ReactNode,
 } from "react";
+import {
+  AUTH_SESSION_CHANGED_EVENT,
+  AUTH_STORAGE_KEY,
+  notifyAuthSessionChanged,
+} from "@/lib/auth";
 
 export type User = {
   id: number;
@@ -15,6 +21,7 @@ export type User = {
   tier: "free" | "premium";
   is_admin: boolean;
   is_banned: boolean;
+  verified_email: boolean;
   created_at: string;
 };
 
@@ -34,7 +41,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Restore the session from the httpOnly cookie on page load.
+  const persistSession = useCallback((nextUser: User | null, notify = true) => {
+    setUser(nextUser);
+    if (typeof window !== "undefined") {
+      if (nextUser) {
+        localStorage.setItem(
+          AUTH_STORAGE_KEY,
+          JSON.stringify({ name: nextUser.name, email: nextUser.email })
+        );
+      } else {
+        localStorage.removeItem(AUTH_STORAGE_KEY);
+      }
+      if (notify) notifyAuthSessionChanged();
+    }
+  }, []);
+
+  // Restore the session from the httpOnly cookie on page load and whenever a
+  // sibling auth surface changes it.
   useEffect(() => {
     let cancelled = false;
 
@@ -42,7 +65,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         const res = await fetch("/api/v1/auth/me", { credentials: "include" });
         if (!cancelled && res.ok) {
-          setUser(await res.json());
+          persistSession(await res.json(), false);
+        } else if (!cancelled) {
+          persistSession(null, false);
         }
       } catch {
         // Not signed in or backend unreachable — stay logged out.
@@ -52,10 +77,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     restoreSession();
+    window.addEventListener(AUTH_SESSION_CHANGED_EVENT, restoreSession);
     return () => {
       cancelled = true;
+      window.removeEventListener(AUTH_SESSION_CHANGED_EVENT, restoreSession);
     };
-  }, []);
+  }, [persistSession]);
 
   const signIn = async (email: string, password: string) => {
     setLoading(true);
@@ -76,7 +103,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       const userData = await res.json();
-      setUser(userData);
+      persistSession(userData);
       setError(null);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Login failed";
@@ -105,7 +132,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       const userData = await res.json();
-      setUser(userData);
+      persistSession(userData);
       setError(null);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Registration failed";
@@ -123,7 +150,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         method: "POST",
         credentials: "include",
       });
-      setUser(null);
+      persistSession(null);
       setError(null);
     } catch (err) {
       console.error("Logout error:", err);

@@ -64,7 +64,7 @@ function formatCellValue(row: RowConfig, point: QuarterlyDetailedPoint): string 
     return `${prefix}${formatIndian(value)}%`;
   }
   if (row.type === "eps") {
-    return `Rs ${formatIndian(value)}`;
+    return `₹${formatIndian(value)}`;
   }
   if (row.type === "npa") {
     const isPercent = row.key === "grossNpa" ? point.grossNpaIsPercent : point.netNpaIsPercent;
@@ -81,7 +81,8 @@ function cellColorClass(row: RowConfig, point: QuarterlyDetailedPoint): string {
 }
 
 function parsePeriod(period: string): number {
-  const direct = Date.parse(period || "");
+  const normalized = String(period || "").split(/\s+to\s+/i).at(-1) || "";
+  const direct = Date.parse(normalized);
   if (!Number.isNaN(direct)) return direct;
   const padded = Date.parse(`01 ${period || ""}`);
   if (!Number.isNaN(padded)) return padded;

@@ -1,6 +1,8 @@
 "use client";
 
-const sections = [
+import { useAuth } from "@/hooks/useAuth";
+
+const allSections = [
   { id: "overview", label: "Overview" },
   { id: "corporate-actions", label: "Corporate Actions" },
   { id: "financials", label: "Financials" },
@@ -10,6 +12,8 @@ const sections = [
 ];
 
 export function StockSectionTabs() {
+  const { user, loading } = useAuth();
+  const sections = !loading && user ? allSections : allSections.slice(0, 1);
   return (
     <div className="sticky top-[96px] z-30 -mx-3 overflow-auto rounded-2xl border border-border/70 bg-panel/90 p-1.5 sm:-mx-0 sm:top-[118px] sm:p-2 md:top-[122px]">
       <div className="flex min-w-max items-center gap-0.5 sm:gap-1">

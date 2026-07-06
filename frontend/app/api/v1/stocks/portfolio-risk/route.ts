@@ -7,7 +7,7 @@ export const maxDuration = 60;
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const holdings = Array.isArray(body?.holdings) ? body.holdings : [];
+    const holdings = Array.isArray(body?.holdings) ? body.holdings.slice(0, 20) : [];
 
     const result = await portfolioRisk(holdings);
 

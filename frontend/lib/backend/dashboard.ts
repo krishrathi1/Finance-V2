@@ -115,8 +115,9 @@ function syncHistoryWithLiveQuote(price: any) {
   }
 
   price.history = history;
-  const lows = history.map((row) => num(row?.low) ?? candleClose(row)).filter((value): value is number => value !== null && value > 0);
-  const highs = history.map((row) => num(row?.high) ?? candleClose(row)).filter((value): value is number => value !== null && value > 0);
+  const annualWindow = history.slice(-252);
+  const lows = annualWindow.map((row) => num(row?.low) ?? candleClose(row)).filter((value): value is number => value !== null && value > 0);
+  const highs = annualWindow.map((row) => num(row?.high) ?? candleClose(row)).filter((value): value is number => value !== null && value > 0);
   if (lows.length) {
     const computedLow = round2(Math.min(...lows));
     if (computedLow !== null) price.fiftyTwoWeekLow = computedLow;
@@ -563,7 +564,7 @@ export async function buildDashboard(symbol: string, options: BuildOptions = {})
     data.fmpKeyMetrics = fmpKeyMetrics;
     const row: any = fmpKeyMetrics[0] || {};
     const map: Record<string, string> = {
-      evToEbitda: "evToEbitda", peRatio: "pe", pbRatio: "pb", roe: "roe", roic: "roic",
+      evToEbitda: "evToEbitda", peRatio: "peRatio", pbRatio: "pbRatio", roe: "roe", roic: "roic",
       debtToEquity: "debtToEquity", currentRatio: "currentRatio",
     };
     for (const [src, dst] of Object.entries(map)) {

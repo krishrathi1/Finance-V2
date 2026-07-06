@@ -361,6 +361,7 @@ function ComparePageContent() {
   const [loading, setLoading] = useState(false);
   const [analysisLoading, setAnalysisLoading] = useState(false);
   const [analysis, setAnalysis] = useState<{ answer: string; source: "gemini" | "fallback" } | null>(null);
+  const [analysisError, setAnalysisError] = useState("");
   const [error, setError] = useState("");
   const compareRequestId = useRef(0);
   const analysisRequestId = useRef(0);
@@ -409,10 +410,14 @@ function ComparePageContent() {
     if (!a || !b || a === b) return;
     const requestId = ++analysisRequestId.current;
     setAnalysisLoading(true);
+    setAnalysisError("");
     try {
       const result = await fetchCompareAnalysis(a, b);
       if (requestId !== analysisRequestId.current) return;
       setAnalysis(result);
+    } catch (err) {
+      if (requestId !== analysisRequestId.current) return;
+      setAnalysisError(err instanceof Error ? err.message : "AI comparison failed. Please try again.");
     } finally {
       if (requestId === analysisRequestId.current) setAnalysisLoading(false);
     }
@@ -433,12 +438,12 @@ function ComparePageContent() {
           dataA.smartScore.score * 2 +
           (5 - dataA.riskScore.score) * 1.5 +
           upsideA / 10 +
-          ((dataA.metrics.roe ?? 0) - (dataA.metrics.pe ?? 0) / 10);
+          ((dataA.metrics.roe ?? 0) - (dataA.metrics.peRatio ?? 0) / 10);
         const scoreB =
           dataB.smartScore.score * 2 +
           (5 - dataB.riskScore.score) * 1.5 +
           upsideB / 10 +
-          ((dataB.metrics.roe ?? 0) - (dataB.metrics.pe ?? 0) / 10);
+          ((dataB.metrics.roe ?? 0) - (dataB.metrics.peRatio ?? 0) / 10);
         const winner = scoreA >= scoreB ? dataA : dataB;
         const loser = scoreA >= scoreB ? dataB : dataA;
         return {
@@ -601,6 +606,13 @@ function ComparePageContent() {
                 <div className="rounded-2xl border border-border/60 bg-bg/40 p-4">
                   <p className="whitespace-pre-line text-sm leading-7 text-text">{analysis.answer}</p>
                 </div>
+              </CardContent>
+            ) : null}
+            {analysisError ? (
+              <CardContent className="pt-0">
+                <p className="rounded-xl border border-danger/30 bg-danger/10 p-3 text-sm text-danger">
+                  {analysisError}
+                </p>
               </CardContent>
             ) : null}
           </Card>

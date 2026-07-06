@@ -22,13 +22,16 @@ export function useStockNews(symbol: string) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    const controller = new AbortController();
+    let cancelled = false;
     const fetchNews = async () => {
       try {
         setLoading(true);
         setError(null);
 
         const response = await fetch(
-          `/api/v1/stocks/${symbol}/news`
+          `/api/v1/stocks/${encodeURIComponent(symbol)}/news`,
+          { signal: controller.signal }
         );
 
         if (!response.ok) {
@@ -36,18 +39,23 @@ export function useStockNews(symbol: string) {
         }
 
         const newsData: NewsResponse = await response.json();
-        setData(newsData.data);
+        if (!cancelled) setData(newsData.data);
       } catch (err) {
+        if (cancelled || (err instanceof Error && err.name === "AbortError")) return;
         console.error('News fetch error:', err);
         setError(err instanceof Error ? err.message : 'Failed to fetch news');
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
 
     if (symbol) {
       fetchNews();
     }
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
   }, [symbol]);
 
   return { data, loading, error };

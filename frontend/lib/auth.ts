@@ -14,8 +14,4 @@ export function notifyAuthSessionChanged() {
   window.dispatchEvent(new Event(AUTH_SESSION_CHANGED_EVENT));
 }
 
-// Admin mock credentials (for legacy components like FloatingAuth)
-export const ADMIN_NAME = "Admin";
-export const ADMIN_EMAIL = "admin@gmail.com";
-export const ADMIN_PASSWORD = "11";
 export const AUTH_STORAGE_KEY = "finance_auth_session";

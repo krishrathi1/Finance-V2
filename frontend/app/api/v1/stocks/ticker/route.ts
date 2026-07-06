@@ -13,11 +13,12 @@ export async function GET(request: NextRequest) {
       ?.split(",")
       .map((symbol) => symbol.trim())
       .filter(Boolean) || [];
+    const boundedSymbols = requestedSymbols.slice(0, 50);
 
-    const snapshot = requestedSymbols.length
+    const snapshot = boundedSymbols.length
       ? {
-          rows: await getLiveTickerRows(requestedSymbols, { refresh }),
-          universeCount: requestedSymbols.length,
+          rows: await getLiveTickerRows(boundedSymbols, { refresh }),
+          universeCount: boundedSymbols.length,
           source: "requested",
           quoteSource: "provider",
           updatedAt: new Date().toISOString(),

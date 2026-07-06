@@ -7,6 +7,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 const FRESH_TTL_MS = 30_000;
+const inFlightBuilds = new Map<string, ReturnType<typeof buildDashboard>>();
 
 export async function GET(
   request: NextRequest,
@@ -27,7 +28,16 @@ export async function GET(
   }
 
   try {
-    const data = await buildDashboard(symbol, { timeframe, exchange, allowGemini: refresh });
+    let build = inFlightBuilds.get(cacheKey);
+    if (!build) {
+      build = buildDashboard(symbol, { timeframe, exchange, allowGemini: refresh });
+      inFlightBuilds.set(cacheKey, build);
+      const clearBuild = () => {
+        if (inFlightBuilds.get(cacheKey) === build) inFlightBuilds.delete(cacheKey);
+      };
+      void build.then(clearBuild, clearBuild);
+    }
+    const data = await build;
     setCache(cacheKey, data, FRESH_TTL_MS);
     return NextResponse.json({ cached: false, data });
   } catch (error) {

@@ -909,8 +909,8 @@ export function computeSmartScore(input: SmartScoreInput): DashboardData["smartS
 
     const valuation = median(
       [
-        inverseNormalize(peRatio, 8.0, 45.0),
-        inverseNormalize(pbRatio, 1.0, 8.0),
+        inverseNormalize(peRatio !== null && peRatio > 0 ? peRatio : null, 8.0, 45.0),
+        inverseNormalize(pbRatio !== null && pbRatio > 0 ? pbRatio : null, 1.0, 8.0),
         inverseNormalize(pegRatio, 0.5, 3.0),
         inverseNormalize(evToSales, 1.0, 12.0),
         normalize(dividendYield, 0.0, 4.0),
@@ -964,7 +964,14 @@ export function computeSmartScore(input: SmartScoreInput): DashboardData["smartS
       quarterlyDetailed,
     );
     const finalScore01 = clamp(baseScore01 + mlAdjustment * mlConfidence, 0.0, 1.0);
-    const score5 = round2(finalScore01 * 5.0);
+    const fundamentalCoverage = [
+      roe, roa, roce, profitMargin,
+      growthFeatures.revenueGrowth, growthFeatures.profitGrowth,
+      peRatio, pbRatio, pegRatio, evToSales,
+      debtToEquity, currentRatio, interestCoverage, altmanZ,
+    ].filter((value) => value !== null).length;
+    const isRated = fundamentalCoverage >= 3;
+    const score5 = isRated ? round2(finalScore01 * 5.0) : 0;
 
     const dimensions: Record<string, number> = {
       profitability: round2(profitability * 5.0),
@@ -978,12 +985,12 @@ export function computeSmartScore(input: SmartScoreInput): DashboardData["smartS
       score: score5,
       maxScore: 5,
       dimensions,
-      label: score5 >= 4 ? "Strong" : score5 >= 2.5 ? "Moderate" : "Weak",
+      label: !isRated ? "Unrated" : score5 >= 4 ? "Strong" : score5 >= 2.5 ? "Moderate" : "Weak",
       explanation:
         "Factor score uses normalized profitability, growth, valuation, momentum, and balance-sheet health. " +
         "A bounded multi-horizon walk-forward ML signal blends price trend persistence with earnings surprise " +
         "and volume confirmation before applying a small score adjustment.",
-      score10: round2(finalScore01 * 10.0),
+      score10: isRated ? round2(finalScore01 * 10.0) : 0,
       mlAdjustment: round2(mlAdjustment * mlConfidence * 5.0),
       mlConfidence: round2(mlConfidence),
       validation: validation as DashboardData["smartScore"]["validation"],
@@ -1071,13 +1078,14 @@ export function computeRiskScore(input: RiskScoreInput): DashboardData["riskScor
     const altmanZ = computeAltmanZ(metrics, financials);
     const interestCoverage = num(metrics["interestCoverage"]);
 
+    const neutralIfMissing = (value: Num): number => value === null ? 0.5 : value;
     const financialRisk = avg(
       [
         normalize(debtToEquity, 0.4, 2.5),
-        1.0 - (pyOr(normalize(currentRatio, 1.0, 3.0), 0.5) as number),
-        1.0 - (pyOr(normalize(roa, 1.0, 10.0), 0.5) as number),
-        1.0 - (pyOr(normalize(interestCoverage, 1.5, 8.0), 0.5) as number),
-        1.0 - (pyOr(normalize(altmanZ, 1.8, 4.0), 0.5) as number),
+        1.0 - neutralIfMissing(normalize(currentRatio, 1.0, 3.0)),
+        1.0 - neutralIfMissing(normalize(roa, 1.0, 10.0)),
+        1.0 - neutralIfMissing(normalize(interestCoverage, 1.5, 8.0)),
+        1.0 - neutralIfMissing(normalize(altmanZ, 1.8, 4.0)),
       ],
       0.5,
     );
@@ -1099,7 +1107,14 @@ export function computeRiskScore(input: RiskScoreInput): DashboardData["riskScor
 
     const weightedRisk =
       0.25 * sentimentRisk + 0.25 * financialRisk + 0.3 * narrativeRisk + 0.2 * technicalRisk;
-    const riskScore = round2(clamp(weightedRisk, 0.0, 1.0) * 5.0);
+    const riskCoverage =
+      sentiments.length +
+      narrativeRiskScores.length +
+      [debtToEquity, currentRatio, roa, altmanZ, interestCoverage, rsi14, macd]
+        .filter((value) => value !== null).length +
+      (priceHistory.length >= 2 ? 1 : 0);
+    const isRated = riskCoverage >= 2;
+    const riskScore = isRated ? round2(clamp(weightedRisk, 0.0, 1.0) * 5.0) : 0;
 
     return {
       score: riskScore,
@@ -1110,7 +1125,7 @@ export function computeRiskScore(input: RiskScoreInput): DashboardData["riskScor
         narrativeRisk: round2(narrativeRisk * 5.0),
         technicalRisk: round2(technicalRisk * 5.0),
       },
-      label: riskScore < 2 ? "Low" : riskScore < 3.5 ? "Medium" : "High",
+      label: !isRated ? "Unrated" : riskScore < 2 ? "Low" : riskScore < 3.5 ? "Medium" : "High",
       explanation:
         "Risk score blends sentiment risk, financial stress, narrative red flags, and technical instability " +
         "using weighted normalized factors.",

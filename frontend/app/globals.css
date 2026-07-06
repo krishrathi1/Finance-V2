@@ -7,6 +7,8 @@
 ───────────────────────────────────────────────────────────────────────── */
 
 :root {
+  --font-manrope: "Segoe UI", Arial, sans-serif;
+  --font-space: "Trebuchet MS", "Segoe UI", Arial, sans-serif;
   --bg: 225 40% 97%;
   --panel: 225 35% 100%;
   --border: 226 24% 83%;

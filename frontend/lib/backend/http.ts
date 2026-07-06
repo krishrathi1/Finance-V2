@@ -42,6 +42,10 @@ function redactSecrets(message: unknown): string {
     .replace(/(AIza[0-9A-Za-z_-]{20,})/g, "[redacted-google-key]");
 }
 
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 /** GET JSON with retries. Returns null on any failure (never throws). */
 export async function getJson<T = any>(url: string, opts: FetchOpts = {}): Promise<T | null> {
   const retries = opts.retries ?? 1;
@@ -53,6 +57,10 @@ export async function getJson<T = any>(url: string, opts: FetchOpts = {}): Promi
         lastErr = new Error(`HTTP ${res.status} for ${url}`);
         // Retry only on transient/blocking statuses
         if (![401, 403, 429, 500, 502, 503, 504].includes(res.status)) break;
+        if (attempt < retries) {
+          const retryAfter = Number(res.headers.get("retry-after"));
+          await wait(Number.isFinite(retryAfter) ? Math.min(2000, retryAfter * 1000) : 250 * (attempt + 1));
+        }
         continue;
       }
       return (await res.json()) as T;
@@ -74,6 +82,10 @@ export async function getText(url: string, opts: FetchOpts = {}): Promise<string
       if (!res.ok) {
         lastErr = new Error(`HTTP ${res.status} for ${url}`);
         if (![401, 403, 429, 500, 502, 503, 504].includes(res.status)) break;
+        if (attempt < retries) {
+          const retryAfter = Number(res.headers.get("retry-after"));
+          await wait(Number.isFinite(retryAfter) ? Math.min(2000, retryAfter * 1000) : 250 * (attempt + 1));
+        }
         continue;
       }
       return await res.text();
@@ -104,17 +116,24 @@ export function round2(value: unknown): number | null {
 
 /** Run a provider call with a hard timeout, resolving to null on timeout/failure. */
 export async function safeCall<T>(fn: () => Promise<T>, timeoutMs: number, label = "call"): Promise<T | null> {
-  return await Promise.race([
-    (async () => {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      (async () => {
       try {
         return await fn();
       } catch (err) {
         console.warn(`[provider] ${label} failed: ${redactSecrets(err)}`);
         return null;
       }
-    })(),
-    new Promise<null>((resolve) => setTimeout(() => resolve(null), timeoutMs)),
-  ]);
+      })(),
+      new Promise<null>((resolve) => {
+        timer = setTimeout(() => resolve(null), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 /** Normalize an Indian symbol: strip exchange suffixes, upper-case. */

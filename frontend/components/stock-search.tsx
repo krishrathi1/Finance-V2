@@ -73,7 +73,7 @@ export function StockSearch({ className = "" }: { className?: string }) {
           onChange={(event) => onSearch(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === "Enter" && canSubmit) {
-              router.push(`/stocks/${query.toUpperCase()}`);
+              router.push(`/stocks/${encodeURIComponent(query.trim().toUpperCase())}`);
               setOpen(false);
             }
           }}
@@ -81,7 +81,7 @@ export function StockSearch({ className = "" }: { className?: string }) {
           className="search-input h-10 w-full bg-transparent text-sm outline-none sm:h-12"
         />
         <button
-          onClick={() => canSubmit && router.push(`/stocks/${query.toUpperCase()}`)}
+          onClick={() => canSubmit && router.push(`/stocks/${encodeURIComponent(query.trim().toUpperCase())}`)}
           className="flex shrink-0 items-center gap-1.5 rounded-lg bg-gradient-to-r from-accent to-amber-500 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md sm:rounded-xl sm:px-4 sm:py-2"
         >
           <TrendingUp className="h-3.5 w-3.5" />

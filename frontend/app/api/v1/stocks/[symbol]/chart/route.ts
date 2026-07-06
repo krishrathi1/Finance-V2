@@ -3,6 +3,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getNseQuote } from '@/lib/backend/providers/nse';
 import { getYahooCandles, getYahooQuote } from '@/lib/backend/providers/yahoo';
 
+export const dynamic = 'force-dynamic';
+export const maxDuration = 20;
+
 function daysToCount(days: string) {
   const key = String(days || '1W').toUpperCase();
   if (key === '1D') return 7;
@@ -97,7 +100,7 @@ export async function GET(
     const nseSymbol = baseSymbol + 'EQN';
 
     // Fetch from NSE API
-    const apiUrl = `https://www.nseindia.com/api/NextApi/apiClient/GetQuoteApi?functionName=getSymbolChartData&symbol=${nseSymbol}&days=${days}`;
+    const apiUrl = `https://www.nseindia.com/api/NextApi/apiClient/GetQuoteApi?functionName=getSymbolChartData&symbol=${encodeURIComponent(nseSymbol)}&days=${encodeURIComponent(days)}`;
 
     const response = await fetch(apiUrl, {
       method: 'GET',
@@ -106,6 +109,7 @@ export async function GET(
         'Referer': 'https://www.nseindia.com',
         'Accept': 'application/json',
       },
+      signal: AbortSignal.timeout(8000),
     });
 
     if (!response.ok) {

@@ -14,8 +14,11 @@ export async function POST(request: NextRequest) {
 
     // Clear cookies
     const response = NextResponse.json(null, { status: 204 });
-    response.cookies.delete('access_token');
-    response.cookies.delete('refresh_token');
+    response.cookies.set('access_token', '', { expires: new Date(0), path: '/' });
+    response.cookies.set('refresh_token', '', {
+      expires: new Date(0),
+      path: '/api/v1/auth/refresh',
+    });
 
     return response;
   } catch (error) {

@@ -25,12 +25,14 @@ export function ReturnsCalculator({
     const numeric = Number(amountInput.replace(/[^\d]/g, ""));
     return Number.isFinite(numeric) && numeric > 0 ? numeric : 0;
   }, [amountInput]);
+  const hasTarget = currentPrice > 0 && aiTarget > 0;
+  const projectionTarget = hasTarget ? aiTarget : currentPrice;
 
   const simulation = useMemo(() => {
     const safeCurrent = currentPrice > 0 ? currentPrice : 1;
     const principal = amount > 0 ? amount : 0;
     const sharesBought = principal / safeCurrent;
-    const direction = aiTarget >= safeCurrent ? 1 : -1;
+    const direction = projectionTarget >= safeCurrent ? 1 : -1;
     const confidence = Math.max(0, Math.min(1, mlConfidence));
     const probabilityBias = Math.max(-1, Math.min(1, ((upProbability ?? 0.5) - 0.5) * 2));
     const bend = 0.7 + (confidence * 0.55) + (Math.abs(probabilityBias) * 0.2);
@@ -39,7 +41,7 @@ export function ReturnsCalculator({
     const simulateValue = (curve: number, year: number, volatilityFactor = 0) => {
       const progress = year / 3;
       const curvedProgress = progress === 0 ? 0 : Math.min(1, Math.pow(progress, Math.max(0.2, curve)));
-      const simulatedPrice = safeCurrent + ((aiTarget - safeCurrent) * curvedProgress);
+      const simulatedPrice = safeCurrent + ((projectionTarget - safeCurrent) * curvedProgress);
       const stabilizer = year === 0 ? 0 : direction * probabilityBias * confidence * safeCurrent * 0.02 * year;
       const scenarioPrice = simulatedPrice + stabilizer
       const scenarioValue = sharesBought * scenarioPrice * (1 + (volatilityFactor * year));
@@ -68,7 +70,7 @@ export function ReturnsCalculator({
       sharesBought,
       series,
     };
-  }, [amount, currentPrice, aiTarget, mlConfidence, upProbability]);
+  }, [amount, currentPrice, projectionTarget, mlConfidence, upProbability]);
 
   const future = simulation.series[simulation.series.length - 1]?.base ?? 0;
   const bearFuture = simulation.series[simulation.series.length - 1]?.bear ?? 0;
@@ -80,6 +82,17 @@ export function ReturnsCalculator({
   const sharesBought = simulation.sharesBought;
   const confidencePct = (simulation.confidence * 100).toFixed(0);
   const shareEstimate = sharesBought >= 1 ? sharesBought.toFixed(2) : sharesBought.toFixed(3);
+
+  if (!hasTarget) {
+    return (
+      <Card className="p-4">
+        <h3 className="text-lg font-semibold">Predictive ROI Simulator</h3>
+        <p className="mt-3 rounded-xl border border-border/70 bg-bg/40 p-4 text-sm text-muted">
+          A reliable analyst target is not available for {symbol}, so no return projection is shown.
+        </p>
+      </Card>
+    );
+  }
 
   return (
     <Card className="flex flex-col overflow-hidden p-3 sm:p-4 xl:h-[52rem]">

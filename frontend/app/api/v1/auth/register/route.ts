@@ -20,6 +20,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (typeof password !== 'string' || password.length < 8 || password.length > 128) {
+      return NextResponse.json(
+        { detail: 'Password must be between 8 and 128 characters' },
+        { status: 400 }
+      );
+    }
+
     // Check if user already exists
     const existing = await query('SELECT id FROM users WHERE email = ?', [email]);
     if (Array.isArray(existing) && existing.length > 0) {

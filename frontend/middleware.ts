@@ -25,6 +25,10 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const accessToken = request.cookies.get("access_token")?.value;
 
+  if (pathname === "/email-preview" && process.env.NODE_ENV === "production") {
+    return new NextResponse(null, { status: 404 });
+  }
+
   if (pathname.startsWith("/api/")) {
     const ip = clientIpFromHeaders(request.headers);
 
@@ -42,9 +46,20 @@ export async function middleware(request: NextRequest) {
   const isProtected = PROTECTED_ROUTES.some((route) => pathname.startsWith(route));
   const isAdminRoute = ADMIN_ROUTES.some((route) => pathname.startsWith(route));
   const isAuthRoute = AUTH_ROUTES.some((route) => pathname.startsWith(route));
+  let tokenPayload: Awaited<ReturnType<typeof jwtVerify>>["payload"] | null = null;
+  if (accessToken && (isProtected || isAdminRoute || isAuthRoute)) {
+    const rawSecret = process.env.JWT_SECRET_KEY?.trim();
+    if (rawSecret) {
+      try {
+        tokenPayload = (await jwtVerify(accessToken, new TextEncoder().encode(rawSecret))).payload;
+      } catch {
+        tokenPayload = null;
+      }
+    }
+  }
 
   // If trying to access protected or admin route without token
-  if ((isProtected || isAdminRoute) && !accessToken) {
+  if ((isProtected || isAdminRoute) && !tokenPayload) {
     const url = request.nextUrl.clone();
     url.pathname = "/signin";
     url.searchParams.set("next", pathname);
@@ -52,35 +67,13 @@ export async function middleware(request: NextRequest) {
   }
 
   // If already authenticated and trying to access auth pages, redirect to dashboard
-  if (isAuthRoute && accessToken) {
+  if (isAuthRoute && tokenPayload) {
     return NextResponse.redirect(new URL("/dashboard", request.url));
   }
 
   // For admin routes, verify is_admin claim
-  if (isAdminRoute && accessToken) {
-    const jwtSecretKey = process.env.JWT_SECRET_KEY;
-    if (!jwtSecretKey) {
-      // Fail closed: without a real secret we cannot safely verify the admin claim.
-      const url = request.nextUrl.clone();
-      url.pathname = "/signin";
-      url.searchParams.set("next", pathname);
-      return NextResponse.redirect(url);
-    }
-    try {
-      const secret = new TextEncoder().encode(jwtSecretKey);
-      const { payload } = await jwtVerify(accessToken, secret);
-
-      // Check if user is admin
-      if (payload.admin !== true) {
-        return NextResponse.redirect(new URL("/", request.url));
-      }
-    } catch (error) {
-      // Invalid token, redirect to signin
-      const url = request.nextUrl.clone();
-      url.pathname = "/signin";
-      url.searchParams.set("next", pathname);
-      return NextResponse.redirect(url);
-    }
+  if (isAdminRoute && tokenPayload && tokenPayload.admin !== true) {
+    return NextResponse.redirect(new URL("/", request.url));
   }
 
   return NextResponse.next();
@@ -95,6 +88,7 @@ export const config = {
     "/admin/:path*",
     "/signin",
     "/signup",
+    "/email-preview",
     "/api/v1/auth/:path*",
     "/api/v1/stocks/:path*",
   ],

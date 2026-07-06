@@ -86,6 +86,7 @@ export function PriceSidebar({ data }: { data: DashboardData }) {
   const rangePercentChange = startPrice ? (rangePointChange / startPrice) * 100 : 0;
   const weekLow = quoteData?.fiftytwoWeekLow && quoteData.fiftytwoWeekLow > 0 ? quoteData.fiftytwoWeekLow : data.price.fiftyTwoWeekLow;
   const weekHigh = quoteData?.fiftytwoWeekHigh && quoteData.fiftytwoWeekHigh > 0 ? quoteData.fiftytwoWeekHigh : data.price.fiftyTwoWeekHigh;
+  const hasWeekRange = weekLow > 0 && weekHigh > weekLow;
   const weekRangeProgress = Math.max(0, Math.min(100, ((currentPrice - weekLow) / (weekHigh - weekLow + 0.0001)) * 100));
   const isOneDay = selected.key === "1D";
   const pointChange = isOneDay
@@ -176,7 +177,7 @@ export function PriceSidebar({ data }: { data: DashboardData }) {
 
         {rangeSelector}
 
-        <div className="mt-4">
+        {hasWeekRange ? <div className="mt-4">
           <div className="mb-1 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs text-muted">
             <span>52W Low {formatCurrency(weekLow)}</span>
             <span>52W High {formatCurrency(weekHigh)}</span>
@@ -190,7 +191,7 @@ export function PriceSidebar({ data }: { data: DashboardData }) {
               className="h-2 rounded-full bg-gradient-to-r from-amber-400 to-lime-400"
             />
           </div>
-        </div>
+        </div> : null}
 
         {todayStats.length > 0 ? (
           <div className="mt-4 rounded-xl border border-border/70 p-3">

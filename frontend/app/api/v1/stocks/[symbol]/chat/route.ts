@@ -13,7 +13,10 @@ export async function POST(
 
   try {
     const body = await request.json().catch(() => ({}));
-    const question = typeof body?.question === 'string' ? body.question : '';
+    const question = typeof body?.question === 'string' ? body.question.trim().slice(0, 1000) : '';
+    if (!question) {
+      return NextResponse.json({ detail: 'Question is required' }, { status: 400 });
+    }
 
     // Light context: company name / P/E from a single NSE quote.
     const context: Record<string, unknown> = { symbol: symbol.toUpperCase() };

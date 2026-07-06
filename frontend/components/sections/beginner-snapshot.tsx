@@ -77,9 +77,10 @@ export function BeginnerSnapshot({
   const risk = getRiskSummary(riskScore);
   const reliability = getReliabilitySummary(mlConfidence);
   const verdict = getBeginnerVerdict(smartScore, riskScore);
-  const targetGap = currentPrice > 0 ? ((aiTarget - currentPrice) / currentPrice) * 100 : 0;
-  const targetTone = targetGap >= 0 ? "text-success" : "text-danger";
-  const targetLabel = targetGap >= 0 ? "Potential upside" : "Possible downside";
+  const hasTarget = aiTarget > 0 && currentPrice > 0;
+  const targetGap = hasTarget ? ((aiTarget - currentPrice) / currentPrice) * 100 : null;
+  const targetTone = targetGap === null ? "text-muted" : targetGap >= 0 ? "text-success" : "text-danger";
+  const targetLabel = targetGap === null ? "Analyst target" : targetGap >= 0 ? "Potential upside" : "Possible downside";
 
   return (
     <Card className="overflow-hidden border border-border/70 bg-panel/80 p-4 sm:p-5">
@@ -129,9 +130,13 @@ export function BeginnerSnapshot({
               <ArrowUpRight className="h-3.5 w-3.5" />
               {targetLabel}
             </div>
-            <p className={`mt-2 text-xl font-semibold ${targetTone}`}>{targetGap >= 0 ? "+" : ""}{targetGap.toFixed(2)}%</p>
+            <p className={`mt-2 text-xl font-semibold ${targetTone}`}>
+              {targetGap === null ? "N/A" : `${targetGap >= 0 ? "+" : ""}${targetGap.toFixed(2)}%`}
+            </p>
             <p className="mt-1 text-sm text-muted">
-              Current {formatCurrency(currentPrice)} vs analyst target {formatCurrency(aiTarget)}
+              {targetGap === null
+                ? "No current analyst target is available."
+                : `Current ${formatCurrency(currentPrice)} vs analyst target ${formatCurrency(aiTarget)}`}
             </p>
             <p className="mt-1 text-[10px] text-muted/50">Source: FMP analyst consensus</p>
           </div>

@@ -1,9 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
+import { lookup } from "node:dns/promises";
 
 const IMAGE_HEADERS = {
   "Cache-Control": "public, max-age=86400, stale-while-revalidate=3600",
   "Access-Control-Allow-Origin": "*",
+  "X-Content-Type-Options": "nosniff",
 };
+
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const ALLOWED_IMAGE_TYPES = new Set([
+  "image/avif",
+  "image/gif",
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+]);
 
 function placeholderSvg() {
   return new NextResponse(
@@ -26,6 +37,7 @@ function placeholderSvg() {
       headers: {
         ...IMAGE_HEADERS,
         "Content-Type": "image/svg+xml; charset=utf-8",
+        "Content-Security-Policy": "default-src 'none'; sandbox",
       },
     }
   );
@@ -55,7 +67,7 @@ function isPrivateIp(host: string): boolean {
   return false;
 }
 
-function isPublicHttpUrl(url: URL) {
+async function isPublicHttpUrl(url: URL) {
   if (!["http:", "https:"].includes(url.protocol)) return false;
   const host = url.hostname.toLowerCase();
   if (
@@ -66,7 +78,41 @@ function isPublicHttpUrl(url: URL) {
   ) {
     return false;
   }
-  return !isPrivateIp(host);
+  if (isPrivateIp(host)) return false;
+  try {
+    const addresses = await lookup(host, { all: true, verbatim: true });
+    return addresses.length > 0 && addresses.every(({ address }) => !isPrivateIp(address));
+  } catch {
+    return false;
+  }
+}
+
+async function readLimitedBody(response: Response): Promise<Uint8Array | null> {
+  const declaredLength = Number(response.headers.get("content-length"));
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_IMAGE_BYTES) return null;
+  if (!response.body) return null;
+
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > MAX_IMAGE_BYTES) {
+      await reader.cancel();
+      return null;
+    }
+    chunks.push(value);
+  }
+
+  const body = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return body;
 }
 
 export async function GET(request: NextRequest) {
@@ -74,33 +120,46 @@ export async function GET(request: NextRequest) {
   if (!rawUrl) return placeholderSvg();
 
   try {
-    const targetUrl = new URL(rawUrl);
-    if (!isPublicHttpUrl(targetUrl)) {
-      return placeholderSvg();
+    let targetUrl = new URL(rawUrl);
+    for (let redirectCount = 0; redirectCount <= 3; redirectCount += 1) {
+      if (!(await isPublicHttpUrl(targetUrl))) return placeholderSvg();
+
+      const response = await fetch(targetUrl.toString(), {
+        cache: "no-store",
+        redirect: "manual",
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+          Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+          "Accept-Language": "en-US,en;q=0.9",
+          Referer: targetUrl.origin,
+        },
+        signal: AbortSignal.timeout(6000),
+      });
+
+      if (response.status >= 300 && response.status < 400) {
+        const location = response.headers.get("location");
+        if (!location || redirectCount === 3) return placeholderSvg();
+        targetUrl = new URL(location, targetUrl);
+        continue;
+      }
+
+      const contentType = (response.headers.get("content-type") || "")
+        .split(";", 1)[0]
+        .trim()
+        .toLowerCase();
+      if (!response.ok || !ALLOWED_IMAGE_TYPES.has(contentType)) return placeholderSvg();
+      const body = await readLimitedBody(response);
+      if (!body) return placeholderSvg();
+
+      const responseBody = body.buffer.slice(
+        body.byteOffset,
+        body.byteOffset + body.byteLength
+      ) as ArrayBuffer;
+      return new NextResponse(responseBody, {
+        headers: { ...IMAGE_HEADERS, "Content-Type": contentType },
+      });
     }
-
-    const response = await fetch(targetUrl.toString(), {
-      cache: "no-store",
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-        Accept: "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.9",
-        Referer: targetUrl.origin,
-      },
-      signal: AbortSignal.timeout(6000),
-    });
-
-    const contentType = response.headers.get("content-type") || "";
-    if (!response.ok || !contentType.startsWith("image/") || !response.body) {
-      return placeholderSvg();
-    }
-
-    return new NextResponse(response.body, {
-      headers: {
-        ...IMAGE_HEADERS,
-        "Content-Type": contentType,
-      },
-    });
+    return placeholderSvg();
   } catch (error) {
     console.warn("Proxy image failed:", error);
     return placeholderSvg();

@@ -3,6 +3,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getNseQuote } from '@/lib/backend/providers/nse';
 import { getYahooQuote } from '@/lib/backend/providers/yahoo';
 
+export const dynamic = 'force-dynamic';
+export const maxDuration = 20;
+
 function yahooQuoteResponse(symbol: string, exchange: string, quote: Awaited<ReturnType<typeof getYahooQuote>>) {
   return {
     symbol: symbol.toUpperCase(),
@@ -99,7 +102,7 @@ export async function GET(
     }
 
     // Fetch quote data from NSE API
-    const quoteUrl = `https://www.nseindia.com/api/quote-equity?symbol=${baseSymbol}`;
+    const quoteUrl = `https://www.nseindia.com/api/quote-equity?symbol=${encodeURIComponent(baseSymbol)}`;
 
     const quoteResponse = await fetch(quoteUrl, {
       method: 'GET',
@@ -108,6 +111,7 @@ export async function GET(
         'Referer': 'https://www.nseindia.com',
         'Accept': 'application/json',
       },
+      signal: AbortSignal.timeout(8000),
     });
 
     if (!quoteResponse.ok) {
@@ -124,12 +128,13 @@ export async function GET(
     // Try to fetch quarterly results for financial metrics
     let quarterlyResults = null;
     try {
-      const resultsUrl = `https://www.nseindia.com/api/results-comparision?symbol=${baseSymbol}`;
+      const resultsUrl = `https://www.nseindia.com/api/results-comparision?symbol=${encodeURIComponent(baseSymbol)}`;
       const resultsResponse = await fetch(resultsUrl, {
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
           'Referer': 'https://www.nseindia.com',
         },
+        signal: AbortSignal.timeout(8000),
       });
       if (resultsResponse.ok) {
         const resultsData = await resultsResponse.json();

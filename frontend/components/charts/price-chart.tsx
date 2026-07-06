@@ -5,7 +5,7 @@ import { useId, useState, useEffect, useRef, useLayoutEffect } from "react";
 
 // PriceChart only reads `date` and `close`, so accept any series that provides them
 // (full PricePoint[] from the dashboard, or the {date, close}[] the sidebar derives).
-type ChartPoint = { date: string; close: number };
+type ChartPoint = { date: unknown; close: unknown };
 
 export function PriceChart({ data, trend, height = 260 }: { data: ChartPoint[]; trend?: "up" | "down"; height?: number | string }) {
   const gradientId = useId().replace(/:/g, "");
@@ -43,12 +43,12 @@ export function PriceChart({ data, trend, height = 260 }: { data: ChartPoint[]; 
     return () => resizeObserver.disconnect();
   }, []);
 
-  const compact = data.map((item) => {
-    const label = item.date.includes("T") ? item.date.slice(11, 16) : item.date.slice(5);
-    return {
-      date: label,
-      close: Number(item.close.toFixed(2))
-    };
+  const compact = data.flatMap((item) => {
+    const date = typeof item?.date === "string" ? item.date : "";
+    const close = Number(item?.close);
+    if (!date || !Number.isFinite(close)) return [];
+    const label = date.includes("T") ? date.slice(11, 16) : date.slice(5);
+    return [{ date: label || date, close: Number(close.toFixed(2)) }];
   });
 
   if (!compact.length) {

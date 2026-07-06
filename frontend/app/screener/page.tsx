@@ -342,7 +342,7 @@ export default function ScreenerPage() {
   ].filter(Boolean).length;
 
   return (
-    <div className="flex h-[calc(100vh-4rem)] flex-col overflow-hidden">
+    <div className="flex min-h-[calc(100dvh-7rem)] flex-col overflow-hidden">
       {/* ── Top Bar ── */}
       <div className="flex shrink-0 items-center justify-between border-b border-border/40 bg-panel/80 px-4 py-2.5 backdrop-blur-xl">
         <div className="flex items-center gap-3">

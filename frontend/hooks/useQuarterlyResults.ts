@@ -43,13 +43,16 @@ export function useQuarterlyResults(symbol: string) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    const controller = new AbortController();
+    let cancelled = false;
     const fetchResults = async () => {
       try {
         setLoading(true);
         setError(null);
 
         const response = await fetch(
-          `/api/v1/stocks/${symbol}/quarterly-results`
+          `/api/v1/stocks/${encodeURIComponent(symbol)}/quarterly-results`,
+          { signal: controller.signal }
         );
 
         if (!response.ok) {
@@ -57,18 +60,23 @@ export function useQuarterlyResults(symbol: string) {
         }
 
         const resultsData = await response.json();
-        setData(resultsData);
+        if (!cancelled) setData(resultsData);
       } catch (err) {
+        if (cancelled || (err instanceof Error && err.name === "AbortError")) return;
         console.error('Quarterly results fetch error:', err);
         setError(err instanceof Error ? err.message : 'Failed to fetch quarterly results');
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
 
     if (symbol) {
       fetchResults();
     }
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
   }, [symbol]);
 
   return { data, loading, error };
