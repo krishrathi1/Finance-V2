@@ -10,13 +10,16 @@ let cachedJwtSecret: Uint8Array | null = null;
 function getJwtSecret(): Uint8Array {
   if (!cachedJwtSecret) {
     const raw = process.env.JWT_SECRET_KEY;
-    if (!raw || raw.trim().length < 32) {
+    const normalized = raw?.trim() || '';
+    const obviousPlaceholder = /^(change|replace|your|example|placeholder|secret|development|test)/i.test(normalized);
+    const uniqueCharacters = new Set(normalized).size;
+    if (normalized.length < 32 || obviousPlaceholder || uniqueCharacters < 12) {
       throw new Error(
         'JWT_SECRET_KEY must be set to a random value of at least 32 characters. ' +
           'Generate one with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'base64url\'))"'
       );
     }
-    cachedJwtSecret = new TextEncoder().encode(raw);
+    cachedJwtSecret = new TextEncoder().encode(normalized);
   }
   return cachedJwtSecret;
 }
@@ -58,6 +61,33 @@ export async function createVerificationToken(userId: number): Promise<string> {
     .setExpirationTime('24h');
 
   return await token.sign(getJwtSecret());
+}
+
+export async function createPasswordResetToken(userId: number, otpRecordId: number): Promise<string> {
+  return new jose.SignJWT({ sub: String(userId), type: 'password_reset', otpRecordId })
+    .setProtectedHeader({ alg: 'HS256' })
+    .setExpirationTime('5m')
+    .sign(getJwtSecret());
+}
+
+export async function verifyPasswordResetToken(
+  token: string
+): Promise<{ userId: number; otpRecordId: number } | null> {
+  try {
+    const { payload } = await jose.jwtVerify(token, getJwtSecret());
+    const userId = Number(payload.sub);
+    const otpRecordId = Number(payload.otpRecordId);
+    if (
+      payload.type !== 'password_reset' ||
+      !Number.isInteger(userId) ||
+      !Number.isInteger(otpRecordId)
+    ) {
+      return null;
+    }
+    return { userId, otpRecordId };
+  } catch {
+    return null;
+  }
 }
 
 /** Returns the user id from a valid email-verification token, or null. */

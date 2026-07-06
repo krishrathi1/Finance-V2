@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { verifyPassword, createAccessToken, createRefreshToken } from '@/lib/auth-utils';
 
+const DUMMY_PASSWORD_HASH = '$2b$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy';
+
 export async function POST(request: NextRequest) {
   try {
     const { email, password } = await request.json();
@@ -17,6 +19,7 @@ export async function POST(request: NextRequest) {
     const users = await query('SELECT * FROM users WHERE email = ?', [email]);
 
     if (!Array.isArray(users) || users.length === 0) {
+      await verifyPassword(password, DUMMY_PASSWORD_HASH);
       return NextResponse.json(
         { detail: 'Invalid email or password' },
         { status: 401 }
@@ -43,7 +46,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create tokens
-    const accessToken = await createAccessToken(user.id, user.is_admin, user.tier);
+    const accessToken = await createAccessToken(user.id, Boolean(user.is_admin), user.tier);
     const { raw: rawRefresh, hash: refreshHash } = await createRefreshToken();
 
     // Store refresh token

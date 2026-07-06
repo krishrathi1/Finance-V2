@@ -4,6 +4,7 @@ const transporter = nodemailer.createTransport({
   host: process.env.SMTP_SERVER || 'mail.voreva.in',
   port: parseInt(process.env.SMTP_PORT || '587'),
   secure: false,
+  requireTLS: true,
   auth: {
     user: process.env.SMTP_EMAIL || 'noreply@mystockvision.com',
     pass: process.env.SMTP_PASSWORD || '',

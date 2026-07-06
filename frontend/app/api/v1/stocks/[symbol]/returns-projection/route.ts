@@ -6,6 +6,13 @@ export async function GET(request: NextRequest) {
     const amount = parseFloat(searchParams.get('amount') || '10000');
     const cagr = parseFloat(searchParams.get('cagr') || '12');
     const years = parseFloat(searchParams.get('years') || '5');
+    if (
+      !Number.isFinite(amount) || amount <= 0 || amount > 1e12 ||
+      !Number.isFinite(cagr) || cagr < -100 || cagr > 1000 ||
+      !Number.isFinite(years) || years <= 0 || years > 100
+    ) {
+      return NextResponse.json({ detail: 'Invalid projection parameters' }, { status: 400 });
+    }
 
     const projectedValue = amount * Math.pow(1 + cagr / 100, years);
     const gain = projectedValue - amount;

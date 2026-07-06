@@ -35,17 +35,24 @@ export function isGeminiConfigured(): boolean {
 
 /** Race a promise against a hard timeout. Resolves null on timeout. */
 async function withTimeout<T>(fn: () => Promise<T>, timeoutMs: number): Promise<T | null> {
-  return Promise.race([
-    (async () => {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      (async () => {
       try {
         return await fn();
       } catch (err) {
         console.warn(`[gemini] generation failed: ${String(err)}`);
         return null;
       }
-    })(),
-    new Promise<null>((resolve) => setTimeout(() => resolve(null), timeoutMs)),
-  ]);
+      })(),
+      new Promise<null>((resolve) => {
+        timer = setTimeout(() => resolve(null), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 /**
@@ -66,7 +73,14 @@ export async function generateText(
     for (const id of candidates) {
       try {
         const model = client.getGenerativeModel({ model: id });
-        const result = await model.generateContent(prompt);
+        let result;
+        try {
+          result = await model.generateContent(prompt);
+        } catch (firstError) {
+          if (!/429|quota|rate.?limit/i.test(String(firstError))) throw firstError;
+          await new Promise((resolve) => setTimeout(resolve, 500));
+          result = await model.generateContent(prompt);
+        }
         const text = (result.response.text() || "").trim();
         if (text.length > 0) {
           workingModel = id; // cache the first model that works for this process

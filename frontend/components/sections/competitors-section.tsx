@@ -29,7 +29,7 @@ export function CompetitorsSection({
           {companies.map((company) => (
             <div
               key={company.symbol}
-              className="rounded-full border border-border/70 bg-white px-3 py-2 text-sm text-text"
+              className="rounded-full border border-border/70 bg-panel px-3 py-2 text-sm text-text"
             >
               <span className="font-medium">{company.symbol}</span>
               <span className="ml-2 text-text/65">{company.name}</span>

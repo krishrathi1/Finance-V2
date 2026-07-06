@@ -101,9 +101,7 @@ export function getIndianMarketStatus(now: Date = new Date()): MarketStatus {
     };
   }
 
-  const nextOpen = nextTradingOpenPseudo(
-    pseudoNow.getTime() < closeTime ? pseudoNow : new Date(pseudoNow.getTime() + 24 * 60 * 60 * 1000)
-  );
+  const nextOpen = nextTradingOpenPseudo(pseudoNow);
   const timeLeft = formatDuration(nextOpen - pseudoNow.getTime());
   return {
     isOpen: false,

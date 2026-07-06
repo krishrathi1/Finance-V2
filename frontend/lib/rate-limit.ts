@@ -21,9 +21,10 @@ export function rateLimit(key: string, limit: number, windowMs: number): RateLim
       for (const [k, b] of buckets) {
         if (b.resetAt <= now) buckets.delete(k);
       }
-      // Still full of live buckets? Fail open rather than evicting active
-      // counters (an attacker filling the map shouldn't lock everyone out).
-      if (buckets.size >= MAX_BUCKETS) return { ok: true, retryAfterSeconds: 0 };
+      if (buckets.size >= MAX_BUCKETS) {
+        const oldestKey = buckets.keys().next().value as string | undefined;
+        if (oldestKey) buckets.delete(oldestKey);
+      }
     }
     buckets.set(key, { count: 1, resetAt: now + windowMs });
     return { ok: true, retryAfterSeconds: 0 };
@@ -37,7 +38,9 @@ export function rateLimit(key: string, limit: number, windowMs: number): RateLim
 }
 
 export function clientIpFromHeaders(headers: Headers): string {
+  const realIp = headers.get("x-real-ip")?.trim();
+  if (realIp) return realIp;
   const forwarded = headers.get("x-forwarded-for");
-  if (forwarded) return forwarded.split(",")[0].trim();
-  return headers.get("x-real-ip") || "unknown";
+  if (forwarded) return forwarded.split(",").at(-1)?.trim() || "unknown";
+  return "unknown";
 }

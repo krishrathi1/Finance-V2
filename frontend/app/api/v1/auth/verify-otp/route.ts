@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
+import { createPasswordResetToken } from '@/lib/auth-utils';
 
 export async function POST(request: NextRequest) {
   try {
@@ -16,18 +17,15 @@ export async function POST(request: NextRequest) {
     const users = await query('SELECT * FROM users WHERE email = ?', [email]);
 
     if (!Array.isArray(users) || users.length === 0) {
-      return NextResponse.json(
-        { detail: 'User not found' },
-        { status: 404 }
-      );
+      return NextResponse.json({ detail: 'Invalid or expired OTP' }, { status: 401 });
     }
 
     const user = users[0] as any;
 
     // Find valid OTP
     const otpRecords = await query(
-      'SELECT * FROM password_reset_tokens WHERE user_id = ? AND otp = ? AND is_used = false AND expires_at > NOW() ORDER BY created_at DESC LIMIT 1',
-      [user.id, otp]
+      'SELECT * FROM password_reset_tokens WHERE user_id = ? AND is_used = false AND expires_at > NOW() ORDER BY created_at DESC LIMIT 1',
+      [user.id]
     );
 
     if (!Array.isArray(otpRecords) || otpRecords.length === 0) {
@@ -38,12 +36,19 @@ export async function POST(request: NextRequest) {
     }
 
     const otpRecord = otpRecords[0] as any;
+    if (String(otpRecord.otp) !== String(otp)) {
+      await query(
+        'UPDATE password_reset_tokens SET failed_attempts = failed_attempts + 1, is_used = (failed_attempts + 1 >= 5) WHERE id = ?',
+        [otpRecord.id]
+      );
+      return NextResponse.json({ detail: 'Invalid or expired OTP' }, { status: 401 });
+    }
 
     // Mark OTP as used
     await query('UPDATE password_reset_tokens SET is_used = true WHERE id = ?', [otpRecord.id]);
 
     // Return a temporary reset token (valid for 5 minutes)
-    const resetToken = Buffer.from(`${user.id}:${Date.now()}`).toString('base64');
+    const resetToken = await createPasswordResetToken(user.id, otpRecord.id);
 
     return NextResponse.json(
       {

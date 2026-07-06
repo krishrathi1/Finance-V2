@@ -771,7 +771,7 @@ export async function competitorVerdict(
     "Be direct and opinionated. No markdown.";
 
   if (isGeminiConfigured()) {
-    const raw = await generateText(buildChatPrompt(symbol, question, {}));
+    const raw = await generateText(question);
     if (raw) {
       const parsed = extractJson(raw);
       if (parsed && typeof parsed === "object" && !Array.isArray(parsed) && parsed.verdict) {
@@ -824,19 +824,19 @@ export async function earningsTldr(
 
   const fmtQ = (q: AnyObj): string => {
     const rev = q.revenue ?? q.totalRevenue ?? 0;
-    const profit = q.profit ?? q.netIncome ?? q.netProfit ?? 0;
+    const profit = q.netProfit ?? q.profit ?? q.netIncome ?? 0;
     const period = q.period ?? q.date ?? "?";
     const revG = q.totalRevenueGrowthPct ?? q.revenueGrowth;
-    const niG = q.niGrowthPct ?? q.netIncomeGrowth;
+    const niG = q.netProfitGrowthPct ?? q.niGrowthPct ?? q.netIncomeGrowth;
     let gText = "";
     if (revG !== null && revG !== undefined) {
       const v = Number(revG);
-      const shown = Math.round((Math.abs(v) < 5 ? v * 100 : v) * 10) / 10;
+      const shown = Math.round(v * 10) / 10;
       gText += ` RevGrowth=${shown}%`;
     }
     if (niG !== null && niG !== undefined) {
       const v = Number(niG);
-      const shown = Math.round((Math.abs(v) < 5 ? v * 100 : v) * 10) / 10;
+      const shown = Math.round(v * 10) / 10;
       gText += ` ProfitGrowth=${shown}%`;
     }
     return `${period}: Revenue=${intComma(Number(rev) || 0)}, NetProfit=${intComma(Number(profit) || 0)}${gText}`;
@@ -858,7 +858,7 @@ export async function earningsTldr(
     "Be direct. No markdown. Numbers in Indian format (Cr, L).";
 
   if (isGeminiConfigured()) {
-    const raw = await generateText(buildChatPrompt(symbol, question, {}));
+    const raw = await generateText(question);
     if (raw) {
       const parsed = extractJson(raw);
       if (parsed && typeof parsed === "object" && !Array.isArray(parsed) && parsed.bullets) {
@@ -870,7 +870,7 @@ export async function earningsTldr(
 
   // Rule-based fallback.
   const revenues = recent.map((q) => toFloatDefault(asObj(q).revenue ?? asObj(q).totalRevenue, 0));
-  const profits = recent.map((q) => toFloatDefault(asObj(q).profit ?? asObj(q).netIncome, 0));
+  const profits = recent.map((q) => toFloatDefault(asObj(q).netProfit ?? asObj(q).profit ?? asObj(q).netIncome, 0));
   const revTrend = revenues.length >= 2 && revenues[0] > revenues[revenues.length - 1] ? "growing" : "declining";
   const profitTrend = profits.length >= 2 && profits[0] > profits[profits.length - 1] ? "improving" : "under pressure";
   // toneColor / trend retained for parity with Python output, surfaced via the object below.
@@ -1182,7 +1182,7 @@ export async function portfolioRisk(
   recommendations: string[];
   source: "gemini" | "fallback";
 }> {
-  const list = asArr(holdings);
+  const list = asArr(holdings).slice(0, 20);
   if (!list.length) {
     return {
       overallRisk: "",
@@ -1217,7 +1217,7 @@ export async function portfolioRisk(
     "Respond with ONLY raw JSON, no markdown.";
 
   if (isGeminiConfigured()) {
-    const raw = await generateText(buildChatPrompt("PORTFOLIO", prompt, {}));
+    const raw = await generateText(prompt);
     if (raw) {
       const parsed = extractJson(raw);
       if (parsed && typeof parsed === "object" && !Array.isArray(parsed) && parsed.summary) {
@@ -1352,7 +1352,7 @@ export async function portfolioRoast(
     "Be opinionated, specific, and direct. No markdown.";
 
   if (isGeminiConfigured()) {
-    const raw = await generateText(buildChatPrompt("PORTFOLIO", prompt, {}));
+    const raw = await generateText(prompt);
     if (raw) {
       const parsed = extractJson(raw);
       if (parsed && typeof parsed === "object" && !Array.isArray(parsed) && parsed.roast) {
@@ -1519,7 +1519,7 @@ export async function ipoAiAnalysis(
     "}";
 
   if (isGeminiConfigured()) {
-    const raw = await generateText(buildChatPrompt(symbol, prompt, {}));
+    const raw = await generateText(prompt);
     if (raw) {
       const parsed = extractJson(raw);
       const required = ["verdict", "summary", "keyStrengths", "keyRisks", "listingOutlook", "quickTake"];
@@ -1584,11 +1584,15 @@ export async function parseScreenerQuery(
     `Query: "${query}"`;
 
   if (isGeminiConfigured()) {
-    const raw = await generateText(buildChatPrompt("SCREENER", prompt, {}));
+    const raw = await generateText(prompt);
     if (raw) {
-      // Note: screener uses a NON-nested object regex (mirrors Python r"\{[^{}]*\}").
-      const parsed = extractJson(raw, /\{[^{}]*\}/);
-      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      const parsed = extractJson(raw);
+      if (
+        parsed &&
+        typeof parsed === "object" &&
+        !Array.isArray(parsed) &&
+        Object.keys(parsed).length > 0
+      ) {
         return { filters: parsed, source: "gemini" };
       }
     }

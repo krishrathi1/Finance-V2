@@ -179,8 +179,10 @@ function num(value: unknown): number | null {
 function periodLabel(item: any): string {
   const to = String(item?.re_to_dt ?? "").trim();
   const from = String(item?.re_from_dt ?? "").trim();
-  if (to && from) return `${from} to ${to}`;
-  return to || from || "";
+  const raw = to || from;
+  if (!raw) return "";
+  const parsed = Date.parse(raw);
+  return Number.isNaN(parsed) ? raw : new Date(parsed).toISOString().slice(0, 10);
 }
 
 export async function getNseQuarterlyResults(base: string): Promise<QuarterlyResults | null> {
@@ -224,7 +226,7 @@ export async function getNseQuarterlyResults(base: string): Promise<QuarterlyRes
         interestEarned: num(item.re_int_new),
         otherIncome: num(item.re_oth_inc_new),
         expenses: num(item.re_oth_tot_exp),
-        interestExpended: num(item.re_int_new),
+        interestExpended: num(item.re_int_exp ?? item.re_int_expended),
         operatingExpenses: num(item.re_oth_exp),
         depreciations: num(item.re_depr_und_exp),
         profitBeforeTax: pbt,
@@ -239,8 +241,10 @@ export async function getNseQuarterlyResults(base: string): Promise<QuarterlyRes
 
     // Keep the last ~8 quarters. The feed is generally newest-first, so the
     // "last 8" are the leading 8 entries; preserve feed order otherwise.
-    const summaryTrim = summary.slice(0, 8);
-    const detailedTrim = detailed.slice(0, 8);
+    const byPeriod = (a: { period: string }, b: { period: string }) =>
+      Date.parse(a.period) - Date.parse(b.period);
+    const summaryTrim = summary.sort(byPeriod).slice(-8);
+    const detailedTrim = detailed.sort(byPeriod).slice(-8);
 
     // The results-comparision feed does not distinguish standalone vs
     // consolidated, so expose the same series under the generic `quarterly`

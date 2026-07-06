@@ -460,9 +460,8 @@ export function finalizeKeyMetrics(
     else if (divYield < 0) out.dividendYield = null;
   }
 
-  if (debtToEquity !== null && debtToEquity > 10) {
-    out.debtToEquity = debtToEquity / 100;
-  }
+  // Provider mappers normalize debt/equity before this stage. Do not guess
+  // that a large but legitimate ratio is percentage-encoded and divide it.
 
   const evSales = num(out.evToSales);
   if (evSales !== null && evSales > 100) {
@@ -975,6 +974,13 @@ export function normalizeShareholding(sh: any): DashboardData["shareholding"] {
 export function backfillQuarterlyFinancials(financials: DashboardData["financials"]): void {
   if (!financials || typeof financials !== "object") return;
   const f = financials as any;
+  const periodTime = (period: string): number => {
+    const normalized = period.split(/\s+to\s+/i).at(-1) || period;
+    const parsed = Date.parse(normalized);
+    return Number.isNaN(parsed) ? 0 : parsed;
+  };
+  const keepLatest = (rows: any[]): any[] =>
+    rows.sort((a, b) => periodTime(String(a.period)) - periodTime(String(b.period))).slice(-5);
 
   // Keep 5 trailing quarters, not 4: scoring.ts's extractGrowthFeatures needs
   // quarterly[len-1] vs quarterly[len-5] (a trailing-4-quarter YoY comparison)
@@ -989,7 +995,7 @@ export function backfillQuarterlyFinancials(financials: DashboardData["financial
       if (!period || (revenue === null && profit === null)) continue;
       cleaned.push({ period, revenue, profit });
     }
-    return cleaned.slice(-5);
+    return keepLatest(cleaned);
   };
 
   const summaryFromDetails = (rows: any[]): any[] => {
@@ -1006,7 +1012,7 @@ export function backfillQuarterlyFinancials(financials: DashboardData["financial
         profit: profit !== null ? round(profit, 2) : null,
       });
     }
-    return summary.slice(-5);
+    return keepLatest(summary);
   };
 
   f.quarterlyConsolidated = cleanSummary(f.quarterlyConsolidated || []);

@@ -149,19 +149,13 @@ async function getFmpCandles(
   }
 }
 
-/** Convert "YYYY-MM-DD" to a short "Mon yy" label (e.g. "Mar 24"). Falls back to the raw string. */
+/** Normalize a provider date to ISO for stable cross-provider ordering. */
 function periodLabel(dateStr: string): string {
   const s = String(dateStr || "").trim();
   if (!s) return s;
   const parsed = Date.parse(s);
   if (!Number.isFinite(parsed)) return s;
-  const d = new Date(parsed);
-  const months = [
-    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-  ];
-  const yy = String(d.getUTCFullYear()).slice(-2);
-  return `${months[d.getUTCMonth()]} ${yy}`;
+  return new Date(parsed).toISOString().slice(0, 10);
 }
 
 /**

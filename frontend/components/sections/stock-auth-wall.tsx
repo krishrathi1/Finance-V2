@@ -1,12 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-
-import {
-  AUTH_SESSION_CHANGED_EVENT,
-  AUTH_STORAGE_KEY,
-  requestAuthPanel,
-} from "@/lib/auth";
+import { requestAuthPanel } from "@/lib/auth";
+import { useAuth } from "@/hooks/useAuth";
 
 const unlockItems = [
   "Smart Score",
@@ -23,33 +18,9 @@ const unlockItems = [
 ];
 
 export function StockAuthWall({ children }: { children: React.ReactNode }) {
-  const [isSignedIn, setIsSignedIn] = useState(false);
-
-  useEffect(() => {
-    const checkSession = () => {
-      try {
-        const raw = localStorage.getItem(AUTH_STORAGE_KEY);
-        if (!raw) {
-          setIsSignedIn(false);
-          return;
-        }
-        const parsed = JSON.parse(raw) as { name?: string };
-        setIsSignedIn(Boolean(parsed?.name));
-      } catch {
-        setIsSignedIn(false);
-      }
-    };
-
-    checkSession();
-    window.addEventListener(AUTH_SESSION_CHANGED_EVENT, checkSession);
-    window.addEventListener("storage", checkSession);
-    return () => {
-      window.removeEventListener(AUTH_SESSION_CHANGED_EVENT, checkSession);
-      window.removeEventListener("storage", checkSession);
-    };
-  }, []);
-
-  if (isSignedIn) return <>{children}</>;
+  const { user, loading } = useAuth();
+  if (loading) return <div className="h-56 animate-pulse rounded-2xl border border-border/55 bg-panel/45" />;
+  if (user) return <>{children}</>;
 
   return (
     <section className="relative overflow-hidden rounded-2xl border border-border/55 bg-panel/45 p-5 backdrop-blur-md sm:p-6">

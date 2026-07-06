@@ -21,7 +21,7 @@ function formatDate(value: string) {
 
 function formatTarget(value: number | null | undefined) {
   if (value === null || value === undefined || !Number.isFinite(value)) return "-";
-  return `Rs ${value.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
+  return `₹${value.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 }
 
 export function BrokerageSummary({ brokerage }: { brokerage?: BrokeragePayload }) {

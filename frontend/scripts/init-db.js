@@ -100,12 +100,20 @@ async function initializeDatabase() {
         id INT AUTO_INCREMENT PRIMARY KEY,
         user_id INT NOT NULL,
         otp VARCHAR(6) NOT NULL,
+        failed_attempts INT NOT NULL DEFAULT 0,
         is_used BOOLEAN DEFAULT FALSE,
         expires_at TIMESTAMP NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
       )
     `);
+    try {
+      await connection.execute(
+        'ALTER TABLE password_reset_tokens ADD COLUMN failed_attempts INT NOT NULL DEFAULT 0 AFTER otp'
+      );
+    } catch (error) {
+      if (error.code !== 'ER_DUP_FIELDNAME') throw error;
+    }
     console.log('✓ password_reset_tokens table created');
 
     console.log('\n✅ Database initialized successfully!');

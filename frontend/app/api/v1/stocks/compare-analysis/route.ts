@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { compareAnalysis } from '@/lib/backend/ai/features';
+import { buildDashboard } from '@/lib/backend/dashboard';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -10,8 +11,15 @@ export async function POST(request: NextRequest) {
 
     const symbolA = String(symbol_a ?? '').trim();
     const symbolB = String(symbol_b ?? '').trim();
+    if (!/^[A-Z0-9&.-]{1,20}$/i.test(symbolA) || !/^[A-Z0-9&.-]{1,20}$/i.test(symbolB)) {
+      return NextResponse.json({ detail: 'Two valid stock symbols are required' }, { status: 400 });
+    }
 
-    const result = await compareAnalysis(symbolA, symbolB);
+    const [contextA, contextB] = await Promise.all([
+      buildDashboard(symbolA),
+      buildDashboard(symbolB),
+    ]);
+    const result = await compareAnalysis(symbolA, symbolB, { contextA, contextB });
 
     return NextResponse.json({
       answer: result.answer,

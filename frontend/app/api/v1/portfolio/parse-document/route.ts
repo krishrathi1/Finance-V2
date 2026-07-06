@@ -9,6 +9,9 @@ type ParsedHolding = {
   buyPrice: number;
 };
 
+const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
+const MAX_EXTRACTED_TEXT = 200_000;
+
 /**
  * Extract raw text from a PDF buffer using pdf-parse v2 (PDFParse class API).
  */
@@ -178,37 +181,35 @@ export async function POST(request: NextRequest) {
     const blob = file as File;
     const contentType = String(blob.type || "").toLowerCase();
     const fileName = String(blob.name || "").toLowerCase();
-
-    const arrayBuffer = await blob.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-
-    let text = "";
-
     const isPdf = contentType.includes("application/pdf") || fileName.endsWith(".pdf");
     const isDocx =
       contentType.includes("officedocument.wordprocessingml") ||
-      contentType.includes("application/msword") ||
-      fileName.endsWith(".docx") ||
-      fileName.endsWith(".doc");
+      fileName.endsWith(".docx");
+
+    if (blob.size > MAX_UPLOAD_BYTES) {
+      return NextResponse.json(
+        { holdings: [], detail: "File must be 5 MB or smaller" },
+        { status: 413 }
+      );
+    }
+    if (!isPdf && !isDocx) {
+      return NextResponse.json(
+        { holdings: [], detail: "Only PDF and DOCX files are supported" },
+        { status: 415 }
+      );
+    }
+
+    const arrayBuffer = await blob.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    let text = "";
 
     if (isPdf) {
       text = await extractPdfText(buffer);
     } else if (isDocx) {
       text = await extractDocxText(buffer);
-    } else {
-      // Unknown type: attempt both, falling back gracefully.
-      try {
-        text = await extractPdfText(buffer);
-      } catch {
-        try {
-          text = await extractDocxText(buffer);
-        } catch {
-          text = "";
-        }
-      }
     }
 
-    const holdings = extractHoldings(text);
+    const holdings = extractHoldings(text.slice(0, MAX_EXTRACTED_TEXT));
     return NextResponse.json({ holdings });
   } catch (error) {
     console.error("Portfolio parse-document error:", error);

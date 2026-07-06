@@ -70,12 +70,12 @@ export function NewsSection({ symbol, news }: { symbol: string; news: NewsItem[]
                   <Badge
                     variant="outline"
                     className={`px-2 py-1 text-[11px] uppercase tracking-[0.18em] ${
-                      item.sentimentScore >= 0.55
+                      Number.isFinite(item.sentimentScore) && item.sentimentScore >= 0.55
                         ? "border-success/30 bg-success/10 text-success"
                         : "border-danger/30 bg-danger/10 text-danger"
                     }`}
                   >
-                    Sentiment {(item.sentimentScore * 100).toFixed(0)}%
+                    Sentiment {Number.isFinite(item.sentimentScore) ? `${(item.sentimentScore * 100).toFixed(0)}%` : "—"}
                   </Badge>
                 </div>
                 <p className="mt-1 text-xs text-muted">

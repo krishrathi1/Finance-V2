@@ -3,6 +3,8 @@ import type { DashboardData, ScreenerFilters, ScreenerResult } from "@/lib/types
 const INTERNAL_BASE = normalizeBaseUrl(process.env.INTERNAL_API_BASE);
 const PUBLIC_BASE = normalizeBaseUrl(process.env.NEXT_PUBLIC_API_BASE || '');
 const memoryCache = new Map<string, { at: number; data: unknown }>();
+const MAX_MEMORY_CACHE_ENTRIES = 250;
+const MAX_STALE_AGE_MS = 10 * 60_000;
 
 export type DashboardEnvelope = {
   data: DashboardData;
@@ -51,11 +53,23 @@ function getFreshCache<T>(key: string, maxAgeMs: number): T | null {
 
 function getStaleCache<T>(key: string): T | null {
   const hit = memoryCache.get(key);
-  return hit ? (hit.data as T) : null;
+  if (!hit || Date.now() - hit.at > MAX_STALE_AGE_MS) {
+    if (hit) memoryCache.delete(key);
+    return null;
+  }
+  return hit.data as T;
 }
 
 function setCache<T>(key: string, data: T) {
-  memoryCache.set(key, { at: Date.now(), data });
+  const now = Date.now();
+  for (const [cacheKey, entry] of memoryCache) {
+    if (now - entry.at > MAX_STALE_AGE_MS) memoryCache.delete(cacheKey);
+  }
+  if (!memoryCache.has(key) && memoryCache.size >= MAX_MEMORY_CACHE_ENTRIES) {
+    const oldestKey = memoryCache.keys().next().value as string | undefined;
+    if (oldestKey) memoryCache.delete(oldestKey);
+  }
+  memoryCache.set(key, { at: now, data });
 }
 
 function isAbortError(error: unknown) {
@@ -110,7 +124,7 @@ export async function fetchDashboardEnvelope(
     }
   }
 
-  if (stale) return stale;
+  if (stale) return { ...stale, cached: true, stale: true };
   if (isAbortError(lastError)) {
     throw new Error("Dashboard request timed out. Please retry in a few seconds.");
   }
@@ -271,6 +285,7 @@ export async function fetchTickerTape(symbols: string[] = [], options: { force?:
     }
     const payload = await res.json();
     const rows = (payload.data || []) as TickerTapeRow[];
+    if (!rows.length && stale?.length) return stale;
     setCache(key, rows);
     return rows;
   } catch (err) {
@@ -396,6 +411,7 @@ export async function fetchSwotAnalysis(symbol: string, options: { refresh?: boo
   bullCase: string;
   bearCase: string;
   generatedAt?: number;
+  isFallback: boolean;
 }> {
   const fallback = {
     strengths: ["Strong brand presence in the sector", "Consistent revenue growth track record", "Healthy balance sheet with low debt"],
@@ -403,7 +419,8 @@ export async function fetchSwotAnalysis(symbol: string, options: { refresh?: boo
     opportunities: ["Expanding into new geographies", "Growing digital adoption in the sector", "Potential for strategic acquisitions"],
     threats: ["Intensifying competition from global players", "Regulatory changes could impact operations", "Currency fluctuation risks"],
     bullCase: "If the company successfully executes its expansion strategy and maintains current margins, the stock could see meaningful upside driven by revenue growth and improving return ratios.",
-    bearCase: "Prolonged margin compression from rising costs, combined with slowing demand or regulatory headwinds, could limit near-term upside and pressure valuations."
+    bearCase: "Prolonged margin compression from rising costs, combined with slowing demand or regulatory headwinds, could limit near-term upside and pressure valuations.",
+    isFallback: true
   };
 
   try {
@@ -419,6 +436,7 @@ export async function fetchSwotAnalysis(symbol: string, options: { refresh?: boo
       bullCase: typeof payload.bullCase === "string" ? payload.bullCase : fallback.bullCase,
       bearCase: typeof payload.bearCase === "string" ? payload.bearCase : fallback.bearCase,
       generatedAt: typeof payload.generatedAt === "number" ? payload.generatedAt : undefined,
+      isFallback: payload.source === "fallback",
     };
   } catch {
     return fallback;

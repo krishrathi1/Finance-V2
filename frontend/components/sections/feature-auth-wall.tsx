@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-
-import { AUTH_SESSION_CHANGED_EVENT, AUTH_STORAGE_KEY, requestAuthPanel } from "@/lib/auth";
+import { requestAuthPanel } from "@/lib/auth";
+import { useAuth } from "@/hooks/useAuth";
 
 type FeatureAuthWallProps = {
   children: React.ReactNode;
@@ -19,33 +18,9 @@ export function FeatureAuthWall({
   ctaLabel = "Sign up to unlock",
   points = [],
 }: FeatureAuthWallProps) {
-  const [isSignedIn, setIsSignedIn] = useState(false);
-
-  useEffect(() => {
-    const sync = () => {
-      try {
-        const raw = localStorage.getItem(AUTH_STORAGE_KEY);
-        if (!raw) {
-          setIsSignedIn(false);
-          return;
-        }
-        const parsed = JSON.parse(raw) as { name?: string };
-        setIsSignedIn(Boolean(parsed?.name));
-      } catch {
-        setIsSignedIn(false);
-      }
-    };
-
-    sync();
-    window.addEventListener(AUTH_SESSION_CHANGED_EVENT, sync);
-    window.addEventListener("storage", sync);
-    return () => {
-      window.removeEventListener(AUTH_SESSION_CHANGED_EVENT, sync);
-      window.removeEventListener("storage", sync);
-    };
-  }, []);
-
-  if (isSignedIn) return <>{children}</>;
+  const { user, loading } = useAuth();
+  if (loading) return <div className="h-40 animate-pulse rounded-2xl border border-border/55 bg-panel/45" />;
+  if (user) return <>{children}</>;
 
   return (
     <section className="relative overflow-hidden rounded-2xl border border-border/55 bg-panel/45 p-5 backdrop-blur-md sm:p-6">

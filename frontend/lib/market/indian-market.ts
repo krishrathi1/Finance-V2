@@ -734,7 +734,7 @@ export async function getLiveIndexTicker(indexName: string): Promise<TickerRow |
 }
 
 export async function getLiveTickerRows(requestedSymbols: string[], options: { refresh?: boolean } = {}) {
-  const requested = requestedSymbols.map((symbol) => symbol.trim()).filter(Boolean);
+  const requested = requestedSymbols.map((symbol) => symbol.trim()).filter(Boolean).slice(0, 50);
   if (!requested.length) {
     return (await getLiveTickerSnapshot(Boolean(options.refresh))).rows;
   }

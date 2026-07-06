@@ -51,6 +51,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ detail: 'Not authenticated' }, { status: 401 });
     }
 
+    if (!Boolean(user.verified_email)) {
+      return NextResponse.json(
+        { detail: 'Verify your email before requesting premium access' },
+        { status: 403 }
+      );
+    }
+
     if (user.tier === 'premium') {
       return NextResponse.json({ detail: 'Account is already premium' }, { status: 400 });
     }

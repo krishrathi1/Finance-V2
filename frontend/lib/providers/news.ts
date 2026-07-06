@@ -1,5 +1,3 @@
-import fs from 'fs';
-import path from 'path';
 
 export interface NewsArticle {
   title: string;
@@ -15,23 +13,14 @@ const MARKET_PLACEHOLDER = 'https://images.unsplash.com/photo-1611974717482-98aa
 export class NewsProvider {
   private apiKey: string | null = process.env.NEWS_API_KEY || null;
   private theNewsApiKey: string | null = process.env.THE_NEWS_API_KEY || null;
-  private cacheFile = path.join(process.cwd(), 'cache', 'market_news.json');
+  private cache: { date: string; articles: NewsArticle[] } | null = null;
 
   async getMarketNews(): Promise<NewsArticle[]> {
     const today = new Date().toISOString().split('T')[0];
     
     // 1. Try Cache First
-    try {
-      if (fs.existsSync(this.cacheFile)) {
-        const cacheRaw = fs.readFileSync(this.cacheFile, 'utf8');
-        const cache = JSON.parse(cacheRaw);
-        if (cache.date === today && cache.articles?.length > 0) {
-          console.log(`[NewsProvider] Serving cached market news for ${today}`);
-          return cache.articles;
-        }
-      }
-    } catch (e) {
-      console.error('[NewsProvider] Cache read error:', e);
+    if (this.cache?.date === today && this.cache.articles.length > 0) {
+      return this.cache.articles;
     }
 
     // 2. Fetch fresh data
@@ -93,20 +82,7 @@ export class NewsProvider {
       new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
     );
 
-    // 5. Save to Cache
-    try {
-      const cacheDir = path.dirname(this.cacheFile);
-      if (!fs.existsSync(cacheDir)) {
-        fs.mkdirSync(cacheDir, { recursive: true });
-      }
-      fs.writeFileSync(this.cacheFile, JSON.stringify({
-        date: today,
-        articles: finalArticles
-      }), 'utf8');
-      console.log(`[NewsProvider] Market news cached for ${today}`);
-    } catch (e) {
-      console.error('[NewsProvider] Cache write error:', e);
-    }
+    this.cache = { date: today, articles: finalArticles };
 
     return finalArticles;
   }
@@ -120,12 +96,15 @@ export class NewsProvider {
       '"RBI Policy" | "Economy" | "Inflation"'
     ];
     const domains = 'moneycontrol.com,economictimes.indiatimes.com,livemint.com,reuters.com,businesstoday.in,ndtvprofit.com';
+    const publishedAfter = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .slice(0, 10);
     
     try {
       const results = await Promise.all(
         queries.map(async (query) => {
           try {
-            const url = `https://api.thenewsapi.com/v1/news/all?search=${encodeURIComponent(query)}&locale=in&language=en&categories=business&domains=${domains}&published_after=2026-04-12&sort=published_at&limit=8&api_token=${this.theNewsApiKey}`;
+            const url = `https://api.thenewsapi.com/v1/news/all?search=${encodeURIComponent(query)}&locale=in&language=en&categories=business&domains=${domains}&published_after=${publishedAfter}&sort=published_at&limit=8&api_token=${this.theNewsApiKey}`;
             const response = await fetch(url, { next: { revalidate: 3600 } });
             if (!response.ok) return [];
             const data = await response.json();
@@ -294,9 +273,10 @@ export class NewsProvider {
       let summary = description.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
       if (summary.length < 10) summary = title;
 
+      const publishedDate = new Date(pubDate);
       articles.push({
         title, source, url: link,
-        publishedAt: new Date(pubDate).toISOString(),
+        publishedAt: Number.isNaN(publishedDate.getTime()) ? new Date().toISOString() : publishedDate.toISOString(),
         summary: summary.substring(0, 250),
         imageUrl: imageUrl
       });

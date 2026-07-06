@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { sendOtpEmail } from '@/lib/email';
+import { randomInt } from 'node:crypto';
 
 function generateOTP(): string {
-  return Math.floor(100000 + Math.random() * 900000).toString();
+  return randomInt(100000, 1000000).toString();
 }
 
 export async function POST(request: NextRequest) {
@@ -34,6 +35,11 @@ export async function POST(request: NextRequest) {
     // Store OTP in database (expires in 10 minutes)
     const expiresAt = new Date();
     expiresAt.setMinutes(expiresAt.getMinutes() + 10);
+
+    await query(
+      'UPDATE password_reset_tokens SET is_used = true WHERE user_id = ? AND is_used = false',
+      [user.id]
+    );
 
     await query(
       'INSERT INTO password_reset_tokens (user_id, otp, expires_at) VALUES (?, ?, ?)',

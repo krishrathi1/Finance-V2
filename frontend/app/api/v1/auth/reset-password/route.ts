@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
-import { hashPassword } from '@/lib/auth-utils';
+import { hashPassword, verifyPasswordResetToken } from '@/lib/auth-utils';
 
 export async function POST(request: NextRequest) {
   try {
@@ -20,9 +20,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (newPassword.length < 6) {
+    if (newPassword.length < 8 || newPassword.length > 128) {
       return NextResponse.json(
-        { detail: 'Password must be at least 6 characters' },
+        { detail: 'Password must be between 8 and 128 characters' },
         { status: 400 }
       );
     }
@@ -32,42 +32,27 @@ export async function POST(request: NextRequest) {
 
     if (!Array.isArray(users) || users.length === 0) {
       return NextResponse.json(
-        { detail: 'User not found' },
-        { status: 404 }
+        { detail: 'Invalid reset token' },
+        { status: 401 }
       );
     }
 
     const user = users[0] as any;
 
-    // Verify reset token (simple validation - in production use JWT)
-    try {
-      const decoded = Buffer.from(resetToken, 'base64').toString('utf-8');
-      const [userId, timestamp] = decoded.split(':');
-
-      if (parseInt(userId) !== user.id) {
-        throw new Error('Invalid user ID in token');
-      }
-
-      // Check if token is still valid (5 minutes). A malformed/tampered
-      // timestamp must fail closed (reject), not silently pass the expiry
-      // check — `NaN > x` is always false, which previously let a bad
-      // timestamp bypass expiry entirely.
-      const issuedTime = parseInt(timestamp, 10);
-      if (!Number.isFinite(issuedTime)) {
-        throw new Error('Invalid timestamp in token');
-      }
-      const currentTime = Date.now();
-      if (currentTime - issuedTime > 5 * 60 * 1000) {
-        return NextResponse.json(
-          { detail: 'Reset token has expired' },
-          { status: 401 }
-        );
-      }
-    } catch (error) {
+    const verifiedToken = await verifyPasswordResetToken(resetToken);
+    if (!verifiedToken || verifiedToken.userId !== user.id) {
       return NextResponse.json(
         { detail: 'Invalid reset token' },
         { status: 401 }
       );
+    }
+
+    const verifiedOtpRows = await query(
+      'SELECT id FROM password_reset_tokens WHERE id = ? AND user_id = ? AND is_used = true AND expires_at > NOW() LIMIT 1',
+      [verifiedToken.otpRecordId, user.id]
+    );
+    if (!Array.isArray(verifiedOtpRows) || verifiedOtpRows.length === 0) {
+      return NextResponse.json({ detail: 'Invalid reset token' }, { status: 401 });
     }
 
     // Hash new password
@@ -78,6 +63,7 @@ export async function POST(request: NextRequest) {
 
     // Clear all password reset tokens for this user
     await query('DELETE FROM password_reset_tokens WHERE user_id = ?', [user.id]);
+    await query('DELETE FROM refresh_tokens WHERE user_id = ?', [user.id]);
 
     return NextResponse.json(
       { detail: 'Password reset successfully' },

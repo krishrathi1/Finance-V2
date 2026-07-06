@@ -26,6 +26,7 @@ type SwotData = {
   bullCase: string;
   bearCase: string;
   generatedAt?: number;
+  isFallback: boolean;
 };
 
 const QUADRANT_CONFIG = {
@@ -80,7 +81,7 @@ function ShimmerBlock({ lines = 3 }: { lines?: number }) {
         <div
           key={i}
           className="h-3.5 animate-pulse rounded-md bg-border/40"
-          style={{ width: `${70 + Math.random() * 25}%` }}
+          style={{ width: "82%" }}
         />
       ))}
     </div>
@@ -197,7 +198,9 @@ export function SwotAnalysis({ symbol }: { symbol: string }) {
           <div>
             <h3 className="text-lg font-bold tracking-tight">SWOT Analysis</h3>
             <p className="text-xs font-medium text-muted/60">
-              AI-driven strategic intelligence • {data?.generatedAt ? timeAgo(data.generatedAt) : "live"}
+              {data?.isFallback
+                ? "Sample analysis — live AI is unavailable"
+                : `AI-driven strategic intelligence • ${data?.generatedAt ? timeAgo(data.generatedAt) : "live"}`}
             </p>
           </div>
         </div>

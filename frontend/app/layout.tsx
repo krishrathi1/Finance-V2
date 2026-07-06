@@ -1,6 +1,5 @@
 import type { Metadata, Viewport } from "next";
 import Link from "next/link";
-import { Manrope, Space_Grotesk } from "next/font/google";
 import { Suspense } from "react";
 
 import { AuthProvider } from "@/hooks/useAuth";
@@ -15,9 +14,6 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { OG_IMAGE_PATH, SITE_DESCRIPTION, SITE_NAME, SITE_TITLE, SITE_URL } from "@/lib/seo";
 
 import "./globals.css";
-
-const manrope = Manrope({ subsets: ["latin"], variable: "--font-manrope" });
-const space = Space_Grotesk({ subsets: ["latin"], variable: "--font-space" });
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -105,9 +101,6 @@ export const metadata: Metadata = {
       "max-snippet": -1,
     },
   },
-  verification: {
-    google: "add-your-google-search-console-verification-code-here",
-  },
   other: {
     "theme-color": "#f59e0b",
   },
@@ -189,7 +182,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           }}
         />
       </head>
-      <body className={`${manrope.variable} ${space.variable} min-h-screen font-[var(--font-manrope)]`}>
+      <body className="min-h-screen font-[var(--font-manrope)]">
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
           <AuthProvider>
             <ScrollProgress />

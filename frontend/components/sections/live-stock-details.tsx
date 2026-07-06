@@ -18,6 +18,7 @@ import { ReturnsCalculator } from "@/components/sections/returns-calculator";
 import { ReturnsPanel } from "@/components/sections/returns-panel";
 import { RiskScore } from "@/components/sections/risk-score";
 import { ShareholdingSection } from "@/components/sections/shareholding-section";
+import { QualityScore } from "@/components/sections/quality-score";
 import { SmartScore } from "@/components/sections/smart-score";
 import { StockAuthWall } from "@/components/sections/stock-auth-wall";
 import { SwotAnalysis } from "@/components/sections/swot-analysis";
@@ -162,6 +163,8 @@ export function LiveStockDetails({ initialData, symbol, exchange }: { initialDat
             label={riskScore.label}
           />
         </div>
+
+        <QualityScore metrics={data.metrics} financials={data.financials} />
 
         <section id="swot">
           <SwotAnalysis symbol={symbol} />

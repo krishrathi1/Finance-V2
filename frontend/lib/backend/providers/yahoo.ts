@@ -110,7 +110,7 @@ function toPercent(value: unknown): number | null {
   return round2(n * 100);
 }
 
-/** Format a unix timestamp / date string as a "Mon yy" period label (e.g. "Mar 24"). */
+/** Format a unix timestamp / date string as an ISO date for stable ordering. */
 function periodLabel(value: unknown): string | null {
   const n = toFloat(value);
   let d: Date;
@@ -122,9 +122,7 @@ function periodLabel(value: unknown): string | null {
     return null;
   }
   if (Number.isNaN(d.getTime())) return null;
-  const month = d.toLocaleString("en-US", { month: "short", timeZone: "UTC" });
-  const year = String(d.getUTCFullYear()).slice(-2);
-  return `${month} ${year}`;
+  return d.toISOString().slice(0, 10);
 }
 
 /**
@@ -532,6 +530,7 @@ function mapFinancials(qs: any): ProviderBundle["financials"] {
       quarterly.push({ period, revenue: toCrore(r?.revenue), profit: toCrore(r?.earnings) });
     }
   }
+  quarterly.sort((a, b) => Date.parse(a.period) - Date.parse(b.period));
 
   const financials: ProviderBundle["financials"] = {};
   if (quarterly.length) financials.quarterly = quarterly;
