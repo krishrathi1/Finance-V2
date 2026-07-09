@@ -72,6 +72,24 @@ function setCache<T>(key: string, data: T) {
   memoryCache.set(key, { at: now, data });
 }
 
+const inFlight = new Map<string, Promise<unknown>>();
+
+/**
+ * Coalesce concurrent cache-miss calls for the same key into one shared
+ * request. Without this, N simultaneous requests for the same resource (e.g.
+ * the dashboard for RELIANCE loaded from several components at once) each
+ * independently miss the cache and fire their own upstream fetch.
+ */
+function dedupeInFlight<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  const pending = inFlight.get(key);
+  if (pending) return pending as Promise<T>;
+  const promise = fn().finally(() => {
+    inFlight.delete(key);
+  });
+  inFlight.set(key, promise);
+  return promise;
+}
+
 function isAbortError(error: unknown) {
   if (!error) return false;
   if (error instanceof Error && error.name === "AbortError") return true;
@@ -89,46 +107,49 @@ export async function fetchDashboardEnvelope(
   if (fresh) return fresh;
 
   const stale = getStaleCache<DashboardEnvelope>(key);
-  const attempts = force
-    ? [{ timeoutMs: 20_000, refresh: true }]
-    : [
-        { timeoutMs: 15_000, refresh: false },
-        { timeoutMs: 20_000, refresh: true }
-      ];
-  let lastError: unknown = null;
 
-  for (const attempt of attempts) {
-    try {
-      const res = await fetchWithTimeout(
-        getApiUrl(`/${symbol}/dashboard?timeframe=5Y&exchange=${encodeURIComponent(normalizedExchange)}${attempt.refresh ? "&refresh=true" : ""}`),
-        {
-          cache: "no-store"
-        },
-        attempt.timeoutMs
-      );
-      if (!res.ok) {
-        throw new Error(`Dashboard request failed: ${res.status}`);
+  return dedupeInFlight(key, async () => {
+    const attempts = force
+      ? [{ timeoutMs: 20_000, refresh: true }]
+      : [
+          { timeoutMs: 15_000, refresh: false },
+          { timeoutMs: 20_000, refresh: true }
+        ];
+    let lastError: unknown = null;
+
+    for (const attempt of attempts) {
+      try {
+        const res = await fetchWithTimeout(
+          getApiUrl(`/${symbol}/dashboard?timeframe=5Y&exchange=${encodeURIComponent(normalizedExchange)}${attempt.refresh ? "&refresh=true" : ""}`),
+          {
+            cache: "no-store"
+          },
+          attempt.timeoutMs
+        );
+        if (!res.ok) {
+          throw new Error(`Dashboard request failed: ${res.status}`);
+        }
+        const payload = await res.json();
+        const envelope = {
+          data: payload.data as DashboardData,
+          cached: Boolean(payload.cached),
+          stale: Boolean(payload.stale),
+          fallback: Boolean(payload.fallback),
+          warning: typeof payload.warning === "string" ? payload.warning : undefined
+        } satisfies DashboardEnvelope;
+        setCache(key, envelope);
+        return envelope;
+      } catch (error) {
+        lastError = error;
       }
-      const payload = await res.json();
-      const envelope = {
-        data: payload.data as DashboardData,
-        cached: Boolean(payload.cached),
-        stale: Boolean(payload.stale),
-        fallback: Boolean(payload.fallback),
-        warning: typeof payload.warning === "string" ? payload.warning : undefined
-      } satisfies DashboardEnvelope;
-      setCache(key, envelope);
-      return envelope;
-    } catch (error) {
-      lastError = error;
     }
-  }
 
-  if (stale) return { ...stale, cached: true, stale: true };
-  if (isAbortError(lastError)) {
-    throw new Error("Dashboard request timed out. Please retry in a few seconds.");
-  }
-  throw (lastError instanceof Error ? lastError : new Error("Dashboard request failed"));
+    if (stale) return { ...stale, cached: true, stale: true };
+    if (isAbortError(lastError)) {
+      throw new Error("Dashboard request timed out. Please retry in a few seconds.");
+    }
+    throw (lastError instanceof Error ? lastError : new Error("Dashboard request failed"));
+  });
 }
 
 export async function fetchDashboard(symbol: string, options: { exchange?: string } = {}): Promise<DashboardData> {
@@ -277,21 +298,23 @@ export async function fetchTickerTape(symbols: string[] = [], options: { force?:
   if (fresh) return fresh;
 
   const stale = getStaleCache<TickerTapeRow[]>(key);
-  try {
-    const timeoutMs = symbols.length ? (force ? 7000 : 4500) : (force ? 35_000 : 25_000);
-    const res = await fetchWithTimeout(getApiUrl(`/ticker${query}`), { cache: "no-store" }, timeoutMs);
-    if (!res.ok) {
-      throw new Error(`Ticker request failed: ${res.status}`);
+  return dedupeInFlight(key, async () => {
+    try {
+      const timeoutMs = symbols.length ? (force ? 7000 : 4500) : (force ? 35_000 : 25_000);
+      const res = await fetchWithTimeout(getApiUrl(`/ticker${query}`), { cache: "no-store" }, timeoutMs);
+      if (!res.ok) {
+        throw new Error(`Ticker request failed: ${res.status}`);
+      }
+      const payload = await res.json();
+      const rows = (payload.data || []) as TickerTapeRow[];
+      if (!rows.length && stale?.length) return stale;
+      setCache(key, rows);
+      return rows;
+    } catch (err) {
+      if (stale) return stale;
+      throw err;
     }
-    const payload = await res.json();
-    const rows = (payload.data || []) as TickerTapeRow[];
-    if (!rows.length && stale?.length) return stale;
-    setCache(key, rows);
-    return rows;
-  } catch (err) {
-    if (stale) return stale;
-    throw err;
-  }
+  });
 }
 
 export type MarketMoodPayload = {
@@ -318,21 +341,23 @@ export async function fetchMarketMood(options: { force?: boolean } = {}): Promis
 
   const stale = getStaleCache<MarketMoodPayload>(key);
 
-  try {
-    const query = force ? "?refresh=true" : "";
-    const res = await fetchWithTimeout(getApiUrl(`/market-mood${query}`), { cache: "no-store" }, force ? 35_000 : 25_000);
-    if (!res.ok) {
-      throw new Error(`Market mood request failed: ${res.status}`);
+  return dedupeInFlight(key, async () => {
+    try {
+      const query = force ? "?refresh=true" : "";
+      const res = await fetchWithTimeout(getApiUrl(`/market-mood${query}`), { cache: "no-store" }, force ? 35_000 : 25_000);
+      if (!res.ok) {
+        throw new Error(`Market mood request failed: ${res.status}`);
+      }
+      const payload = (await res.json()) as MarketMoodPayload;
+      if (typeof payload.value === "number") {
+        setCache(key, payload);
+      }
+      return payload;
+    } catch (err) {
+      if (stale) return stale;
+      throw err;
     }
-    const payload = (await res.json()) as MarketMoodPayload;
-    if (typeof payload.value === "number") {
-      setCache(key, payload);
-    }
-    return payload;
-  } catch (err) {
-    if (stale) return stale;
-    throw err;
-  }
+  });
 }
 
 type IndexHeatmapPayload = {
@@ -354,33 +379,35 @@ export async function fetchIndexHeatmap(indexName: string, options: { force?: bo
 
   const stale = getStaleCache<IndexHeatmapPayload>(key);
 
-  try {
-    const res = await fetchWithTimeout(getApiUrl(`/index-heatmap${query}`), { cache: "no-store" }, force ? 9000 : 6000);
-    if (!res.ok) {
-      throw new Error(`Index heatmap request failed: ${res.status}`);
-    }
-    const payload = await res.json();
-    const data: IndexHeatmapPayload = {
-      indexName: (payload.indexName || indexName) as string,
-      updatedAt: (payload.updatedAt || "") as string,
-      rows: (payload.rows || []) as Array<{ symbol: string; cmp: number; change: number; changePercent: number; exchange?: "NSE" | "BSE" }>,
-      source: typeof payload.source === "string" ? payload.source : "",
-      constituentCount: typeof payload.constituentCount === "number" ? payload.constituentCount : 0,
-    };
+  return dedupeInFlight(key, async () => {
+    try {
+      const res = await fetchWithTimeout(getApiUrl(`/index-heatmap${query}`), { cache: "no-store" }, force ? 9000 : 6000);
+      if (!res.ok) {
+        throw new Error(`Index heatmap request failed: ${res.status}`);
+      }
+      const payload = await res.json();
+      const data: IndexHeatmapPayload = {
+        indexName: (payload.indexName || indexName) as string,
+        updatedAt: (payload.updatedAt || "") as string,
+        rows: (payload.rows || []) as Array<{ symbol: string; cmp: number; change: number; changePercent: number; exchange?: "NSE" | "BSE" }>,
+        source: typeof payload.source === "string" ? payload.source : "",
+        constituentCount: typeof payload.constituentCount === "number" ? payload.constituentCount : 0,
+      };
 
-    // A 200 response with no rows means every upstream provider failed this
-    // call (soft failure, not an HTTP error) — prefer showing the last good
-    // data over blanking the heatmap, same as the network-error path below.
-    if (!data.rows.length && stale?.rows.length) {
-      return stale;
-    }
+      // A 200 response with no rows means every upstream provider failed this
+      // call (soft failure, not an HTTP error) — prefer showing the last good
+      // data over blanking the heatmap, same as the network-error path below.
+      if (!data.rows.length && stale?.rows.length) {
+        return stale;
+      }
 
-    setCache(key, data);
-    return data;
-  } catch (err) {
-    if (stale) return stale;
-    throw err;
-  }
+      setCache(key, data);
+      return data;
+    } catch (err) {
+      if (stale) return stale;
+      throw err;
+    }
+  });
 }
 
 export type MarketIndexOption = {
@@ -471,31 +498,33 @@ export async function fetchMarketNews(options: { force?: boolean } = {}) {
     }>
   >(key);
 
-  try {
-    const query = force ? "?refresh=true" : "";
-    const res = await fetchWithTimeout(getApiUrl(`/market-news${query}`), { cache: "no-store" }, force ? 10000 : 7000);
-    if (!res.ok) {
-      throw new Error(`Market news request failed: ${res.status}`);
-    }
-    const payload = await res.json();
-    const rows = (payload.data || []) as Array<{
-      title: string;
-      source: string;
-      publishedAt: string;
-      url: string;
-      summary: string;
-      imageUrl: string | null;
-    }>;
-    if (rows.length) {
-      setCache(key, rows);
+  return dedupeInFlight(key, async () => {
+    try {
+      const query = force ? "?refresh=true" : "";
+      const res = await fetchWithTimeout(getApiUrl(`/market-news${query}`), { cache: "no-store" }, force ? 10000 : 7000);
+      if (!res.ok) {
+        throw new Error(`Market news request failed: ${res.status}`);
+      }
+      const payload = await res.json();
+      const rows = (payload.data || []) as Array<{
+        title: string;
+        source: string;
+        publishedAt: string;
+        url: string;
+        summary: string;
+        imageUrl: string | null;
+      }>;
+      if (rows.length) {
+        setCache(key, rows);
+        return rows;
+      }
+      if (stale) return stale;
       return rows;
+    } catch (err) {
+      if (stale) return stale;
+      throw err;
     }
-    if (stale) return stale;
-    return rows;
-  } catch (err) {
-    if (stale) return stale;
-    throw err;
-  }
+  });
 }
 
 export type IpoItem = {
@@ -560,20 +589,22 @@ export async function fetchIpoData(
   const key = `ipo:${type}`;
   const fresh = force ? null : getFreshCache<IpoItem[]>(key, 60_000 * 10);
   if (fresh) return fresh;
-  try {
-    const res = await fetchWithTimeout(
-      getApiUrl(`/ipo?type=${type}${force ? "&refresh=true" : ""}`),
-      { cache: "no-store" },
-      10_000
-    );
-    if (!res.ok) throw new Error(`IPO request failed: ${res.status}`);
-    const payload = await res.json();
-    const rows = (payload.data || []) as IpoItem[];
-    setCache(key, rows);
-    return rows;
-  } catch {
-    return [];
-  }
+  return dedupeInFlight(key, async () => {
+    try {
+      const res = await fetchWithTimeout(
+        getApiUrl(`/ipo?type=${type}${force ? "&refresh=true" : ""}`),
+        { cache: "no-store" },
+        10_000
+      );
+      if (!res.ok) throw new Error(`IPO request failed: ${res.status}`);
+      const payload = await res.json();
+      const rows = (payload.data || []) as IpoItem[];
+      setCache(key, rows);
+      return rows;
+    } catch {
+      return [];
+    }
+  });
 }
 
 export async function fetchAIScreenerResults(query: string): Promise<{ results: ScreenerResult[]; parsedFilters: Record<string, unknown> }> {

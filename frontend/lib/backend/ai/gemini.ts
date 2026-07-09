@@ -33,21 +33,31 @@ export function isGeminiConfigured(): boolean {
   return apiKey().length > 0;
 }
 
-/** Race a promise against a hard timeout. Resolves null on timeout. */
-async function withTimeout<T>(fn: () => Promise<T>, timeoutMs: number): Promise<T | null> {
+/**
+ * Race a promise against a hard timeout. Resolves null on timeout.
+ * `fn` receives an AbortSignal that fires when the timeout wins the race, so
+ * callers that forward it to the Gemini SDK's `requestOptions.signal` get
+ * their in-flight HTTP request cancelled immediately instead of it continuing
+ * to run in the background after this has already resolved to null.
+ */
+async function withTimeout<T>(fn: (signal: AbortSignal) => Promise<T>, timeoutMs: number): Promise<T | null> {
   let timer: ReturnType<typeof setTimeout> | undefined;
+  const controller = new AbortController();
   try {
     return await Promise.race([
       (async () => {
       try {
-        return await fn();
+        return await fn(controller.signal);
       } catch (err) {
         console.warn(`[gemini] generation failed: ${String(err)}`);
         return null;
       }
       })(),
       new Promise<null>((resolve) => {
-        timer = setTimeout(() => resolve(null), timeoutMs);
+        timer = setTimeout(() => {
+          controller.abort();
+          resolve(null);
+        }, timeoutMs);
       }),
     ]);
   } finally {
@@ -66,20 +76,21 @@ export async function generateText(
   if (!isGeminiConfigured()) return null;
   const timeoutMs = opts?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
-  return withTimeout(async () => {
+  return withTimeout(async (signal) => {
     const client = new GoogleGenerativeAI(apiKey());
     const candidates = workingModel ? [workingModel, ...modelCandidates().filter((m) => m !== workingModel)] : modelCandidates();
     let lastErr: unknown = null;
     for (const id of candidates) {
+      if (signal.aborted) break;
       try {
         const model = client.getGenerativeModel({ model: id });
         let result;
         try {
-          result = await model.generateContent(prompt);
+          result = await model.generateContent(prompt, { signal });
         } catch (firstError) {
           if (!/429|quota|rate.?limit/i.test(String(firstError))) throw firstError;
           await new Promise((resolve) => setTimeout(resolve, 500));
-          result = await model.generateContent(prompt);
+          result = await model.generateContent(prompt, { signal });
         }
         const text = (result.response.text() || "").trim();
         if (text.length > 0) {

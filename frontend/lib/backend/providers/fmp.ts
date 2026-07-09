@@ -47,6 +47,7 @@ function fmpSymbol(symbol: string): string {
  */
 async function getFmpQuote(
   marketSymbol: string,
+  signal?: AbortSignal,
 ): Promise<import("@/lib/backend/contracts").RawQuote | null> {
   try {
     const key = apiKey();
@@ -56,9 +57,9 @@ async function getFmpQuote(
     const primary = `${FMP_HOST}/stable/quote?symbol=${encodeURIComponent(sym)}&apikey=${encodeURIComponent(key)}`;
     const fallback = `${FMP_HOST}/api/v3/quote/${encodeURIComponent(sym)}?apikey=${encodeURIComponent(key)}`;
 
-    let payload = await getJson<any[]>(primary, { timeoutMs: 6000 });
+    let payload = await getJson<any[]>(primary, { timeoutMs: 6000, signal });
     if (!Array.isArray(payload) || payload.length === 0) {
-      payload = await getJson<any[]>(fallback, { timeoutMs: 6000 });
+      payload = await getJson<any[]>(fallback, { timeoutMs: 6000, signal });
     }
     if (!Array.isArray(payload) || payload.length === 0) return null;
 
@@ -92,6 +93,7 @@ async function getFmpQuote(
 async function getFmpCandles(
   marketSymbol: string,
   timeframe: string,
+  signal?: AbortSignal,
 ): Promise<Candle[] | null> {
   try {
     const key = apiKey();
@@ -99,7 +101,7 @@ async function getFmpCandles(
     const sym = fmpSymbol(marketSymbol);
 
     const url = `${FMP_HOST}/api/v3/historical-price-full/${encodeURIComponent(sym)}?apikey=${encodeURIComponent(key)}`;
-    const payload = await getJson<any>(url, { timeoutMs: 8000 });
+    const payload = await getJson<any>(url, { timeoutMs: 8000, signal });
 
     const historical: any[] | undefined = Array.isArray(payload)
       ? payload
@@ -167,6 +169,7 @@ function periodLabel(dateStr: string): string {
  */
 async function getFmpQuarterlyResults(
   marketSymbol: string,
+  signal?: AbortSignal,
 ): Promise<QuarterPoint[] | null> {
   try {
     const key = apiKey();
@@ -174,7 +177,7 @@ async function getFmpQuarterlyResults(
     const sym = fmpSymbol(marketSymbol);
 
     const url = `${FMP_HOST}/stable/income-statement?symbol=${encodeURIComponent(sym)}&period=quarter&limit=8&apikey=${encodeURIComponent(key)}`;
-    const payload = await getJson<any[]>(url, { timeoutMs: 7000 });
+    const payload = await getJson<any[]>(url, { timeoutMs: 7000, signal });
     if (!Array.isArray(payload) || payload.length === 0) return null;
 
     const rows = payload.map((item) => {
@@ -206,6 +209,7 @@ async function getFmpQuarterlyResults(
  */
 async function getFmpProfile(
   marketSymbol: string,
+  signal?: AbortSignal,
 ): Promise<
   | (Partial<DashboardData["profile"]> & { companyName?: string; sector?: string })
   | null
@@ -216,7 +220,7 @@ async function getFmpProfile(
     const sym = fmpSymbol(marketSymbol);
 
     const url = `${FMP_HOST}/api/v3/profile/${encodeURIComponent(sym)}?apikey=${encodeURIComponent(key)}`;
-    const payload = await getJson<any[]>(url, { timeoutMs: 5000 });
+    const payload = await getJson<any[]>(url, { timeoutMs: 5000, signal });
     if (!Array.isArray(payload) || payload.length === 0 || !payload[0]) return null;
 
     const p = payload[0];
@@ -252,6 +256,7 @@ async function getFmpProfile(
  */
 async function getFmpKeyMetrics(
   marketSymbol: string,
+  signal?: AbortSignal,
 ): Promise<Array<Record<string, number | string | null>> | null> {
   try {
     const key = apiKey();
@@ -259,7 +264,7 @@ async function getFmpKeyMetrics(
     const sym = fmpSymbol(marketSymbol);
 
     const url = `${FMP_HOST}/api/v3/key-metrics/${encodeURIComponent(sym)}?period=annual&limit=5&apikey=${encodeURIComponent(key)}`;
-    const payload = await getJson<any[]>(url, { timeoutMs: 6000 });
+    const payload = await getJson<any[]>(url, { timeoutMs: 6000, signal });
     if (!Array.isArray(payload)) return null;
     return payload as Array<Record<string, number | string | null>>;
   } catch (err) {
@@ -275,6 +280,7 @@ async function getFmpKeyMetrics(
  */
 async function getFmpFinancialGrowth(
   marketSymbol: string,
+  signal?: AbortSignal,
 ): Promise<Array<Record<string, number | string | null>> | null> {
   try {
     const key = apiKey();
@@ -282,7 +288,7 @@ async function getFmpFinancialGrowth(
     const sym = fmpSymbol(marketSymbol);
 
     const url = `${FMP_HOST}/api/v3/financial-growth/${encodeURIComponent(sym)}?period=annual&limit=5&apikey=${encodeURIComponent(key)}`;
-    const payload = await getJson<any[]>(url, { timeoutMs: 6000 });
+    const payload = await getJson<any[]>(url, { timeoutMs: 6000, signal });
     if (!Array.isArray(payload)) return null;
     return payload as Array<Record<string, number | string | null>>;
   } catch (err) {
@@ -298,6 +304,7 @@ async function getFmpFinancialGrowth(
  */
 async function getFmpAnalystEstimates(
   marketSymbol: string,
+  signal?: AbortSignal,
 ): Promise<Array<Record<string, number | string | null>> | null> {
   try {
     const key = apiKey();
@@ -305,7 +312,7 @@ async function getFmpAnalystEstimates(
     const sym = fmpSymbol(marketSymbol);
 
     const url = `${FMP_HOST}/api/v3/analyst-estimates/${encodeURIComponent(sym)}?limit=5&apikey=${encodeURIComponent(key)}`;
-    const payload = await getJson<any[]>(url, { timeoutMs: 5000 });
+    const payload = await getJson<any[]>(url, { timeoutMs: 5000, signal });
     if (!Array.isArray(payload)) return null;
     return payload as Array<Record<string, number | string | null>>;
   } catch (err) {

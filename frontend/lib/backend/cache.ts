@@ -13,6 +13,11 @@ interface Entry {
 const store = new Map<string, Entry>();
 const MAX_ENTRIES = 500;
 const MAX_STALE_MS = 60 * 60_000;
+// Stale entries are also filtered at read time (getFresh/getStale) — this
+// sweep only exists to bound memory, so it doesn't need to run on every
+// single write. Amortize the O(n) full-map scan across many writes instead.
+const SWEEP_INTERVAL = 50;
+let writesSinceSweep = 0;
 
 export function getFresh<T>(key: string): T | null {
   const hit = store.get(key);
@@ -32,8 +37,12 @@ export function getStale<T>(key: string): T | null {
 
 export function setCache<T>(key: string, data: T, ttlMs: number): void {
   const now = Date.now();
-  for (const [cacheKey, entry] of store) {
-    if (now - entry.at > Math.min(MAX_STALE_MS, entry.ttlMs * 10)) store.delete(cacheKey);
+  writesSinceSweep += 1;
+  if (writesSinceSweep >= SWEEP_INTERVAL || store.size >= MAX_ENTRIES) {
+    for (const [cacheKey, entry] of store) {
+      if (now - entry.at > Math.min(MAX_STALE_MS, entry.ttlMs * 10)) store.delete(cacheKey);
+    }
+    writesSinceSweep = 0;
   }
   if (!store.has(key) && store.size >= MAX_ENTRIES) {
     const oldestKey = store.keys().next().value as string | undefined;

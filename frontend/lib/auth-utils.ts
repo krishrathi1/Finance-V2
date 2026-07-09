@@ -107,7 +107,12 @@ export function getAccessTokenFromRequest(request: Request): string | null {
   if (!cookieHeader) return null;
 
   const cookies = cookieHeader.split(';').reduce((acc: Record<string, string>, cookie) => {
-    const [key, value] = cookie.trim().split('=');
+    // Split on the FIRST '=' only — a naive split('=') truncates any value
+    // containing '=' (e.g. base64 padding) at the first occurrence.
+    const idx = cookie.indexOf('=');
+    if (idx === -1) return acc;
+    const key = cookie.slice(0, idx).trim();
+    const value = cookie.slice(idx + 1).trim();
     acc[key] = decodeURIComponent(value);
     return acc;
   }, {});

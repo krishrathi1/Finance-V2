@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { verifyPassword, createAccessToken, createRefreshToken } from '@/lib/auth-utils';
+import { rateLimit } from '@/lib/rate-limit';
 
 const DUMMY_PASSWORD_HASH = '$2b$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy';
 
@@ -12,6 +13,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { detail: 'Missing email or password' },
         { status: 400 }
+      );
+    }
+
+    // Per-account limit, independent of the middleware's per-IP limit — stops
+    // credential stuffing distributed across many IPs against one account.
+    const emailKey = String(email).trim().toLowerCase();
+    const emailLimit = await rateLimit(`login:email:${emailKey}`, 8, 15 * 60_000);
+    if (!emailLimit.ok) {
+      return NextResponse.json(
+        { detail: 'Too many login attempts for this account. Please try again shortly.' },
+        { status: 429, headers: { 'Retry-After': String(emailLimit.retryAfterSeconds) } }
       );
     }
 

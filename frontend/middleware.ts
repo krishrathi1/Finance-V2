@@ -33,10 +33,30 @@ export async function middleware(request: NextRequest) {
     const ip = clientIpFromHeaders(request.headers);
 
     if (STRICT_AUTH_API.test(pathname) && request.method === "POST") {
-      const result = rateLimit(`auth:${ip}`, 10, 5 * 60_000);
+      // IP-only: NAT'd users share a limit, and it doesn't stop a distributed
+      // attacker rotating IPs against one account — the per-email limiter in
+      // the login/forgot-password routes covers that gap. This is just the
+      // outer bound (was 10/5min = 120/hr; now ~36/hr).
+      const result = await rateLimit(`auth:${ip}`, 6, 10 * 60_000);
       if (!result.ok) return tooManyRequests(result.retryAfterSeconds);
     } else if (AI_API.test(pathname)) {
-      const result = rateLimit(`ai:${ip}`, 20, 60_000);
+      // AI-backed endpoints hit paid LLM quota per call — require a logged-in user
+      // in addition to rate limiting, so anonymous traffic can't drain it.
+      const rawSecret = process.env.JWT_SECRET_KEY?.trim();
+      let authed = false;
+      if (accessToken && rawSecret) {
+        try {
+          await jwtVerify(accessToken, new TextEncoder().encode(rawSecret));
+          authed = true;
+        } catch {
+          authed = false;
+        }
+      }
+      if (!authed) {
+        return NextResponse.json({ detail: "Authentication required." }, { status: 401 });
+      }
+
+      const result = await rateLimit(`ai:${ip}`, 20, 60_000);
       if (!result.ok) return tooManyRequests(result.retryAfterSeconds);
     }
 

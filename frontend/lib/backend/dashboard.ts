@@ -128,24 +128,45 @@ function syncHistoryWithLiveQuote(price: any) {
   }
 }
 
-const POS_WORDS = ["surge", "jump", "gain", "rise", "profit", "beat", "growth", "record", "upgrade", "bullish", "high", "strong", "rally", "soar", "outperform"];
+const POS_WORDS = ["surge", "jump", "gain", "rise", "profit", "beat", "growth", "record", "upgrade", "bullish", "high", "rally", "soar", "outperform"];
 const NEG_WORDS = ["fall", "drop", "loss", "decline", "miss", "downgrade", "bearish", "low", "weak", "slump", "plunge", "fraud", "probe", "cut", "concern", "lawsuit"];
+// Magnitude modifiers, not standalone sentiment: "strong decline" is very
+// negative, not "positive strong" + "negative decline" cancelling out.
+const INTENSIFIER_WORDS = ["strong", "sharp", "steep", "significant", "massive", "major"];
+const NEGATION_WORDS = ["no", "not", "without", "never", "hardly", "barely", "denies", "denied", "lacks"];
 
 function scoreSentiment(text: string): number {
   let s = 0.5;
-  const t = text.toLowerCase();
-  for (const w of POS_WORDS) if (t.includes(w)) s += 0.06;
-  for (const w of NEG_WORDS) if (t.includes(w)) s -= 0.06;
+  const words = text.toLowerCase().split(/[^a-z']+/).filter(Boolean);
+  const negatedAt = (idx: number) => {
+    for (let i = Math.max(0, idx - 3); i < idx; i++) {
+      if (NEGATION_WORDS.includes(words[i]) || words[i].endsWith("n't")) return true;
+    }
+    return false;
+  };
+  words.forEach((word, idx) => {
+    if (INTENSIFIER_WORDS.includes(word)) return;
+    const magnitude = idx > 0 && INTENSIFIER_WORDS.includes(words[idx - 1]) ? 0.12 : 0.06;
+    if (POS_WORDS.includes(word)) s += negatedAt(idx) ? -magnitude : magnitude;
+    else if (NEG_WORDS.includes(word)) s += negatedAt(idx) ? magnitude : -magnitude;
+  });
   return Math.max(0, Math.min(1, Math.round(s * 100) / 100));
 }
 
 function parseRssItems(xml: string): Array<{ title: string; link: string; pubDate: string; source: string; description: string }> {
   const out: Array<{ title: string; link: string; pubDate: string; source: string; description: string }> = [];
-  const blocks = xml.split(/<item>/i).slice(1);
-  const clean = (s: string) =>
-    s.replace(/<!\[CDATA\[/g, "").replace(/\]\]>/g, "").replace(/<[^>]+>/g, " ").replace(/&#?\w+;/g, " ").replace(/\s+/g, " ").trim();
+  const blocks = xml.split(/<item[^>]*>/i).slice(1);
+  const clean = (s: string) => {
+    // Extract CDATA content verbatim and skip the tag-stripping pass entirely
+    // for it — a title like "Firm <XYZ> profit" inside CDATA is literal text,
+    // not markup, so "<XYZ>" must survive.
+    const cdata = s.match(/<!\[CDATA\[([\s\S]*?)\]\]>/);
+    if (cdata) return cdata[1].replace(/\s+/g, " ").trim();
+    return s.replace(/<[^>]+>/g, " ").replace(/&#?\w+;/g, " ").replace(/\s+/g, " ").trim();
+  };
   const pick = (b: string, tag: string) => {
-    const m = b.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, "i"));
+    // Allow an optional namespace prefix on the tag name (e.g. <media:title>).
+    const m = b.match(new RegExp(`<(?:\\w+:)?${tag}[^>]*>([\\s\\S]*?)<\\/(?:\\w+:)?${tag}>`, "i"));
     return m ? clean(m[1]) : "";
   };
   for (const b of blocks.slice(0, 20)) {
@@ -163,12 +184,18 @@ function parseRssItems(xml: string): Array<{ title: string; link: string; pubDat
 }
 
 /** Live company news via Google News RSS (keyless, reliable). Returns NewsItem[]. */
-async function fetchSymbolNews(company: string, symbol: string): Promise<DashboardData["news"]> {
+async function fetchSymbolNews(company: string, symbol: string, signal?: AbortSignal): Promise<DashboardData["news"]> {
   const q = encodeURIComponent(`${company || symbol} stock`);
   const url = `https://news.google.com/rss/search?q=${q}&hl=en-IN&gl=IN&ceid=IN:en`;
-  const xml = await getText(url, { timeoutMs: 6000, headers: { "user-agent": DESKTOP_UA, accept: "application/rss+xml, text/xml, */*" } });
+  const xml = await getText(url, { timeoutMs: 6000, headers: { "user-agent": DESKTOP_UA, accept: "application/rss+xml, text/xml, */*" }, signal });
   if (!xml) return [];
-  return parseRssItems(xml)
+  if (!/<rss[\s>]/i.test(xml) && !/<item[\s>]/i.test(xml)) {
+    console.warn(`[dashboard] fetchSymbolNews got a non-RSS response for "${company || symbol}" (first 200 chars): ${xml.slice(0, 200).replace(/\s+/g, " ")}`);
+    return [];
+  }
+  const parsedItems = parseRssItems(xml);
+  if (parsedItems.length === 0) console.warn(`[dashboard] fetchSymbolNews parsed 0 items from an RSS-looking response for "${company || symbol}"`);
+  return parsedItems
     .slice(0, 10)
     .map((it) => {
       let publishedAt = new Date().toISOString();
@@ -444,19 +471,19 @@ export async function buildDashboard(symbol: string, options: BuildOptions = {})
     fmpGrowth,
     fmpEstimates,
   ] = await Promise.all([
-    safeCall(() => getNseQuote(base), 6000, "nseQuote"),
-    safeCall(() => getNseCorporateEvents(base), 8000, "nseEvents"),
-    safeCall(() => getNseQuarterlyResults(base), 8000, "nseQuarterly"),
-    safeCall(() => getYahooQuote(marketSymbol), 6000, "yahooQuote"),
-    safeCall(() => getYahooCandles(marketSymbol, historyDays), 8000, "yahooCandles"),
-    safeCall(() => getYahooBundle(marketSymbol, historyDays), 11000, "yahooBundle"),
-    safeCall(() => getFmpQuote(marketSymbol), 6000, "fmpQuote"),
-    safeCall(() => getFmpCandles(marketSymbol, "5Y"), 8000, "fmpCandles"),
-    safeCall(() => getFmpQuarterlyResults(marketSymbol), 7000, "fmpQuarterly"),
-    safeCall(() => getFmpProfile(marketSymbol), 6000, "fmpProfile"),
-    safeCall(() => getFmpKeyMetrics(marketSymbol), 6000, "fmpKeyMetrics"),
-    safeCall(() => getFmpFinancialGrowth(marketSymbol), 6000, "fmpGrowth"),
-    safeCall(() => getFmpAnalystEstimates(marketSymbol), 6000, "fmpEstimates"),
+    safeCall((signal) => getNseQuote(base, signal), 6000, "nseQuote"),
+    safeCall((signal) => getNseCorporateEvents(base, signal), 8000, "nseEvents"),
+    safeCall((signal) => getNseQuarterlyResults(base, signal), 8000, "nseQuarterly"),
+    safeCall((signal) => getYahooQuote(marketSymbol, signal), 6000, "yahooQuote"),
+    safeCall((signal) => getYahooCandles(marketSymbol, historyDays, signal), 8000, "yahooCandles"),
+    safeCall((signal) => getYahooBundle(marketSymbol, historyDays, signal), 11000, "yahooBundle"),
+    safeCall((signal) => getFmpQuote(marketSymbol, signal), 6000, "fmpQuote"),
+    safeCall((signal) => getFmpCandles(marketSymbol, "5Y", signal), 8000, "fmpCandles"),
+    safeCall((signal) => getFmpQuarterlyResults(marketSymbol, signal), 7000, "fmpQuarterly"),
+    safeCall((signal) => getFmpProfile(marketSymbol, signal), 6000, "fmpProfile"),
+    safeCall((signal) => getFmpKeyMetrics(marketSymbol, signal), 6000, "fmpKeyMetrics"),
+    safeCall((signal) => getFmpFinancialGrowth(marketSymbol, signal), 6000, "fmpGrowth"),
+    safeCall((signal) => getFmpAnalystEstimates(marketSymbol, signal), 6000, "fmpEstimates"),
   ]);
 
   const bundle: any = yahooBundle || {};
@@ -579,13 +606,16 @@ export async function buildDashboard(symbol: string, options: BuildOptions = {})
   syncHistoryWithLiveQuote(data.price);
 
   // ---- Company news ----
-  const rssNews = (await safeCall(() => fetchSymbolNews(data.companyName || base, base), 7000, "symbolNews")) || [];
+  const rssNews = (await safeCall((signal) => fetchSymbolNews(data.companyName || base, base, signal), 7000, "symbolNews")) || [];
   if (rssNews.length) {
     data.news = rssNews;
   } else {
     try {
       data.news = buildCompanyNews(base, data.companyName || base, data.sector || "", data.profile.industry || "", bundle.news || [], []);
-    } catch { /* keep [] */ }
+    } catch (err) {
+      console.warn(`[dashboard] buildCompanyNews failed for ${base}: ${String(err)}`);
+      /* keep [] */
+    }
   }
 
   // ---- Corporate actions + quarterly chain ----
@@ -602,10 +632,18 @@ export async function buildDashboard(symbol: string, options: BuildOptions = {})
   }
 
   // ---- Shareholding normalize ----
-  try { data.shareholding = normalizeShareholding(data.shareholding); } catch { /* keep */ }
+  try {
+    data.shareholding = normalizeShareholding(data.shareholding);
+  } catch (err) {
+    console.warn(`[dashboard] normalizeShareholding failed for ${base}: ${String(err)}`);
+  }
 
   // ---- Backfill quarterly ----
-  try { backfillQuarterlyFinancials(data.financials); } catch { /* keep */ }
+  try {
+    backfillQuarterlyFinancials(data.financials);
+  } catch (err) {
+    console.warn(`[dashboard] backfillQuarterlyFinancials failed for ${base}: ${String(err)}`);
+  }
 
   // ---- competitors reset (parity with Python) ----
   data.competitors = {
@@ -619,7 +657,10 @@ export async function buildDashboard(symbol: string, options: BuildOptions = {})
   // ---- Derived sections (order matters) ----
   if (data.price.change == null && data.price.changePercent != null && data.price.cmp) {
     const pct = data.price.changePercent;
-    data.price.change = round2((data.price.cmp * pct) / (100 + pct || 1));
+    // pct === -100 would make the divisor 0 (price went to zero); fall back
+    // to 1 in that case only, instead of relying on `x || 1`'s NaN/0 folding.
+    const divisor = 100 + pct;
+    data.price.change = round2((data.price.cmp * pct) / (divisor !== 0 ? divisor : 1));
   }
   data.metrics = finalizeKeyMetrics(data.metrics, data.price, data.financials, data.competitors);
   data.returnsSummary = returnsSummary(data.price.history);
@@ -666,8 +707,14 @@ export async function buildDashboard(symbol: string, options: BuildOptions = {})
   // ---- Optional AI enrichment (bounded; never blocks materially) ----
   if (options.allowGemini) {
     try {
-      const weakHint = Object.entries(data.smartScore.dimensions || {}).sort((a: any, b: any) => a[1] - b[1])[0]?.[0];
-      const highHint = Object.entries(data.riskScore.components || {}).sort((a: any, b: any) => b[1] - a[1])[0]?.[0];
+      const weakHint = (Object.entries(data.smartScore.dimensions || {}) as Array<[string, number]>).reduce(
+        (min, entry) => (min === null || entry[1] < min[1] ? entry : min),
+        null as [string, number] | null
+      )?.[0];
+      const highHint = (Object.entries(data.riskScore.components || {}) as Array<[string, number]>).reduce(
+        (max, entry) => (max === null || entry[1] > max[1] ? entry : max),
+        null as [string, number] | null
+      )?.[0];
       const [smart, risk, profile] = await Promise.all([
         safeCall(() => explainSmartScore(base, data.smartScore.score, data.smartScore.dimensions, weakHint), 9000, "explainSmart"),
         safeCall(() => explainRiskScore(base, data.riskScore.score, data.riskScore.components, highHint), 9000, "explainRisk"),

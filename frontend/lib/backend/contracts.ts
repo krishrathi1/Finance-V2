@@ -119,26 +119,26 @@ export interface NewsArticle {
 // ---------------------------------------------------------------------------
 
 export interface NseProviderApi {
-  getNseQuote(base: string): Promise<RawQuote | null>;
-  getNseCorporateEvents(base: string): Promise<DashboardData["corporateActions"] | null>;
-  getNseQuarterlyResults(base: string): Promise<QuarterlyResults | null>;
+  getNseQuote(base: string, signal?: AbortSignal): Promise<RawQuote | null>;
+  getNseCorporateEvents(base: string, signal?: AbortSignal): Promise<DashboardData["corporateActions"] | null>;
+  getNseQuarterlyResults(base: string, signal?: AbortSignal): Promise<QuarterlyResults | null>;
 }
 
 export interface YahooProviderApi {
-  getYahooQuote(marketSymbol: string): Promise<RawQuote | null>;
-  getYahooCandles(base: string, days: number): Promise<Candle[] | null>;
+  getYahooQuote(marketSymbol: string, signal?: AbortSignal): Promise<RawQuote | null>;
+  getYahooCandles(base: string, days: number, signal?: AbortSignal): Promise<Candle[] | null>;
   /** yfinance-equivalent: profile, metrics, statements, shareholding, news, intraday, candles. */
-  getYahooBundle(marketSymbol: string, days: number): Promise<ProviderBundle | null>;
+  getYahooBundle(marketSymbol: string, days: number, signal?: AbortSignal): Promise<ProviderBundle | null>;
 }
 
 export interface FmpProviderApi {
-  getFmpQuote(marketSymbol: string): Promise<RawQuote | null>;
-  getFmpCandles(marketSymbol: string, timeframe: string): Promise<Candle[] | null>;
-  getFmpQuarterlyResults(marketSymbol: string): Promise<QuarterPoint[] | null>;
-  getFmpProfile(marketSymbol: string): Promise<(Partial<DashboardData["profile"]> & { companyName?: string; sector?: string }) | null>;
-  getFmpKeyMetrics(marketSymbol: string): Promise<Array<Record<string, number | string | null>> | null>;
-  getFmpFinancialGrowth(marketSymbol: string): Promise<Array<Record<string, number | string | null>> | null>;
-  getFmpAnalystEstimates(marketSymbol: string): Promise<Array<Record<string, number | string | null>> | null>;
+  getFmpQuote(marketSymbol: string, signal?: AbortSignal): Promise<RawQuote | null>;
+  getFmpCandles(marketSymbol: string, timeframe: string, signal?: AbortSignal): Promise<Candle[] | null>;
+  getFmpQuarterlyResults(marketSymbol: string, signal?: AbortSignal): Promise<QuarterPoint[] | null>;
+  getFmpProfile(marketSymbol: string, signal?: AbortSignal): Promise<(Partial<DashboardData["profile"]> & { companyName?: string; sector?: string }) | null>;
+  getFmpKeyMetrics(marketSymbol: string, signal?: AbortSignal): Promise<Array<Record<string, number | string | null>> | null>;
+  getFmpFinancialGrowth(marketSymbol: string, signal?: AbortSignal): Promise<Array<Record<string, number | string | null>> | null>;
+  getFmpAnalystEstimates(marketSymbol: string, signal?: AbortSignal): Promise<Array<Record<string, number | string | null>> | null>;
   /** For search + screener reuse. */
   searchFmp?(query: string): Promise<Array<{ symbol: string; name: string; exchange: string }>>;
 }

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { query } from '@/lib/db';
+import { query, ResultSetHeader } from '@/lib/db';
 import { getCurrentUser } from '@/lib/current-user';
 
 type PremiumRequestRow = {
@@ -82,13 +82,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const result = await query(
+    const result = await query<ResultSetHeader>(
       "INSERT INTO premium_requests (user_id, reason, status) VALUES (?, ?, 'pending')",
       [user.id, reason]
     );
 
     const rows = await query('SELECT * FROM premium_requests WHERE id = ?', [
-      (result as any).insertId,
+      result.insertId,
     ]);
     return NextResponse.json(toResponseShape(rows[0] as PremiumRequestRow), { status: 201 });
   } catch (error) {

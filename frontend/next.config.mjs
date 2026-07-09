@@ -7,6 +7,26 @@ const nextConfig = {
     typedRoutes: false
   },
   async headers() {
+    const isDev = process.env.NODE_ENV !== "production";
+    // 'unsafe-eval' is only needed for webpack/Fast Refresh in dev; drop it in
+    // production. 'unsafe-inline' on script-src stays in both — the app emits
+    // an inline JSON-LD <script> (app/layout.tsx) which isn't worth wiring
+    // per-request nonces for — but everything else here (object-src, base-uri,
+    // frame-ancestors, disallowing arbitrary external script/frame sources)
+    // still meaningfully shrinks the blast radius if XSS is ever achieved.
+    const csp = [
+      "default-src 'self'",
+      `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
+      "style-src 'self' 'unsafe-inline'",
+      "img-src 'self' data: https:",
+      "font-src 'self' data:",
+      "connect-src 'self'",
+      "object-src 'none'",
+      "base-uri 'self'",
+      "form-action 'self'",
+      "frame-ancestors 'none'",
+    ].join("; ");
+
     return [
       {
         source: "/(.*)",
@@ -17,6 +37,14 @@ const nextConfig = {
           {
             key: "Permissions-Policy",
             value: "camera=(), microphone=(), geolocation=()",
+          },
+          { key: "Content-Security-Policy", value: csp },
+          // Only meaningful over HTTPS; browsers ignore it on plain HTTP, so
+          // it's safe to send unconditionally (Vercel/most hosts terminate TLS
+          // in front of Next.js).
+          {
+            key: "Strict-Transport-Security",
+            value: "max-age=63072000; includeSubDomains; preload",
           },
         ],
       },

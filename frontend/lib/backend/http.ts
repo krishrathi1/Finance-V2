@@ -15,12 +15,19 @@ export interface FetchOpts {
   body?: BodyInit;
   /** Next.js fetch cache hint; defaults to no-store for live data. */
   revalidate?: number;
+  /** External cancellation, e.g. from safeCall's timeout — aborts in-flight fetches immediately. */
+  signal?: AbortSignal;
 }
 
 export async function fetchWithTimeout(url: string, opts: FetchOpts = {}): Promise<Response> {
   const { headers = {}, timeoutMs = 8000, method = "GET", body } = opts;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const onExternalAbort = () => controller.abort();
+  if (opts.signal) {
+    if (opts.signal.aborted) controller.abort();
+    else opts.signal.addEventListener("abort", onExternalAbort);
+  }
   try {
     const init: RequestInit & { next?: { revalidate: number } } = {
       method,
@@ -33,6 +40,7 @@ export async function fetchWithTimeout(url: string, opts: FetchOpts = {}): Promi
     return await fetch(url, init);
   } finally {
     clearTimeout(timer);
+    opts.signal?.removeEventListener("abort", onExternalAbort);
   }
 }
 
@@ -51,6 +59,7 @@ export async function getJson<T = any>(url: string, opts: FetchOpts = {}): Promi
   const retries = opts.retries ?? 1;
   let lastErr: unknown = null;
   for (let attempt = 0; attempt <= retries; attempt++) {
+    if (opts.signal?.aborted) break;
     try {
       const res = await fetchWithTimeout(url, opts);
       if (!res.ok) {
@@ -77,6 +86,7 @@ export async function getText(url: string, opts: FetchOpts = {}): Promise<string
   const retries = opts.retries ?? 1;
   let lastErr: unknown = null;
   for (let attempt = 0; attempt <= retries; attempt++) {
+    if (opts.signal?.aborted) break;
     try {
       const res = await fetchWithTimeout(url, opts);
       if (!res.ok) {
@@ -114,21 +124,35 @@ export function round2(value: unknown): number | null {
   return Math.round((n + Number.EPSILON) * 100) / 100;
 }
 
-/** Run a provider call with a hard timeout, resolving to null on timeout/failure. */
-export async function safeCall<T>(fn: () => Promise<T>, timeoutMs: number, label = "call"): Promise<T | null> {
+/**
+ * Run a provider call with a hard timeout, resolving to null on timeout/failure.
+ * `fn` receives an AbortSignal that fires the moment the timeout wins the
+ * race — providers that forward it into fetchWithTimeout/getJson/getText get
+ * their in-flight request cancelled immediately instead of continuing to run
+ * (and holding a socket/timer open) after safeCall has already resolved.
+ */
+export async function safeCall<T>(
+  fn: (signal: AbortSignal) => Promise<T>,
+  timeoutMs: number,
+  label = "call"
+): Promise<T | null> {
   let timer: ReturnType<typeof setTimeout> | undefined;
+  const controller = new AbortController();
   try {
     return await Promise.race([
       (async () => {
       try {
-        return await fn();
+        return await fn(controller.signal);
       } catch (err) {
         console.warn(`[provider] ${label} failed: ${redactSecrets(err)}`);
         return null;
       }
       })(),
       new Promise<null>((resolve) => {
-        timer = setTimeout(() => resolve(null), timeoutMs);
+        timer = setTimeout(() => {
+          controller.abort();
+          resolve(null);
+        }, timeoutMs);
       }),
     ]);
   } finally {

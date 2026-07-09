@@ -143,11 +143,11 @@ export function normalizeHistory(candles: Candle[]): PricePoint[] {
   const deduped: PricePoint[] = [];
   const seen = new Set<string>();
   for (const row of normalized) {
-    if (seen.has(row.date)) {
-      // Python: deduped[-1] = row (last duplicate wins, replacing prior).
-      if (deduped.length > 0) deduped[deduped.length - 1] = row;
-      continue;
-    }
+    // Keep the first candle seen for a given date and drop later duplicates.
+    // (Deliberately diverges from the ported Python's `deduped[-1] = row`,
+    // which let a later — often lower-quality/placeholder — duplicate
+    // silently overwrite good data from the first candle for that date.)
+    if (seen.has(row.date)) continue;
     seen.add(row.date);
     deduped.push(row);
   }

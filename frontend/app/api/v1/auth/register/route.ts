@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { query } from '@/lib/db';
+import { query, ResultSetHeader } from '@/lib/db';
 import {
   hashPassword,
   createAccessToken,
@@ -8,14 +8,29 @@ import {
 } from '@/lib/auth-utils';
 import { sendWelcomeEmail } from '@/lib/email';
 
+// Deliberately simple/conservative (not full RFC 5322): rejects the obvious
+// malformed cases ("notanemail", "a@b") that otherwise create unverifiable
+// accounts and bounce every password-reset email sent to them.
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
 export async function POST(request: NextRequest) {
   try {
-    const { email, name, password } = await request.json();
+    const body = await request.json();
+    const name = body?.name;
+    const password = body?.password;
+    const email = typeof body?.email === 'string' ? body.email.trim() : body?.email;
 
     // Validate input
     if (!email || !name || !password) {
       return NextResponse.json(
         { detail: 'Missing required fields' },
+        { status: 400 }
+      );
+    }
+
+    if (typeof email !== 'string' || email.length > 254 || !EMAIL_RE.test(email)) {
+      return NextResponse.json(
+        { detail: 'Please enter a valid email address' },
         { status: 400 }
       );
     }
@@ -40,12 +55,12 @@ export async function POST(request: NextRequest) {
     const passwordHash = await hashPassword(password);
 
     // Create user
-    const result = await query(
+    const result = await query<ResultSetHeader>(
       'INSERT INTO users (email, name, password_hash, tier, verified_email) VALUES (?, ?, ?, ?, ?)',
       [email, name, passwordHash, 'free', false]
     );
 
-    const userId = (result as any).insertId;
+    const userId = result.insertId;
 
     // Send the verification email in the background — registration must not
     // fail or stall because SMTP is slow/down.

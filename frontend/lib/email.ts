@@ -1,5 +1,20 @@
 import nodemailer from 'nodemailer';
 
+/** Escape untrusted text before interpolating into an HTML email template. */
+function escapeHtml(value: string): string {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/** Escape untrusted text for use inside an href="..." attribute. */
+function escapeHtmlAttr(value: string): string {
+  return escapeHtml(value);
+}
+
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_SERVER || 'mail.voreva.in',
   port: parseInt(process.env.SMTP_PORT || '587'),
@@ -13,6 +28,8 @@ const transporter = nodemailer.createTransport({
 
 export async function sendOtpEmail(email: string, otp: string, userName: string) {
   try {
+    const safeUserName = escapeHtml(userName);
+    const safeOtp = escapeHtml(otp);
     const htmlContent = `
       <!DOCTYPE html>
       <html>
@@ -35,12 +52,12 @@ export async function sendOtpEmail(email: string, otp: string, userName: string)
               <p>Password Reset Request</p>
             </div>
             <div class="content">
-              <p>Hi ${userName},</p>
+              <p>Hi ${safeUserName},</p>
               <p>We received a request to reset your password. Use the OTP below to verify your identity and create a new password.</p>
 
               <div class="otp-box">
                 <p>Your OTP is:</p>
-                <div class="otp-code">${otp}</div>
+                <div class="otp-code">${safeOtp}</div>
                 <p style="color: #999; margin: 10px 0 0 0;">Valid for 10 minutes</p>
               </div>
 
@@ -78,6 +95,12 @@ export async function sendOtpEmail(email: string, otp: string, userName: string)
 
 export async function sendWelcomeEmail(email: string, userName: string, verificationLink: string) {
   try {
+    const safeUserName = escapeHtml(userName);
+    // Only allow http(s) links through to the href — blocks javascript:/data:
+    // URIs, then HTML/attribute-escape what's left before interpolating.
+    const safeVerificationLink = /^https?:\/\//i.test(verificationLink)
+      ? escapeHtmlAttr(verificationLink)
+      : '#';
     const htmlContent = `
       <!DOCTYPE html>
       <html>
@@ -97,13 +120,13 @@ export async function sendWelcomeEmail(email: string, userName: string, verifica
               <h1>Welcome to Financial Forensics AI!</h1>
             </div>
             <div class="content">
-              <p>Hi ${userName},</p>
+              <p>Hi ${safeUserName},</p>
               <p>Thank you for signing up! We're excited to have you on board.</p>
 
               <p>Click the button below to verify your email address:</p>
-              <a href="${verificationLink}" class="button">Verify Email</a>
+              <a href="${safeVerificationLink}" class="button">Verify Email</a>
 
-              <p>Or copy this link: <br>${verificationLink}</p>
+              <p>Or copy this link: <br>${safeVerificationLink}</p>
 
               <p>Once verified, you can start exploring stocks, building portfolios, and getting AI-powered insights!</p>
 

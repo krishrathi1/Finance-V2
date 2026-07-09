@@ -9,7 +9,9 @@
  * connections.
  */
 
-import mysql, { Pool } from "mysql2/promise";
+import mysql, { Pool, ResultSetHeader, RowDataPacket } from "mysql2/promise";
+
+export type { ResultSetHeader, RowDataPacket };
 
 declare global {
   // eslint-disable-next-line no-var
@@ -42,11 +44,14 @@ export function getPool(): Pool {
 /**
  * Run a parameterized SQL statement.
  * @returns rows array for SELECT, ResultSetHeader ({insertId, affectedRows}) for writes.
+ * Pass a type argument to get a typed result instead of `any`, e.g.
+ * `query<ResultSetHeader>(...)` for an INSERT/UPDATE to access `.insertId`/
+ * `.affectedRows` without an `as any` cast at the call site.
  */
-export async function query(sql: string, values: any[] = []): Promise<any> {
+export async function query<T = any>(sql: string, values: any[] = []): Promise<T> {
   const pool = getPool();
   const [result] = await pool.query(sql, values);
-  return result;
+  return result as T;
 }
 
 /** Compatibility shim for callers that used a raw connection. */

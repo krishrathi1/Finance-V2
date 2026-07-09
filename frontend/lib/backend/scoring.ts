@@ -575,6 +575,12 @@ function fitLogisticProbability(
   labels: number[],
   latestRow: number[],
 ): [number, number] {
+  // Guard the invariant the caller relies on (features/labels built together
+  // from the same sample array): an empty or mismatched pair would index
+  // out of bounds below instead of failing loudly.
+  if (features.length === 0 || features.length !== labels.length) {
+    return [0.5, 0.0];
+  }
   const numFeatures = features[0].length;
   const mins: number[] = new Array(numFeatures).fill(0);
   const maxs: number[] = new Array(numFeatures).fill(0);

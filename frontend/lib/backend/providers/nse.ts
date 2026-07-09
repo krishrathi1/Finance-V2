@@ -93,12 +93,18 @@ async function ensureCookies(): Promise<string> {
  * GET an NSE `/api/*` endpoint as JSON with cookie priming + a single
  * re-prime/retry on 401/403. Returns parsed JSON or `null` (never throws).
  */
-export async function nseGetJson<T = any>(url: string, timeoutMs = 6000): Promise<T | null> {
+export async function nseGetJson<T = any>(
+  url: string,
+  timeoutMs = 6000,
+  signal?: AbortSignal
+): Promise<T | null> {
   try {
+    if (signal?.aborted) return null;
     let cookies = await ensureCookies();
     let res = await fetchWithTimeout(url, {
       headers: { ...NSE_HEADERS, Cookie: cookies },
       timeoutMs,
+      signal,
     });
 
     if (res.status === 401 || res.status === 403) {
@@ -107,13 +113,24 @@ export async function nseGetJson<T = any>(url: string, timeoutMs = 6000): Promis
       res = await fetchWithTimeout(url, {
         headers: { ...NSE_HEADERS, Cookie: cookies },
         timeoutMs,
+        signal,
       });
     }
 
     if (!res.ok) return null;
     const text = await res.text();
     if (!text) return null;
-    return JSON.parse(text) as T;
+    const parsed: unknown = JSON.parse(text);
+    // Minimal shape guard: NSE occasionally responds 200 with an HTML/plain
+    // error page or a bare string/number instead of the expected JSON
+    // object/array. Casting that straight to `T` would silently propagate a
+    // wrong-shaped value into every field access downstream instead of
+    // failing the way a real "no data" response does.
+    if (parsed === null || typeof parsed !== "object") {
+      console.warn(`[nse] unexpected non-object JSON for ${url}`);
+      return null;
+    }
+    return parsed as T;
   } catch {
     return null;
   }
@@ -123,11 +140,11 @@ export async function nseGetJson<T = any>(url: string, timeoutMs = 6000): Promis
 // 1. LIVE QUOTE — getNseQuote (ports _get_nse_quote_sync, spec 01 §3a)
 // ---------------------------------------------------------------------------
 
-export async function getNseQuote(base: string): Promise<RawQuote | null> {
+export async function getNseQuote(base: string, signal?: AbortSignal): Promise<RawQuote | null> {
   try {
     const key = baseSymbol(base);
     const url = `${NSE_BASE}/api/quote-equity?symbol=${encodeURIComponent(key)}`;
-    const payload = await nseGetJson<any>(url, 6000);
+    const payload = await nseGetJson<any>(url, 6000, signal);
     if (!payload) return null;
 
     const priceInfo = payload.priceInfo ?? {};
@@ -185,11 +202,14 @@ function periodLabel(item: any): string {
   return Number.isNaN(parsed) ? raw : new Date(parsed).toISOString().slice(0, 10);
 }
 
-export async function getNseQuarterlyResults(base: string): Promise<QuarterlyResults | null> {
+export async function getNseQuarterlyResults(
+  base: string,
+  signal?: AbortSignal
+): Promise<QuarterlyResults | null> {
   try {
     const key = baseSymbol(base);
     const url = `${NSE_BASE}/api/results-comparision?symbol=${encodeURIComponent(key)}`;
-    const payload = await nseGetJson<any>(url, 8000);
+    const payload = await nseGetJson<any>(url, 8000, signal);
     if (!payload) return null;
 
     const rows = Array.isArray(payload.resCmpData) ? payload.resCmpData : [];
@@ -376,7 +396,10 @@ function inferDividendType(subject: string): string {
   return labels.length ? labels.join(" + ") : "Dividend";
 }
 
-export async function getNseCorporateEvents(base: string): Promise<CorporateActions | null> {
+export async function getNseCorporateEvents(
+  base: string,
+  signal?: AbortSignal
+): Promise<CorporateActions | null> {
   const result = emptyCorporateActions();
   try {
     const key = baseSymbol(base);
@@ -402,12 +425,12 @@ export async function getNseCorporateEvents(base: string): Promise<CorporateActi
 
     // Each sub-source failing returns null → its list stays empty.
     const [corpRaw, annRaw, boardRaw, insiderRaw, bulkRaw, blockRaw] = await Promise.all([
-      nseGetJson<any>(corpUrl, 5000),
-      nseGetJson<any>(annUrl, 5000),
-      nseGetJson<any>(boardUrl, 5000),
-      nseGetJson<any>(insiderUrl, 5000),
-      nseGetJson<any>(bulkUrl, 5000),
-      nseGetJson<any>(blockUrl, 5000),
+      nseGetJson<any>(corpUrl, 5000, signal),
+      nseGetJson<any>(annUrl, 5000, signal),
+      nseGetJson<any>(boardUrl, 5000, signal),
+      nseGetJson<any>(insiderUrl, 5000, signal),
+      nseGetJson<any>(bulkUrl, 5000, signal),
+      nseGetJson<any>(blockUrl, 5000, signal),
     ]);
 
     const corpJson: any[] = Array.isArray(corpRaw) ? corpRaw : [];

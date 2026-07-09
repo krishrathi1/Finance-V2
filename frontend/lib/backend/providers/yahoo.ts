@@ -129,12 +129,12 @@ function periodLabel(value: unknown): string | null {
  * Fetch & parse Yahoo v8 chart for a single fully-qualified ticker (e.g. RELIANCE.NS).
  * Returns the raw `result.chart.result[0]` object or null.
  */
-async function fetchChartResult(ticker: string, days: number): Promise<any | null> {
+async function fetchChartResult(ticker: string, days: number, signal?: AbortSignal): Promise<any | null> {
   const range = days > 365 ? "5y" : days > 30 ? "1y" : "1mo";
   const url = `${YAHOO_QUERY1}/v8/finance/chart/${encodeURIComponent(
     ticker
   )}?range=${range}&interval=1d&includePrePost=false`;
-  const payload = await getJson<any>(url, { timeoutMs: 7000, retries: 1 });
+  const payload = await getJson<any>(url, { timeoutMs: 7000, retries: 1, signal });
   const result = payload?.chart?.result?.[0];
   if (!result) return null;
   return result;
@@ -182,7 +182,7 @@ function parseChartCandles(result: any, days: number): Candle[] {
  * Daily candles for an Indian equity. Suffixed symbols use that exchange; bare
  * symbols try `{SYM}.NS` then `{SYM}.BO`.
  */
-export async function getYahooCandles(base: string, days: number): Promise<Candle[] | null> {
+export async function getYahooCandles(base: string, days: number, signal?: AbortSignal): Promise<Candle[] | null> {
   try {
     const key = String(base || "").trim().toUpperCase();
     if (!key) return null;
@@ -192,7 +192,7 @@ export async function getYahooCandles(base: string, days: number): Promise<Candl
     const tickers = /\.(NS|BO)$/i.test(key) ? [key] : [`${sym}.NS`, `${sym}.BO`];
 
     for (const ticker of tickers) {
-      const result = await fetchChartResult(ticker, dayCount);
+      const result = await fetchChartResult(ticker, dayCount, signal);
       if (!result) continue;
       const candles = parseChartCandles(result, dayCount);
       if (candles.length > 0) return candles;
@@ -211,7 +211,7 @@ export async function getYahooCandles(base: string, days: number): Promise<Candl
  * `marketSymbol` may already carry a suffix; if not, we resolve the suffix the
  * same way candles do.
  */
-export async function getYahooQuote(marketSymbol: string): Promise<RawQuote | null> {
+export async function getYahooQuote(marketSymbol: string, signal?: AbortSignal): Promise<RawQuote | null> {
   try {
     const key = String(marketSymbol || "").trim().toUpperCase();
     if (!key) return null;
@@ -227,7 +227,7 @@ export async function getYahooQuote(marketSymbol: string): Promise<RawQuote | nu
     }
 
     for (const ticker of tickers) {
-      const result = await fetchChartResult(ticker, 5);
+      const result = await fetchChartResult(ticker, 5, signal);
       const meta = result?.meta;
       if (!meta) continue;
 
@@ -606,12 +606,16 @@ function mapBundleQuote(qs: any): RawQuote | undefined {
  * plus daily candles. quoteSummary requires a crumb+cookie; if that flow fails we
  * still return a partial bundle containing at least the candles.
  */
-export async function getYahooBundle(marketSymbol: string, days: number): Promise<ProviderBundle | null> {
+export async function getYahooBundle(
+  marketSymbol: string,
+  days: number,
+  signal?: AbortSignal
+): Promise<ProviderBundle | null> {
   try {
     const dayCount = days && days > 0 ? days : 1825;
 
     // Candles are independent of the crumb flow and always attempted.
-    const candles = await getYahooCandles(marketSymbol, dayCount);
+    const candles = await getYahooCandles(marketSymbol, dayCount, signal);
 
     const bundle: ProviderBundle = {};
     if (candles && candles.length) bundle.candles = candles;
@@ -632,6 +636,7 @@ export async function getYahooBundle(marketSymbol: string, days: number): Promis
         timeoutMs: 8000,
         retries: 1,
         headers: { cookie: auth.cookie, accept: "application/json" },
+        signal,
       });
       const result = payload?.quoteSummary?.result?.[0];
       if (result) {

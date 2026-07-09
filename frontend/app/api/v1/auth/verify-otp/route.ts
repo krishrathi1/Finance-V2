@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { query } from '@/lib/db';
+import { query, ResultSetHeader } from '@/lib/db';
 import { createPasswordResetToken } from '@/lib/auth-utils';
 
 export async function POST(request: NextRequest) {
@@ -44,8 +44,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ detail: 'Invalid or expired OTP' }, { status: 401 });
     }
 
-    // Mark OTP as used
-    await query('UPDATE password_reset_tokens SET is_used = true WHERE id = ?', [otpRecord.id]);
+    // Atomically claim the OTP: only one concurrent request can flip
+    // is_used = false -> true, so a racing duplicate request gets 0 affected
+    // rows here instead of both requests receiving a valid reset token.
+    const claim = await query<ResultSetHeader>(
+      'UPDATE password_reset_tokens SET is_used = true WHERE id = ? AND is_used = false',
+      [otpRecord.id]
+    );
+    if (!claim || claim.affectedRows !== 1) {
+      return NextResponse.json({ detail: 'Invalid or expired OTP' }, { status: 401 });
+    }
 
     // Return a temporary reset token (valid for 5 minutes)
     const resetToken = await createPasswordResetToken(user.id, otpRecord.id);
