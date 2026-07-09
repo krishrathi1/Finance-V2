@@ -92,7 +92,7 @@ function mergeFinancialBackfill(target: any, source: any) {
     const targetRows = target[k];
     if (
       hasFinancialRows(sourceRows) &&
-      (!hasFinancialRows(targetRows) || latestFinancialPeriodMs(sourceRows) > latestFinancialPeriodMs(targetRows))
+      (!hasFinancialRows(targetRows) || latestFinancialPeriodMs(sourceRows) >= latestFinancialPeriodMs(targetRows))
     ) {
       target[k] = sourceRows;
     }
