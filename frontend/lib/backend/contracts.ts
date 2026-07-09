@@ -137,6 +137,7 @@ export interface FmpProviderApi {
   getFmpQuarterlyResults(marketSymbol: string, signal?: AbortSignal): Promise<QuarterPoint[] | null>;
   getFmpProfile(marketSymbol: string, signal?: AbortSignal): Promise<(Partial<DashboardData["profile"]> & { companyName?: string; sector?: string }) | null>;
   getFmpKeyMetrics(marketSymbol: string, signal?: AbortSignal): Promise<Array<Record<string, number | string | null>> | null>;
+  getFmpFinancialStatements?(marketSymbol: string, signal?: AbortSignal): Promise<ProviderBundle["financials"] | null>;
   getFmpFinancialGrowth(marketSymbol: string, signal?: AbortSignal): Promise<Array<Record<string, number | string | null>> | null>;
   getFmpAnalystEstimates(marketSymbol: string, signal?: AbortSignal): Promise<Array<Record<string, number | string | null>> | null>;
   /** For search + screener reuse. */

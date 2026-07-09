@@ -6,8 +6,19 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatNumber } from "@/lib/format";
 import type { FinancialGrowthSnapshot } from "@/lib/types";
 
-function DataTable({ rows }: { rows: Array<Record<string, string | number | null>> }) {
-  if (!rows.length) return <p className="text-sm text-muted">No data available.</p>;
+/** True if any row has a real (non-null) value in a column other than a period/date label. */
+function hasRealData(rows: Array<Record<string, string | number | null>>): boolean {
+  return rows.some((row) =>
+    Object.entries(row).some(
+      ([key, value]) => key !== "period" && key !== "quarter" && key !== "date" && value !== null && value !== undefined
+    )
+  );
+}
+
+function DataTable({ rows, emptyMessage }: { rows: Array<Record<string, string | number | null>>; emptyMessage?: string }) {
+  if (!rows.length || !hasRealData(rows)) {
+    return <p className="text-sm text-muted">{emptyMessage ?? "No data available."}</p>;
+  }
   const columns = Object.keys(rows[0]);
   return (
     <div className="overflow-auto rounded-xl border border-border/70">
@@ -126,8 +137,13 @@ export function FinancialsSection({
         </TabsContent>
 
         <TabsContent value="balance" className="space-y-3">
-          <FinancialBarChart data={yearly} firstKey="assets" secondKey="profit" />
-          <DataTable rows={balanceSheet.length ? balanceSheet : yearly} />
+          {yearly.some((row) => row.assets !== null) ? (
+            <FinancialBarChart data={yearly} firstKey="assets" secondKey="profit" />
+          ) : null}
+          <DataTable
+            rows={balanceSheet.length ? balanceSheet : yearly}
+            emptyMessage="Balance sheet data isn't available for this stock from our current data providers."
+          />
         </TabsContent>
 
         <TabsContent value="cash" className="space-y-3">

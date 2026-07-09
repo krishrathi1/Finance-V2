@@ -13,14 +13,15 @@ import type { DashboardData } from "@/lib/types";
 import type { AnalystConsensus } from "@/lib/backend/contracts";
 import { baseSymbol, round2, safeCall, getText, DESKTOP_UA } from "@/lib/backend/http";
 import { getSampleDashboard } from "@/lib/backend/sample";
-import { getNseQuote, getNseCorporateEvents, getNseQuarterlyResults } from "@/lib/backend/providers/nse";
-import { getYahooQuote, getYahooCandles, getYahooBundle } from "@/lib/backend/providers/yahoo";
+import { getNseQuote, getNseCorporateEvents, getNseQuarterlyResults, getNseShareholdingHistory } from "@/lib/backend/providers/nse";
+import { getYahooQuote, getYahooCandles, getYahooBundle, getYahooTimeseriesFinancials } from "@/lib/backend/providers/yahoo";
 import {
   getFmpQuote,
   getFmpCandles,
   getFmpQuarterlyResults,
   getFmpProfile,
   getFmpKeyMetrics,
+  getFmpFinancialStatements,
   getFmpFinancialGrowth,
   getFmpAnalystEstimates,
 } from "@/lib/backend/providers/fmp";
@@ -65,6 +66,37 @@ function candleClose(row: any): number | null {
 
 function hasCandleRows(rows: unknown): rows is any[] {
   return Array.isArray(rows) && rows.some((row) => candleClose(row) !== null);
+}
+
+function hasFinancialRows(rows: unknown): rows is any[] {
+  return Array.isArray(rows) && rows.some((row) =>
+    row && typeof row === "object" &&
+    Object.entries(row as Record<string, unknown>).some(
+      ([key, value]) => !["period", "quarter", "date"].includes(key) && value !== null && value !== undefined
+    )
+  );
+}
+
+function latestFinancialPeriodMs(rows: unknown): number {
+  if (!Array.isArray(rows)) return 0;
+  return rows.reduce((latest, row) => {
+    const parsed = Date.parse(String(row?.period || row?.date || ""));
+    return Number.isFinite(parsed) && parsed > latest ? parsed : latest;
+  }, 0);
+}
+
+function mergeFinancialBackfill(target: any, source: any) {
+  if (!source) return;
+  for (const k of ["yearly", "incomeStatement", "balanceSheet", "cashFlow"] as const) {
+    const sourceRows = source[k];
+    const targetRows = target[k];
+    if (
+      hasFinancialRows(sourceRows) &&
+      (!hasFinancialRows(targetRows) || latestFinancialPeriodMs(sourceRows) > latestFinancialPeriodMs(targetRows))
+    ) {
+      target[k] = sourceRows;
+    }
+  }
 }
 
 function selectCandleRows(...candidates: unknown[]): any[] {
@@ -460,28 +492,34 @@ export async function buildDashboard(symbol: string, options: BuildOptions = {})
     nseQuote,
     nseEvents,
     nseQuarterly,
+    nseShareholdingHistory,
     yahooQuote,
     yahooCandles,
     yahooBundle,
+    yahooTimeseriesFinancials,
     fmpQuote,
     fmpCandles,
     fmpQuarterly,
     fmpProfile,
     fmpKeyMetrics,
+    fmpStatements,
     fmpGrowth,
     fmpEstimates,
   ] = await Promise.all([
     safeCall((signal) => getNseQuote(base, signal), 6000, "nseQuote"),
     safeCall((signal) => getNseCorporateEvents(base, signal), 8000, "nseEvents"),
     safeCall((signal) => getNseQuarterlyResults(base, signal), 8000, "nseQuarterly"),
+    safeCall((signal) => getNseShareholdingHistory(base, signal), 7000, "nseShareholding"),
     safeCall((signal) => getYahooQuote(marketSymbol, signal), 6000, "yahooQuote"),
     safeCall((signal) => getYahooCandles(marketSymbol, historyDays, signal), 8000, "yahooCandles"),
     safeCall((signal) => getYahooBundle(marketSymbol, historyDays, signal), 11000, "yahooBundle"),
+    safeCall((signal) => getYahooTimeseriesFinancials(marketSymbol, signal), 8000, "yahooTimeseriesFinancials"),
     safeCall((signal) => getFmpQuote(marketSymbol, signal), 6000, "fmpQuote"),
     safeCall((signal) => getFmpCandles(marketSymbol, "5Y", signal), 8000, "fmpCandles"),
     safeCall((signal) => getFmpQuarterlyResults(marketSymbol, signal), 7000, "fmpQuarterly"),
     safeCall((signal) => getFmpProfile(marketSymbol, signal), 6000, "fmpProfile"),
     safeCall((signal) => getFmpKeyMetrics(marketSymbol, signal), 6000, "fmpKeyMetrics"),
+    safeCall((signal) => getFmpFinancialStatements(marketSymbol, signal), 9000, "fmpStatements"),
     safeCall((signal) => getFmpFinancialGrowth(marketSymbol, signal), 6000, "fmpGrowth"),
     safeCall((signal) => getFmpAnalystEstimates(marketSymbol, signal), 6000, "fmpEstimates"),
   ]);
@@ -560,6 +598,7 @@ export async function buildDashboard(symbol: string, options: BuildOptions = {})
       if (bundle.financials[k] && bundle.financials[k].length) data.financials[k] = bundle.financials[k];
     }
   }
+  mergeFinancialBackfill(data.financials, yahooTimeseriesFinancials);
   if (bundle.profile) {
     const p = bundle.profile;
     if (p.companyName && data.companyName === base) data.companyName = p.companyName;
@@ -570,6 +609,24 @@ export async function buildDashboard(symbol: string, options: BuildOptions = {})
   }
   if (bundle.shareholding && (num(bundle.shareholding.promoters) || num(bundle.shareholding.fii))) {
     data.shareholding = { ...data.shareholding, ...bundle.shareholding };
+  }
+  if (nseShareholdingHistory && nseShareholdingHistory.length) {
+    // NSE's history only carries Promoter/Public (no historical FII/DII split
+    // — see getNseShareholdingHistory); overlay Yahoo's real current-quarter
+    // FII/DII onto the latest history point (index 0) so the most recent
+    // period doesn't regress to 0% FII/DII once normalizeShareholding()
+    // adopts history[0] as the new top-level snapshot.
+    const currentFii = num(data.shareholding.fii);
+    const currentDii = num(data.shareholding.dii);
+    const history = [...nseShareholdingHistory];
+    if (history[0] && (currentFii !== null || currentDii !== null)) {
+      history[0] = {
+        ...history[0],
+        fii: currentFii ?? history[0].fii,
+        dii: currentDii ?? history[0].dii,
+      };
+    }
+    data.shareholding = { ...data.shareholding, history };
   }
 
   // ---- FMP quote fallback + profile/keyMetrics/growth/estimates ----
@@ -597,6 +654,9 @@ export async function buildDashboard(symbol: string, options: BuildOptions = {})
     for (const [src, dst] of Object.entries(map)) {
       if (num(row[src]) !== null && (data.metrics[dst] == null)) data.metrics[dst] = row[src];
     }
+  }
+  if (fmpStatements) {
+    mergeFinancialBackfill(data.financials, fmpStatements);
   }
   if (fmpGrowth && fmpGrowth.length) data.fmpFinancialGrowth = fmpGrowth;
   if (fmpEstimates && fmpEstimates.length) data.analystEstimates = fmpEstimates;
@@ -666,7 +726,7 @@ export async function buildDashboard(symbol: string, options: BuildOptions = {})
   data.returnsSummary = returnsSummary(data.price.history);
   data.returnsHeatmap = returnsHeatmap(data.price.history);
   data.financials.keyRatioTrends = finalizeKeyRatioTrends(
-    data.financials.keyRatioTrends, data.metrics, data.financials, data.price.history, data.sector || ""
+    data.financials.keyRatioTrends, data.metrics, data.financials, data.price.history, data.sector || "", data.fmpKeyMetrics
   );
   data.metrics = enrichMetricsFromRatioTrends(data.metrics, data.financials.keyRatioTrends);
   const growth = buildFinancialGrowthSnapshot(null, data.financials, data.returnsSummary, data.corporateActions.dividends || []);

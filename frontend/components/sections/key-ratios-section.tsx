@@ -4,7 +4,7 @@ import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { KeyRatioTrendCard, KeyRatioTrends } from "@/lib/types";
 
-const PERCENTAGE_LABELS = new Set(["ROE", "ROCE", "ROA", "NPM", "NET NPA", "CASA Ratio", "Advance Growth", "Net Interest Margin", "Operating CF Margin"]);
+const PERCENTAGE_LABELS = new Set(["ROE", "ROCE", "ROA", "ROIC", "NPM", "NET NPA", "CASA Ratio", "Advance Growth", "Net Interest Margin", "Operating CF Margin"]);
 
 function formatValue(value: number | null, label: string): string {
   if (value === null || value === undefined || Number.isNaN(Number(value))) {

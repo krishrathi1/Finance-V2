@@ -44,6 +44,23 @@ const QUOTE_SUMMARY_MODULES = [
   "recommendationTrend",
 ].join(",");
 
+const FUNDAMENTALS_TIMESERIES_TYPES = [
+  "annualTotalRevenue",
+  "annualEBIT",
+  "annualNetIncome",
+  "annualTotalAssets",
+  "annualTotalDebt",
+  "annualTotalLiabilitiesNetMinorityInterest",
+  "annualStockholdersEquity",
+  "annualCurrentAssets",
+  "annualCurrentLiabilities",
+  "annualRetainedEarnings",
+  "annualOperatingCashFlow",
+  "annualInvestingCashFlow",
+  "annualFinancingCashFlow",
+  "annualFreeCashFlow",
+].join(",");
+
 /** Convert a Yahoo unix timestamp (seconds, UTC) into an ISO yyyy-mm-dd string. */
 function tsToIsoDate(ts: unknown): string | null {
   const n = toFloat(ts);
@@ -270,6 +287,9 @@ export async function getYahooQuote(marketSymbol: string, signal?: AbortSignal):
 let yahooCrumbCache: { cookie: string; crumb: string; at: number } | null = null;
 let yahooCrumbPending: Promise<{ cookie: string; crumb: string } | null> | null = null;
 const YAHOO_CRUMB_CACHE_MS = 10 * 60_000;
+const YAHOO_TIMESERIES_CACHE_MS = 2 * 60_000;
+const yahooTimeseriesCache = new Map<string, { at: number; data: ProviderBundle["financials"] | null }>();
+const yahooTimeseriesPending = new Map<string, Promise<ProviderBundle["financials"] | null>>();
 
 /**
  * Obtain a (cookie, crumb) pair required by the v10 quoteSummary endpoint.
@@ -442,6 +462,165 @@ function mapAnalystConsensus(qs: any): ProviderBundle["analystConsensus"] {
 /** Generic helper to read a value from a Yahoo statement row by key. */
 function rowVal(row: any, key: string): number | null {
   return toCrore(row?.[key]);
+}
+
+function hasStatementRows(rows: unknown): rows is Array<Record<string, string | number | null>> {
+  return Array.isArray(rows) && rows.some((row) =>
+    row && typeof row === "object" &&
+    Object.entries(row as Record<string, unknown>).some(
+      ([key, value]) => !["period", "quarter", "date"].includes(key) && value !== null && value !== undefined
+    )
+  );
+}
+
+function latestPeriodMs(rows: unknown): number {
+  if (!Array.isArray(rows)) return 0;
+  return rows.reduce((latest, row) => {
+    const parsed = Date.parse(String((row as any)?.period || (row as any)?.date || ""));
+    return Number.isFinite(parsed) && parsed > latest ? parsed : latest;
+  }, 0);
+}
+
+function mergeFinancials(
+  primary: ProviderBundle["financials"] | undefined,
+  fallback: ProviderBundle["financials"] | null
+): ProviderBundle["financials"] | undefined {
+  if (!fallback) return primary;
+  const merged: ProviderBundle["financials"] = { ...(primary || {}) };
+  for (const key of ["yearly", "incomeStatement", "balanceSheet", "cashFlow"] as const) {
+    const primaryRows = (merged as any)[key];
+    const fallbackRows = (fallback as any)[key];
+    const fallbackIsNewer = latestPeriodMs(fallbackRows) > latestPeriodMs(primaryRows);
+    if (hasStatementRows(fallbackRows) && (!hasStatementRows(primaryRows) || fallbackIsNewer)) {
+      (merged as any)[key] = (fallback as any)[key];
+    }
+  }
+  if (!merged?.quarterly && fallback.quarterly?.length) merged.quarterly = fallback.quarterly;
+  return Object.keys(merged).length ? merged : undefined;
+}
+
+function timeseriesValue(item: any): number | null {
+  return toCrore(item?.reportedValue ?? item);
+}
+
+export async function getYahooTimeseriesFinancials(
+  marketSymbol: string,
+  signal?: AbortSignal
+): Promise<ProviderBundle["financials"] | null> {
+  const ticker = bundleTickers(marketSymbol)[0];
+  if (!ticker) return null;
+  const cacheKey = ticker.toUpperCase();
+  const cached = yahooTimeseriesCache.get(cacheKey);
+  if (cached && Date.now() - cached.at < YAHOO_TIMESERIES_CACHE_MS) return cached.data;
+  const pending = yahooTimeseriesPending.get(cacheKey);
+  if (pending) return pending;
+
+  const request = fetchYahooTimeseriesFinancials(ticker, signal).finally(() => {
+    yahooTimeseriesPending.delete(cacheKey);
+  });
+  yahooTimeseriesPending.set(cacheKey, request);
+  return request;
+}
+
+async function fetchYahooTimeseriesFinancials(
+  ticker: string,
+  signal?: AbortSignal
+): Promise<ProviderBundle["financials"] | null> {
+  try {
+    const now = Math.floor(Date.now() / 1000);
+    const eightYearsAgo = Math.floor(now - 8 * 366 * 24 * 60 * 60);
+    const url =
+      `${YAHOO_QUERY1}/ws/fundamentals-timeseries/v1/finance/timeseries/${encodeURIComponent(ticker)}` +
+      `?symbol=${encodeURIComponent(ticker)}&type=${FUNDAMENTALS_TIMESERIES_TYPES}` +
+      `&period1=${eightYearsAgo}&period2=${now + 366 * 24 * 60 * 60}`;
+
+    const payload = await getJson<any>(url, { timeoutMs: 7000, retries: 1, signal });
+    const result: any[] = Array.isArray(payload?.timeseries?.result) ? payload.timeseries.result : [];
+    if (!result.length) return null;
+
+    const rowsByPeriod = new Map<string, Record<string, number | null>>();
+    for (const block of result) {
+      const type = Array.isArray(block?.meta?.type) ? String(block.meta.type[0] || "") : "";
+      const values: any[] = Array.isArray(block?.[type]) ? block[type] : [];
+      if (!type || !values.length) continue;
+      for (const item of values) {
+        const period = periodLabel(item?.asOfDate);
+        if (!period) continue;
+        const row = rowsByPeriod.get(period) || {};
+        row[type] = timeseriesValue(item);
+        rowsByPeriod.set(period, row);
+      }
+    }
+
+    const periods = Array.from(rowsByPeriod.keys()).sort((a, b) => Date.parse(a) - Date.parse(b));
+    if (!periods.length) return null;
+
+    const incomeStatement = periods
+      .map((period) => {
+        const row = rowsByPeriod.get(period) || {};
+        return {
+          period,
+          revenue: row.annualTotalRevenue ?? null,
+          ebit: row.annualEBIT ?? null,
+          netIncome: row.annualNetIncome ?? null,
+        };
+      })
+      .filter((row) => hasStatementRows([row]));
+
+    const balanceSheet = periods
+      .map((period) => {
+        const row = rowsByPeriod.get(period) || {};
+        return {
+          period,
+          totalAssets: row.annualTotalAssets ?? null,
+          totalDebt: row.annualTotalDebt ?? null,
+          totalLiabilities: row.annualTotalLiabilitiesNetMinorityInterest ?? null,
+          equity: row.annualStockholdersEquity ?? null,
+          currentAssets: row.annualCurrentAssets ?? null,
+          currentLiabilities: row.annualCurrentLiabilities ?? null,
+          retainedEarnings: row.annualRetainedEarnings ?? null,
+        };
+      })
+      .filter((row) => hasStatementRows([row]));
+
+    const cashFlow = periods
+      .map((period) => {
+        const row = rowsByPeriod.get(period) || {};
+        return {
+          period,
+          operatingCashFlow: row.annualOperatingCashFlow ?? null,
+          investingCashFlow: row.annualInvestingCashFlow ?? null,
+          financingCashFlow: row.annualFinancingCashFlow ?? null,
+          freeCashFlow: row.annualFreeCashFlow ?? null,
+        };
+      })
+      .filter((row) => hasStatementRows([row]));
+
+    const yearly = periods
+      .map((period) => {
+        const row = rowsByPeriod.get(period) || {};
+        return {
+          period,
+          revenue: row.annualTotalRevenue ?? null,
+          profit: row.annualNetIncome ?? null,
+          assets: row.annualTotalAssets ?? null,
+          cashFlow: row.annualOperatingCashFlow ?? null,
+        };
+      })
+      .filter((row) => hasStatementRows([row]));
+
+    const financials: ProviderBundle["financials"] = {};
+    if (yearly.length) financials.yearly = yearly;
+    if (incomeStatement.length) financials.incomeStatement = incomeStatement;
+    if (balanceSheet.length) financials.balanceSheet = balanceSheet;
+    if (cashFlow.length) financials.cashFlow = cashFlow;
+    const data = Object.keys(financials).length ? financials : null;
+    yahooTimeseriesCache.set(ticker.toUpperCase(), { at: Date.now(), data });
+    return data;
+  } catch (err) {
+    console.warn(`[yahoo] getYahooTimeseriesFinancials failed: ${String(err)}`);
+    return null;
+  }
 }
 
 /** Build the yearly + statement tables from the *History modules. */
@@ -619,6 +798,8 @@ export async function getYahooBundle(
 
     const bundle: ProviderBundle = {};
     if (candles && candles.length) bundle.candles = candles;
+    const timeseriesFinancials = await getYahooTimeseriesFinancials(marketSymbol, signal);
+    if (timeseriesFinancials) bundle.financials = timeseriesFinancials;
 
     // Attempt the crumb flow; if it fails, return whatever we have (partial).
     const auth = await getYahooCrumb();
@@ -655,7 +836,7 @@ export async function getYahooBundle(
     const metrics = mapMetrics(qs);
     if (metrics && Object.keys(metrics).length) bundle.metrics = metrics;
 
-    const financials = mapFinancials(qs);
+    const financials = mergeFinancials(mapFinancials(qs), timeseriesFinancials);
     if (financials && Object.keys(financials).length) bundle.financials = financials;
 
     const shareholding = mapShareholding(qs);

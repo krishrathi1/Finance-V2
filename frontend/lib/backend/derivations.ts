@@ -564,6 +564,7 @@ export function finalizeKeyRatioTrends(
   financials: DashboardData["financials"],
   history: PricePoint[],
   sector: string,
+  fmpKeyMetrics?: Array<Record<string, number | string | null>>,
 ): KeyRatioTrends {
   const trends = existing && typeof existing === "object" ? existing : ({} as any);
 
@@ -753,6 +754,48 @@ export function finalizeKeyRatioTrends(
       { label: "Asset Turnover", average3Y: averageFromSeries(assetTurnoverSeries), series: assetTurnoverSeries.slice(-5) },
       { label: "Operating CF Margin", average3Y: averageFromSeries(cashFlowMarginSeries), series: cashFlowMarginSeries.slice(-5) },
     ];
+  }
+
+  // Profitability cards (ROE / ROIC), sourced from FMP's annual key-metrics
+  // history — the only place these multi-period ratios come from. Mirrors
+  // the pcfCard/netNpaCard pattern above.
+  const keyMetricsRows = Array.isArray(fmpKeyMetrics) ? fmpKeyMetrics : [];
+  if (keyMetricsRows.length) {
+    const parsedRows: Array<{ ms: number; period: string; row: Record<string, number | string | null> }> = [];
+    for (const row of keyMetricsRows) {
+      if (!row || typeof row !== "object") continue;
+      const dateRaw = String(row.date ?? row.calendarYear ?? "").trim();
+      if (!dateRaw) continue;
+      // parseIsoDate handles both "YYYY-MM-DD" and (via its Date fallback) a bare "YYYY".
+      const parsed = parseIsoDate(dateRaw.slice(0, 10));
+      if (!parsed) continue;
+      parsedRows.push({ ms: parsed.ms, period: dateRaw.slice(0, 4), row });
+    }
+    parsedRows.sort((a, b) => a.ms - b.ms);
+
+    const buildRatioCard = (label: string, keys: string[]) => {
+      const card = getOrCreateCard("profitability", label);
+      if (!cardIsBlank(card)) return;
+      const series: Array<{ period: string; value: number | null }> = [];
+      for (const { period, row } of parsedRows.slice(-5)) {
+        let value: number | null = null;
+        for (const key of keys) {
+          value = num(row[key]);
+          if (value !== null) break;
+        }
+        if (value === null) continue;
+        // FMP reports these as fractions (0.18); display as a percent, matching
+        // how ROE/ROCE are already shown elsewhere (data.metrics["roe"] etc.).
+        series.push({ period, value: round(Math.abs(value) <= 1 ? value * 100 : value, 2) });
+      }
+      if (series.length) {
+        card.series = series;
+        card.average3Y = averageFromSeries(series);
+      }
+    };
+
+    buildRatioCard("ROE", ["roe", "returnOnEquity"]);
+    buildRatioCard("ROIC", ["roic", "returnOnInvestedCapital"]);
   }
 
   for (const group of ["profitability", "valuation", "liquidity"] as const) {

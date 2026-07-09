@@ -22,7 +22,7 @@ import type {
   QuarterlyResults,
   QuarterPoint,
 } from "@/lib/backend/contracts";
-import type { DashboardData, ActionRow, QuarterlyDetailedPoint } from "@/lib/types";
+import type { DashboardData, ActionRow, QuarterlyDetailedPoint, ShareholdingPoint } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
 // Headers + cookie priming
@@ -677,6 +677,74 @@ export async function getNseCorporateEvents(
     // Even on a catastrophic failure return the empty skeleton (never null/throw
     // here is acceptable — caller treats this section defensively).
     return result;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 4. SHAREHOLDING HISTORY — getNseShareholdingHistory
+//
+// NSE's own shareholding-pattern master feed. Yahoo's `institutionOwnership`
+// module only gives a single current snapshot; this endpoint returns one row
+// per quarterly filing going back years, giving real year/quarter-wise trend
+// data. NOTE: this specific feed only discloses Promoter% and Public% (the
+// FII/DII split isn't itself broken out here — that finer breakdown is only
+// in each filing's full XBRL document, which isn't practical to parse
+// per-request). Historical points therefore carry fii=0/dii=0; callers that
+// want the current quarter's real FII/DII split should overlay it onto the
+// most recent point from another source (see dashboard.ts).
+// ---------------------------------------------------------------------------
+
+const NSE_MONTHS: Record<string, string> = {
+  JAN: "01", FEB: "02", MAR: "03", APR: "04", MAY: "05", JUN: "06",
+  JUL: "07", AUG: "08", SEP: "09", OCT: "10", NOV: "11", DEC: "12",
+};
+
+/** Parse NSE's "DD-MON-YYYY" date format (e.g. "31-MAR-2026") to ISO "YYYY-MM-DD". */
+function parseNseDMonY(raw: unknown): string {
+  const m = /^(\d{1,2})-([A-Za-z]{3})-(\d{4})/.exec(String(raw ?? "").trim());
+  if (!m) return "";
+  const month = NSE_MONTHS[m[2].toUpperCase()];
+  if (!month) return "";
+  return `${m[3]}-${month}-${m[1].padStart(2, "0")}`;
+}
+
+export async function getNseShareholdingHistory(
+  base: string,
+  signal?: AbortSignal
+): Promise<ShareholdingPoint[] | null> {
+  try {
+    const key = baseSymbol(base);
+    const url = `${NSE_BASE}/api/corporate-share-holdings-master?index=equities&symbol=${encodeURIComponent(key)}`;
+    const payload = await nseGetJson<any[]>(url, 6000, signal);
+    if (!Array.isArray(payload) || payload.length === 0) return null;
+
+    // NSE returns filings newest-broadcast-first; a quarter can have more
+    // than one row (revisions/resubmissions), so keep only the first
+    // (=newest) row seen per quarter-end date.
+    const byQuarter = new Map<string, ShareholdingPoint>();
+    for (const row of payload) {
+      if (!row || typeof row !== "object") continue;
+      const quarter = parseNseDMonY(row.date);
+      if (!quarter || byQuarter.has(quarter)) continue;
+      const promoters = toFloat(row.pr_and_prgrp);
+      const publicVal = toFloat(row.public_val);
+      if (promoters === null && publicVal === null) continue;
+      byQuarter.set(quarter, {
+        quarter,
+        promoters: promoters ?? Math.max(0, 100 - (publicVal ?? 0)),
+        fii: 0,
+        dii: 0,
+        public: publicVal ?? Math.max(0, 100 - (promoters ?? 0)),
+      });
+    }
+    if (byQuarter.size === 0) return null;
+
+    // Newest first, matching how normalizeShareholding treats history[0] as latest.
+    return Array.from(byQuarter.values())
+      .sort((a, b) => (a.quarter < b.quarter ? 1 : a.quarter > b.quarter ? -1 : 0))
+      .slice(0, 20);
+  } catch {
+    return null;
   }
 }
 

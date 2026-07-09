@@ -18,6 +18,7 @@ import { getJson, round2, toFloat } from "@/lib/backend/http";
 import type {
   Candle,
   FmpProviderApi,
+  ProviderBundle,
   QuarterPoint,
 } from "@/lib/backend/contracts";
 import type { DashboardData } from "@/lib/types";
@@ -273,6 +274,139 @@ async function getFmpKeyMetrics(
   }
 }
 
+function toCrore(value: unknown): number | null {
+  const n = toFloat(value);
+  if (n === null) return null;
+  return round2(n / CRORE);
+}
+
+async function getFmpRows(
+  stablePath: string,
+  v3Path: string,
+  sym: string,
+  timeoutMs: number,
+  signal?: AbortSignal,
+): Promise<any[] | null> {
+  const key = apiKey();
+  const stableUrl = `${FMP_HOST}/stable/${stablePath}?symbol=${encodeURIComponent(sym)}&period=annual&limit=5&apikey=${encodeURIComponent(key)}`;
+  const v3Url = `${FMP_HOST}/api/v3/${v3Path}/${encodeURIComponent(sym)}?period=annual&limit=5&apikey=${encodeURIComponent(key)}`;
+
+  let payload = await getJson<any[]>(stableUrl, { timeoutMs, signal });
+  if (!Array.isArray(payload) || payload.length === 0) {
+    payload = await getJson<any[]>(v3Url, { timeoutMs, signal });
+  }
+  return Array.isArray(payload) && payload.length ? payload : null;
+}
+
+function firstNumber(row: any, keys: string[]): number | null {
+  for (const key of keys) {
+    const value = toCrore(row?.[key]);
+    if (value !== null) return value;
+  }
+  return null;
+}
+
+function hasStatementData(row: Record<string, string | number | null>): boolean {
+  return Object.entries(row).some(([key, value]) => key !== "period" && value !== null && value !== undefined);
+}
+
+/**
+ * Annual income statement, balance sheet, and cash-flow statement.
+ *
+ * Yahoo quoteSummary can omit balance/cash-flow data for Indian listings. FMP
+ * exposes those as dedicated statement endpoints, so this fills the deep
+ * statement tabs and the yearly assets/cash-flow summary when an API key exists.
+ */
+async function getFmpFinancialStatements(
+  marketSymbol: string,
+  signal?: AbortSignal,
+): Promise<ProviderBundle["financials"] | null> {
+  try {
+    const key = apiKey();
+    if (!key) return null;
+    const sym = fmpSymbol(marketSymbol);
+
+    const [incomeRows, balanceRows, cashRows] = await Promise.all([
+      getFmpRows("income-statement", "income-statement", sym, 7000, signal),
+      getFmpRows("balance-sheet-statement", "balance-sheet-statement", sym, 7000, signal),
+      getFmpRows("cash-flow-statement", "cash-flow-statement", sym, 7000, signal),
+    ]);
+
+    const byPeriod = (rows: any[] | null) => {
+      const map = new Map<string, any>();
+      for (const row of rows || []) {
+        const period = periodLabel(String(row?.date || row?.fillingDate || row?.calendarYear || ""));
+        if (period) map.set(period, row);
+      }
+      return map;
+    };
+
+    const incomeStatement = (incomeRows || [])
+      .map((r) => ({
+        period: periodLabel(String(r?.date || r?.fillingDate || "")),
+        revenue: firstNumber(r, ["revenue", "totalRevenue"]),
+        grossProfit: firstNumber(r, ["grossProfit"]),
+        ebit: firstNumber(r, ["ebit", "operatingIncome"]),
+        netIncome: firstNumber(r, ["netIncome"]),
+        eps: round2(r?.eps ?? r?.epsdiluted),
+      }))
+      .filter((row) => row.period && hasStatementData(row))
+      .sort((a, b) => Date.parse(a.period) - Date.parse(b.period));
+
+    const balanceSheet = (balanceRows || [])
+      .map((r) => ({
+        period: periodLabel(String(r?.date || r?.fillingDate || "")),
+        totalAssets: firstNumber(r, ["totalAssets"]),
+        totalDebt: firstNumber(r, ["totalDebt", "shortTermDebt", "longTermDebt"]),
+        totalLiabilities: firstNumber(r, ["totalLiabilities", "totalLiab"]),
+        equity: firstNumber(r, ["totalStockholdersEquity", "totalStockholderEquity", "totalEquity"]),
+        currentAssets: firstNumber(r, ["totalCurrentAssets"]),
+        currentLiabilities: firstNumber(r, ["totalCurrentLiabilities"]),
+        retainedEarnings: firstNumber(r, ["retainedEarnings"]),
+      }))
+      .filter((row) => row.period && hasStatementData(row))
+      .sort((a, b) => Date.parse(a.period) - Date.parse(b.period));
+
+    const cashFlow = (cashRows || [])
+      .map((r) => ({
+        period: periodLabel(String(r?.date || r?.fillingDate || "")),
+        operatingCashFlow: firstNumber(r, ["operatingCashFlow", "netCashProvidedByOperatingActivities"]),
+        investingCashFlow: firstNumber(r, ["netCashUsedForInvestingActivites", "netCashUsedForInvestingActivities"]),
+        financingCashFlow: firstNumber(r, ["netCashUsedProvidedByFinancingActivities", "netCashProvidedByFinancingActivities"]),
+        freeCashFlow: firstNumber(r, ["freeCashFlow"]),
+      }))
+      .filter((row) => row.period && hasStatementData(row))
+      .sort((a, b) => Date.parse(a.period) - Date.parse(b.period));
+
+    const balanceByPeriod = byPeriod(balanceRows);
+    const cashByPeriod = byPeriod(cashRows);
+    const yearly = incomeStatement
+      .map((income) => {
+        const period = String(income.period || "");
+        const balance = balanceByPeriod.get(period);
+        const cash = cashByPeriod.get(period);
+        return {
+          period,
+          revenue: typeof income.revenue === "number" ? income.revenue : null,
+          profit: typeof income.netIncome === "number" ? income.netIncome : null,
+          assets: balance ? firstNumber(balance, ["totalAssets"]) : null,
+          cashFlow: cash ? firstNumber(cash, ["operatingCashFlow", "netCashProvidedByOperatingActivities"]) : null,
+        };
+      })
+      .filter((row) => row.period);
+
+    const financials: ProviderBundle["financials"] = {};
+    if (yearly.length) financials.yearly = yearly;
+    if (incomeStatement.length) financials.incomeStatement = incomeStatement;
+    if (balanceSheet.length) financials.balanceSheet = balanceSheet;
+    if (cashFlow.length) financials.cashFlow = cashFlow;
+    return Object.keys(financials).length ? financials : null;
+  } catch (err) {
+    console.warn(`[fmp] getFmpFinancialStatements failed: ${String(err)}`);
+    return null;
+  }
+}
+
 /**
  * Annual financial growth (raw rows).
  *
@@ -359,6 +493,7 @@ export {
   getFmpQuarterlyResults,
   getFmpProfile,
   getFmpKeyMetrics,
+  getFmpFinancialStatements,
   getFmpFinancialGrowth,
   getFmpAnalystEstimates,
 };
@@ -370,6 +505,7 @@ export const fmpProvider: FmpProviderApi = {
   getFmpQuarterlyResults,
   getFmpProfile,
   getFmpKeyMetrics,
+  getFmpFinancialStatements,
   getFmpFinancialGrowth,
   getFmpAnalystEstimates,
   searchFmp,
