@@ -14,7 +14,8 @@ import { DocumentsSection } from "@/components/sections/documents-section";
 import { EarningsTldr } from "@/components/sections/earnings-tldr";
 import { KeyRatiosSection } from "@/components/sections/key-ratios-section";
 import { MetricsGridLive } from "@/components/sections/metrics-grid-live";
-import { ReturnsCalculator } from "@/components/sections/returns-calculator";
+import { ResearchReportCard } from "@/components/sections/research-report-card";
+import { SimpleReturnsCalculator } from "@/components/sections/simple-returns-calculator";
 import { ReturnsPanel } from "@/components/sections/returns-panel";
 import { RiskScore } from "@/components/sections/risk-score";
 import { ShareholdingSection } from "@/components/sections/shareholding-section";
@@ -135,6 +136,8 @@ export function LiveStockDetails({ initialData, symbol, exchange }: { initialDat
           exchange={data.exchange || exchange}
           dashboardMetrics={data.metrics}
           keyRatioTrends={data.financials.keyRatioTrends}
+          sector={data.sector}
+          industry={data.profile.industry}
         />
       </section>
 
@@ -175,15 +178,16 @@ export function LiveStockDetails({ initialData, symbol, exchange }: { initialDat
         <TechnicalsSection technicals={data.technicals} />
 
         <div className="grid gap-4 xl:grid-cols-2">
-          <BrokerageSummary brokerage={data.brokerageResearch} />
-          <ReturnsCalculator
+          <SimpleReturnsCalculator returnsSummary={data.returnsSummary} />
+          <ResearchReportCard
+            companyName={data.companyName}
             symbol={symbol}
-            currentPrice={data.price.cmp}
-            aiTarget={data.price.aiTarget}
-            mlConfidence={smartScore.mlConfidence}
-            upProbability={smartScore.validation?.upProbability}
+            cmp={data.price.cmp}
+            report={data.brokerageResearch?.reports?.[0]}
           />
         </div>
+
+        <BrokerageSummary brokerage={data.brokerageResearch} />
 
         {data.analystEstimates && data.analystEstimates.length > 0 && (
           <AnalystEstimatesSection estimates={data.analystEstimates} />

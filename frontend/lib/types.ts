@@ -145,7 +145,13 @@ export type DashboardData = {
     }>;
   };
   competitors: {
-    table: Array<{ name: string; marketCap: number; pe: number; pb: number; roe: number }>;
+    table: Array<{
+      name: string;
+      marketCap: number;
+      pe: number | null;
+      pb: number | null;
+      roe: number | null;
+    }>;
     sectorName?: string;
     industryName?: string;
     sectorCompanies?: Array<{ symbol: string; name: string }>;

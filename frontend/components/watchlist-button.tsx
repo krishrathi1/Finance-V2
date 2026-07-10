@@ -3,7 +3,7 @@
 import { Heart } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
-import { addToWatchlist, isInWatchlist, removeFromWatchlist } from "@/lib/watchlist";
+import { addToWatchlist, isInWatchlist, removeFromWatchlist, WATCHLIST_SYNCED_EVENT } from "@/lib/watchlist";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -16,6 +16,14 @@ export function WatchlistButton({ symbol, className }: Props) {
 
   useEffect(() => {
     setActive(isInWatchlist(symbol));
+  }, [symbol]);
+
+  useEffect(() => {
+    function handleSynced() {
+      setActive(isInWatchlist(symbol));
+    }
+    window.addEventListener(WATCHLIST_SYNCED_EVENT, handleSynced);
+    return () => window.removeEventListener(WATCHLIST_SYNCED_EVENT, handleSynced);
   }, [symbol]);
 
   const toggle = useCallback(() => {

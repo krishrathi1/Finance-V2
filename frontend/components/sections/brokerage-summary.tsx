@@ -1,23 +1,10 @@
 import Link from "next/link";
 
 import { Card } from "@/components/ui/card";
+import { brokerActionBadgeClass, formatReportDate } from "@/lib/format";
 import type { DashboardData } from "@/lib/types";
 
 type BrokeragePayload = DashboardData["brokerageResearch"];
-
-function actionStyles(action: string) {
-  const value = (action || "").toLowerCase();
-  if (value === "buy") return "bg-emerald-600/15 text-emerald-700";
-  if (value === "sell") return "bg-rose-600/15 text-rose-700";
-  return "bg-amber-600/15 text-amber-800";
-}
-
-function formatDate(value: string) {
-  if (!value) return "-";
-  const dt = new Date(value);
-  if (Number.isNaN(dt.getTime())) return value;
-  return dt.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
-}
 
 function formatTarget(value: number | null | undefined) {
   if (value === null || value === undefined || !Number.isFinite(value)) return "-";
@@ -71,10 +58,10 @@ export function BrokerageSummary({ brokerage }: { brokerage?: BrokeragePayload }
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="text-sm font-semibold">{row.broker}</p>
-                      <p className="text-xs text-muted">{formatDate(row.date)}</p>
+                      <p className="text-xs text-muted">{formatReportDate(row.date, "-")}</p>
                     </div>
                     <div className="text-right">
-                      <span className={`inline-flex rounded-md px-2 py-0.5 text-xs font-semibold uppercase ${actionStyles(row.action)}`}>
+                      <span className={`inline-flex rounded-md px-2 py-0.5 text-xs font-semibold uppercase ${brokerActionBadgeClass(row.action)}`}>
                         {row.action || "hold"}
                       </span>
                       <p className="mt-1 text-xs text-muted">Target: {formatTarget(row.targetPrice)}</p>

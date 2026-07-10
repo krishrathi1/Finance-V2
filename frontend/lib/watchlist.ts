@@ -1,6 +1,10 @@
 const STORAGE_KEY = "ff-watchlists";
 const DEFAULT_LIST = "My Watchlist";
 
+/** Fired after a server hydration/merge overwrites localStorage, so any
+ * already-rendered watchlist UI knows to re-read from storage. */
+export const WATCHLIST_SYNCED_EVENT = "ff-watchlist-synced";
+
 export type WatchlistStore = {
   lists: Record<string, string[]>;
   notes?: Record<string, Record<string, string>>;
@@ -40,6 +44,80 @@ function write(store: WatchlistStore) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Server sync (best-effort). localStorage stays the source of truth for the
+// current tab/session — every read/write above is untouched and still works
+// fully offline/anonymous. When the user is signed in, mutations are also
+// fired at the server in the background so the same account sees its
+// watchlist on another device; a failed sync just leaves the next login's
+// hydration to reconcile things instead of blocking or erroring the UI.
+// ---------------------------------------------------------------------------
+
+let authenticated = false;
+let hydrated = false;
+
+/** Set by the auth layer (see components/watchlist-sync.tsx) whenever sign-in
+ * state changes, so mutations know whether it's worth calling the server. */
+export function setWatchlistAuthState(isAuthenticated: boolean) {
+  authenticated = isAuthenticated;
+}
+
+/** Call on sign-out so the next sign-in (possibly a different account) hydrates fresh. */
+export function resetWatchlistHydration() {
+  hydrated = false;
+}
+
+function notifySynced() {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event(WATCHLIST_SYNCED_EVENT));
+  }
+}
+
+function syncOp(action: string, extra: Record<string, unknown> = {}) {
+  if (!authenticated || typeof window === "undefined") return;
+  fetch("/api/v1/watchlist", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action, ...extra }),
+  }).catch(() => {
+    // Offline or a transient server error — localStorage already has the
+    // change; it'll reconcile on the next successful hydrate/merge.
+  });
+}
+
+/**
+ * Pulls the server's watchlist into localStorage. If there's local data that
+ * predates sign-in (an anonymous user's saved watchlist), it's merged into
+ * the server store first so signing in never silently discards it.
+ * Safe to call multiple times — only does work once per sign-in.
+ */
+export async function hydrateWatchlistFromServer(): Promise<void> {
+  if (typeof window === "undefined" || hydrated) return;
+  hydrated = true;
+  try {
+    const local = read();
+    const hasLocalData =
+      Object.keys(local.lists).length > 1 || Object.values(local.lists).some((symbols) => symbols.length > 0);
+
+    const res = hasLocalData
+      ? await fetch("/api/v1/watchlist", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "merge", store: local }),
+        })
+      : await fetch("/api/v1/watchlist", { credentials: "include" });
+
+    if (res.ok) {
+      write(await res.json());
+      notifySynced();
+    }
+  } catch {
+    // Offline or logged out mid-flight — keep whatever's already local.
+  }
+}
+
 /** Get all symbols in a specific watchlist (defaults to "My Watchlist") */
 export function getWatchlist(listName: string = DEFAULT_LIST): string[] {
   const store = read();
@@ -60,6 +138,7 @@ export function addToWatchlist(symbol: string, listName: string = DEFAULT_LIST):
     store.lists[listName].push(upper);
   }
   write(store);
+  syncOp("addSymbol", { listName, symbol: upper });
   return store.lists[listName];
 }
 
@@ -73,6 +152,7 @@ export function removeFromWatchlist(symbol: string, listName: string = DEFAULT_L
     delete store.notes[listName][upper];
   }
   write(store);
+  syncOp("removeSymbol", { listName, symbol: upper });
   return store.lists[listName];
 }
 
@@ -102,6 +182,7 @@ export function createWatchlist(listName: string): string[] {
     store.notes[listName] = {};
   }
   write(store);
+  syncOp("createList", { listName });
   return Object.keys(store.lists);
 }
 
@@ -114,6 +195,7 @@ export function deleteWatchlist(listName: string): string[] {
     delete store.notes[listName];
   }
   write(store);
+  syncOp("deleteList", { listName });
   return Object.keys(store.lists);
 }
 
@@ -138,6 +220,7 @@ export function setWatchlistNote(symbol: string, note: string, listName: string 
     delete store.notes[listName][upper];
   }
   write(store);
+  syncOp("setNote", { listName, symbol: upper, note: trimmed });
 }
 
 export function getWatchlistNotes(listName: string = DEFAULT_LIST): Record<string, string> {

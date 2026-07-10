@@ -212,6 +212,46 @@ export async function fetchWatchlistAnalysis(symbol: string): Promise<{ answer: 
   }
 }
 
+export type WatchlistDigest = {
+  headline: string;
+  movers: Array<{ symbol: string; note: string }>;
+  themes: string[];
+  focusList: Array<{ symbol: string; reason: string }>;
+  summary: string;
+  source: "gemini" | "fallback";
+};
+
+export async function fetchWatchlistDigest(listName: string, symbols: string[]): Promise<WatchlistDigest> {
+  try {
+    const res = await fetch("/api/v1/watchlist/digest", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ listName, symbols }),
+      cache: "no-store"
+    });
+    if (!res.ok) throw new Error("watchlist digest failed");
+    const payload = await res.json();
+    return {
+      headline: payload.headline || "AI digest is unavailable right now.",
+      movers: Array.isArray(payload.movers) ? payload.movers : [],
+      themes: Array.isArray(payload.themes) ? payload.themes : [],
+      focusList: Array.isArray(payload.focusList) ? payload.focusList : [],
+      summary: payload.summary || "",
+      source: payload.source === "gemini" ? "gemini" : "fallback"
+    };
+  } catch {
+    return {
+      headline: "AI digest is unavailable right now.",
+      movers: [],
+      themes: [],
+      focusList: [],
+      summary: "Check your connection and try again.",
+      source: "fallback"
+    };
+  }
+}
+
 export async function fetchCompareAnalysis(
   symbolA: string,
   symbolB: string

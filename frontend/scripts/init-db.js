@@ -100,7 +100,7 @@ async function initializeDatabase() {
     }
     console.log('✓ premium_requests table created');
 
-    // Create watchlists table
+    // Create watchlists table (one row per symbol-in-a-list)
     await connection.execute(`
       CREATE TABLE IF NOT EXISTS watchlists (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -112,7 +112,55 @@ async function initializeDatabase() {
         UNIQUE KEY unique_watchlist (user_id, symbol)
       )
     `);
+    // Multiple named watchlists per user (mirrors the client's localStorage
+    // model) — list_name/note added via idempotent ALTERs below so the table
+    // upgrades cleanly for DBs created before this feature existed. The old
+    // (user_id, symbol) unique key can't express "same symbol in two lists",
+    // so it's replaced with (user_id, list_name, symbol).
+    try {
+      await connection.execute(
+        "ALTER TABLE watchlists ADD COLUMN list_name VARCHAR(120) NOT NULL DEFAULT 'My Watchlist'"
+      );
+    } catch (error) {
+      if (error.code !== 'ER_DUP_FIELDNAME') throw error;
+    }
+    try {
+      await connection.execute('ALTER TABLE watchlists ADD COLUMN note VARCHAR(500) NULL');
+    } catch (error) {
+      if (error.code !== 'ER_DUP_FIELDNAME') throw error;
+    }
+    // Add the replacement index before dropping the old one — InnoDB uses
+    // unique_watchlist (user_id, symbol) to satisfy the table's user_id FK
+    // constraint, so dropping it first fails with ER_DROP_INDEX_FK unless
+    // another user_id-prefixed index already exists to take over that job.
+    try {
+      await connection.execute(
+        'ALTER TABLE watchlists ADD UNIQUE INDEX unique_watchlist_item (user_id, list_name, symbol)'
+      );
+    } catch (error) {
+      if (error.code !== 'ER_DUP_KEYNAME') throw error;
+    }
+    try {
+      await connection.execute('ALTER TABLE watchlists DROP INDEX unique_watchlist');
+    } catch (error) {
+      if (error.code !== 'ER_CANT_DROP_FIELD_OR_KEY') throw error;
+    }
     console.log('✓ watchlists table created');
+
+    // Tracks list *names* independently of items, so an empty named list
+    // (created but nothing added yet) still survives a reload — a plain
+    // "distinct list_name in watchlists" query can't represent that.
+    await connection.execute(`
+      CREATE TABLE IF NOT EXISTS watchlist_lists (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        name VARCHAR(120) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+        UNIQUE KEY unique_watchlist_list (user_id, name)
+      )
+    `);
+    console.log('✓ watchlist_lists table created');
 
     // Create portfolios table
     await connection.execute(`

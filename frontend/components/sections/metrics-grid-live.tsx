@@ -8,12 +8,16 @@ export function MetricsGridLive({
   symbol,
   exchange,
   dashboardMetrics,
-  keyRatioTrends
+  keyRatioTrends,
+  sector,
+  industry
 }: {
   symbol: string;
   exchange: string;
   dashboardMetrics: Record<string, number | null>;
   keyRatioTrends?: KeyRatioTrends;
+  sector?: string;
+  industry?: string;
 }) {
   const { data: quoteData } = useStockQuote(symbol, exchange);
 
@@ -40,5 +44,5 @@ export function MetricsGridLive({
     pbRatio: quoteData?.priceToBook ?? dashboardMetrics.pbRatio ?? null,
   };
 
-  return <MetricsGrid metrics={mergedMetrics} keyRatioTrends={keyRatioTrends} />;
+  return <MetricsGrid metrics={mergedMetrics} keyRatioTrends={keyRatioTrends} sector={sector} industry={industry} />;
 }

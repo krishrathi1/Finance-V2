@@ -11,6 +11,7 @@ import { NavLinks } from "@/components/nav-links";
 import { ScrollProgress } from "@/components/scroll-progress";
 import { SmoothExperience } from "@/components/smooth-experience";
 import { ThemeProvider } from "@/components/theme-provider";
+import { WatchlistSync } from "@/components/watchlist-sync";
 import { OG_IMAGE_PATH, SITE_DESCRIPTION, SITE_NAME, SITE_TITLE, SITE_URL } from "@/lib/seo";
 
 import "./globals.css";
@@ -185,6 +186,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="min-h-screen font-[var(--font-manrope)]">
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
           <AuthProvider>
+            <WatchlistSync />
             <ScrollProgress />
             <Suspense fallback={null}>
               <SmoothExperience />

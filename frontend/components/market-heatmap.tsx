@@ -132,7 +132,7 @@ function HeatmapGroup({
       </div>
 
       {rows.length ? (
-        <div className="grid justify-start gap-2 [grid-template-columns:repeat(auto-fill,minmax(150px,180px))] sm:gap-3 sm:[grid-template-columns:repeat(auto-fill,minmax(165px,190px))]">
+        <div className="grid gap-2 [grid-template-columns:repeat(auto-fill,minmax(150px,1fr))] sm:gap-3 sm:[grid-template-columns:repeat(auto-fill,minmax(165px,1fr))]">
           {rows.map((row, index) => (
             <HeatmapTile
               key={`${row.exchange || "NSE"}-${row.symbol}-${index}`}

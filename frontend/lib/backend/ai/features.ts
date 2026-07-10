@@ -1708,3 +1708,153 @@ function ruleBasedScreenerParse(query: string): AnyObj {
   }
   return params;
 }
+
+// ===========================================================================
+// FEATURE 16 — Watchlist digest
+// ===========================================================================
+
+export type WatchlistDigestEntry = {
+  symbol: string;
+  companyName?: string | null;
+  cmp?: number | null;
+  changePercent?: number | null;
+  peRatio?: number | null;
+};
+
+export interface WatchlistDigestResult {
+  headline: string;
+  movers: Array<{ symbol: string; note: string }>;
+  themes: string[];
+  focusList: Array<{ symbol: string; reason: string }>;
+  summary: string;
+  source: "gemini" | "fallback";
+}
+
+/**
+ * A single AI brief across an entire watchlist, rather than one stock at a
+ * time (see FEATURE 9). Surfaces what moved and why, cross-stock themes, and
+ * a ranked shortlist of what deserves attention right now — the read a buy-
+ * side analyst would give before a desk stand-up, not N separate reports.
+ */
+export async function watchlistDigest(
+  listName: string,
+  entries: WatchlistDigestEntry[],
+): Promise<WatchlistDigestResult> {
+  const list = asArr(entries)
+    .map((e) => asObj(e))
+    .filter((e) => typeof e.symbol === "string" && e.symbol)
+    .slice(0, 25) as WatchlistDigestEntry[];
+
+  if (!list.length) {
+    return {
+      headline: "Your watchlist is empty",
+      movers: [],
+      themes: [],
+      focusList: [],
+      summary: "Add a few stocks to this list to get an AI digest of what's moving and what to check first.",
+      source: "fallback",
+    };
+  }
+
+  if (isGeminiConfigured()) {
+    const raw = await generateText(buildWatchlistDigestPrompt(listName, list));
+    if (raw) {
+      const parsed = parseWatchlistDigest(raw);
+      if (parsed) return { ...parsed, source: "gemini" };
+    }
+  }
+  return { ...fallbackWatchlistDigest(list), source: "fallback" };
+}
+
+function buildWatchlistDigestPrompt(listName: string, entries: WatchlistDigestEntry[]): string {
+  const rows = entries
+    .map((e) => {
+      const parts = [`${e.symbol.toUpperCase()}`];
+      if (e.companyName) parts.push(`name=${e.companyName}`);
+      if (isNum(e.cmp)) parts.push(`cmp=${fixed(e.cmp, 2)}`);
+      if (isNum(e.changePercent)) parts.push(`change=${e.changePercent >= 0 ? "+" : ""}${fixed(e.changePercent, 2)}%`);
+      if (isNum(e.peRatio)) parts.push(`pe=${fixed(e.peRatio, 1)}`);
+      return `- ${parts.join(", ")}`;
+    })
+    .join("\n");
+
+  return (
+    "You are the lead quantamental researcher at an elite investment fund, giving a short pre-market " +
+    "briefing to a colleague on their personal watchlist. Be direct, skeptical, and concise. " +
+    "Use only the facts given below. Do not invent numbers, news, or price targets, and do not give guarantees.\n" +
+    `Watchlist: "${listName}" (${entries.length} stocks)\n${rows}\n\n` +
+    "Task: Return strict JSON only with these keys:\n" +
+    '{"headline": string, ' +
+    '"movers": [{"symbol": string, "note": string}, ...], ' +
+    '"themes": [string, ...], ' +
+    '"focusList": [{"symbol": string, "reason": string}, ...], ' +
+    '"summary": string}\n' +
+    "Rules:\n" +
+    "1) headline: one punchy sentence capturing the state of this watchlist right now.\n" +
+    "2) movers: the 2-4 stocks with the largest moves, each with a one-sentence note on likely why (price action only, no invented news).\n" +
+    "3) themes: 1-3 short bullet phrases on what the list has in common (sector tilt, valuation stance, risk-on/off skew) — omit if the list is too small or mixed to say anything meaningful.\n" +
+    "4) focusList: rank up to 3 symbols worth checking first today, each with a one-sentence reason.\n" +
+    "5) summary: 2-3 sentences tying it together, written for someone about to open the app.\n" +
+    "6) Return JSON only, no markdown."
+  );
+}
+
+function parseWatchlistDigest(raw: string): Omit<WatchlistDigestResult, "source"> | null {
+  const text = String(raw ?? "").trim();
+  if (!text) return null;
+  const candidate = extractBalancedJsonText(text) ?? text;
+  let parsed: any;
+  try {
+    parsed = JSON.parse(candidate);
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+  const headline = collapseWs(String(parsed.headline ?? ""));
+  const summary = collapseWs(String(parsed.summary ?? ""));
+  if (!headline || !summary) return null;
+  const movers = asArr(parsed.movers)
+    .map((m) => asObj(m))
+    .filter((m) => m.symbol)
+    .map((m) => ({ symbol: String(m.symbol), note: collapseWs(String(m.note ?? "")) }));
+  const focusList = asArr(parsed.focusList)
+    .map((f) => asObj(f))
+    .filter((f) => f.symbol)
+    .map((f) => ({ symbol: String(f.symbol), reason: collapseWs(String(f.reason ?? "")) }));
+  const themes = asArr(parsed.themes).map((t) => collapseWs(String(t))).filter(Boolean);
+  return { headline, movers, themes, focusList, summary };
+}
+
+function fallbackWatchlistDigest(entries: WatchlistDigestEntry[]): Omit<WatchlistDigestResult, "source"> {
+  const withMoves = entries.filter((e) => isNum(e.changePercent));
+  const ranked = [...withMoves].sort((a, b) => Math.abs(b.changePercent!) - Math.abs(a.changePercent!));
+
+  const movers = ranked.slice(0, 3).map((e) => ({
+    symbol: e.symbol.toUpperCase(),
+    note: `${e.changePercent! >= 0 ? "Up" : "Down"} ${fixed(Math.abs(e.changePercent!), 2)}% today.`,
+  }));
+
+  const gainers = withMoves.filter((e) => e.changePercent! > 0).length;
+  const losers = withMoves.filter((e) => e.changePercent! < 0).length;
+  const tone = gainers > losers ? "mostly green" : losers > gainers ? "mostly red" : "mixed";
+
+  const highPe = entries.filter((e) => isNum(e.peRatio) && e.peRatio! > 40).length;
+  const themes: string[] = [];
+  if (highPe >= Math.max(2, Math.ceil(entries.length / 2))) {
+    themes.push("Several names are trading at rich valuations (P/E above 40).");
+  }
+
+  const focusList = ranked.slice(0, 3).map((e) => ({
+    symbol: e.symbol.toUpperCase(),
+    reason: `Largest move on the list today (${e.changePercent! >= 0 ? "+" : ""}${fixed(e.changePercent!, 2)}%).`,
+  }));
+
+  const headline = `Your list is ${tone} today across ${entries.length} stock${entries.length === 1 ? "" : "s"}.`;
+  const summary =
+    `${gainers} up, ${losers} down out of ${entries.length} tracked. ` +
+    (movers.length
+      ? `${movers[0].symbol} is moving the most — check it first, then confirm the rest against news before acting.`
+      : "No live price moves are available right now — check back once the market data loads.");
+
+  return { headline, movers, themes, focusList, summary };
+}

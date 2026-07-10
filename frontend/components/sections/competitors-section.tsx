@@ -1,63 +1,44 @@
 import { Card } from "@/components/ui/card";
 import { formatNumber } from "@/lib/format";
 
+function cell(value: number | null | undefined, suffix = "") {
+  if (value === null || value === undefined || !Number.isFinite(value)) return "NA";
+  return `${formatNumber(value)}${suffix}`;
+}
+
 export function CompetitorsSection({
   competitors
 }: {
   competitors: {
-    table: Array<{ name: string; marketCap: number; pe: number; pb: number; roe: number }>;
+    table: Array<{
+      name: string;
+      marketCap: number;
+      pe: number | null;
+      pb: number | null;
+      roe: number | null;
+    }>;
     sectorName?: string;
     industryName?: string;
-    sectorCompanies?: Array<{ symbol: string; name: string }>;
-    industryCompanies?: Array<{ symbol: string; name: string }>;
   };
 }) {
-  const sectorCompanies = competitors.sectorCompanies ?? [];
-  const industryCompanies = competitors.industryCompanies ?? [];
   const rows = competitors.table ?? [];
-
-  const renderCompanyGroup = (
-    title: string,
-    subtitle: string | undefined,
-    companies: Array<{ symbol: string; name: string }>
-  ) => (
-    <div className="rounded-2xl border border-border/70 bg-bg p-4">
-      <div className="text-xs font-semibold uppercase tracking-[0.22em] text-text/55">{title}</div>
-      <div className="mt-2 text-lg font-semibold text-text">{subtitle || "Not available"}</div>
-      {companies.length ? (
-        <div className="mt-4 flex flex-wrap gap-2">
-          {companies.map((company) => (
-            <div
-              key={company.symbol}
-              className="rounded-full border border-border/70 bg-panel px-3 py-2 text-sm text-text"
-            >
-              <span className="font-medium">{company.symbol}</span>
-              <span className="ml-2 text-text/65">{company.name}</span>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <p className="mt-4 text-sm text-text/65">No matching companies found for this stock yet.</p>
-      )}
-    </div>
-  );
+  const title = competitors.industryName || competitors.sectorName;
 
   return (
     <Card className="space-y-4 p-4">
-      <h3 className="text-lg font-semibold">Competitors</h3>
-      <div className="grid gap-4 lg:grid-cols-2">
-        {renderCompanyGroup("Sector", competitors.sectorName, sectorCompanies)}
-        {renderCompanyGroup("Industry", competitors.industryName, industryCompanies)}
+      <div>
+        <h3 className="text-lg font-semibold">Competitors</h3>
+        {title ? <p className="text-sm text-muted">Peers in {title}</p> : null}
       </div>
       {rows.length ? (
         <div className="overflow-auto rounded-xl border border-border/70">
           <table className="w-full min-w-[760px] text-sm">
             <thead className="bg-bg">
               <tr>
-                <th className="border-b border-border p-2 text-left">Company</th>
+                <th className="border-b border-border p-2 text-left">Company Name</th>
                 <th className="border-b border-border p-2 text-left">MCap (Cr)</th>
                 <th className="border-b border-border p-2 text-left">PE</th>
-                <th className="border-b border-border p-2 text-left">PB</th>
+                <th className="border-b border-border p-2 text-left">P/B</th>
                 <th className="border-b border-border p-2 text-left">ROE</th>
               </tr>
             </thead>
@@ -65,16 +46,18 @@ export function CompetitorsSection({
               {rows.map((row, index) => (
                 <tr key={index} className="border-b border-border/50 last:border-none">
                   <td className="p-2">{row.name}</td>
-                  <td className="p-2">{formatNumber(row.marketCap)}</td>
-                  <td className="p-2">{formatNumber(row.pe)}</td>
-                  <td className="p-2">{formatNumber(row.pb)}</td>
-                  <td className="p-2">{formatNumber(row.roe)}%</td>
+                  <td className="p-2">{cell(row.marketCap)}</td>
+                  <td className="p-2">{cell(row.pe)}</td>
+                  <td className="p-2">{cell(row.pb)}</td>
+                  <td className="p-2">{cell(row.roe, "%")}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-      ) : null}
+      ) : (
+        <p className="text-sm text-muted">No matching peer companies found for this stock yet.</p>
+      )}
     </Card>
   );
 }

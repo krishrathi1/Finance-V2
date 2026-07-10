@@ -15,6 +15,7 @@ import { baseSymbol, round2, safeCall, getText, DESKTOP_UA } from "@/lib/backend
 import { getSampleDashboard } from "@/lib/backend/sample";
 import { getNseQuote, getNseCorporateEvents, getNseQuarterlyResults, getNseShareholdingHistory } from "@/lib/backend/providers/nse";
 import { getYahooQuote, getYahooCandles, getYahooBundle, getYahooTimeseriesFinancials } from "@/lib/backend/providers/yahoo";
+import { screenUniverse } from "@/lib/backend/providers/universe";
 import {
   getFmpQuote,
   getFmpCandles,
@@ -63,6 +64,34 @@ function previousCalendarDate(dateKey: string) {
 
 function candleClose(row: any): number | null {
   return num(row?.close);
+}
+
+// Maps a provider's free-text sector/industry (Yahoo-style GICS-ish labels
+// like "Financial Services" / "Banks - Regional") onto NSE_UNIVERSE's coarse
+// sector tags (Banking, Finance, IT, ...). Keying off `industry` first matters:
+// the `sector` alone ("Financial Services") is too coarse to tell a bank from
+// an NBFC, and those have materially different peer sets.
+function classifyUniverseSector(sector?: string, industry?: string): string {
+  const text = `${industry || ""} ${sector || ""}`.toLowerCase();
+  if (!text.trim()) return "";
+  if (/bank/.test(text)) return "Banking";
+  if (/insurance/.test(text)) return "Insurance";
+  if (/credit|nbfc|capital markets|asset management|mortgage|financial.*services|financial.*data/.test(text)) return "Finance";
+  if (/software|it services|information technology|semiconductor/.test(text)) return "IT";
+  if (/pharma|drug|biotech|health.*care/.test(text)) return "Pharma";
+  if (/auto|vehicle|tyre/.test(text)) return "Auto";
+  if (/steel|metal|mining|aluminum|aluminium/.test(text)) return "Metal";
+  if (/oil|gas|energy|petroleum/.test(text)) return "Energy";
+  if (/power|utilit|electric/.test(text)) return "Power";
+  if (/cement/.test(text)) return "Cement";
+  if (/telecom/.test(text)) return "Telecom";
+  if (/food|beverage|household|personal product|tobacco|fmcg/.test(text)) return "FMCG";
+  if (/chemical/.test(text)) return "Chemicals";
+  if (/real estate|realty/.test(text)) return "Realty";
+  if (/infrastructure|construction|engineering/.test(text)) return "Infrastructure";
+  if (/defence|defense|aerospace/.test(text)) return "Defence";
+  if (/retail|consumer|apparel|paint/.test(text)) return "Consumer";
+  return "";
 }
 
 function hasCandleRows(rows: unknown): rows is any[] {
@@ -670,9 +699,20 @@ export async function buildDashboard(symbol: string, options: BuildOptions = {})
   // current live quote even when historical providers lag by a few sessions.
   syncHistoryWithLiveQuote(data.price);
 
-  // ---- Company news ----
-  const rssNews = (await safeCall((signal) => fetchSymbolNews(data.companyName || base, base, signal), 7000, "symbolNews")) || [];
-  if (rssNews.length) {
+  // ---- Company news + competitors peers ----
+  // Both are independent live fetches (news only needs company name/base;
+  // peers only need sector/industry, already resolved above), so run them
+  // concurrently instead of serially — otherwise their timeouts stack (up to
+  // 7s + 8s of added latency) for no benefit, since neither depends on the
+  // other's result.
+  const universeSector = classifyUniverseSector(data.sector, data.profile.industry);
+  const [rssNews, competitorPeers] = await Promise.all([
+    safeCall((signal) => fetchSymbolNews(data.companyName || base, base, signal), 7000, "symbolNews"),
+    universeSector
+      ? safeCall(() => screenUniverse({ sector: universeSector, limit: 9 }), 8000, "competitorsUniverse")
+      : Promise.resolve(null),
+  ]);
+  if (rssNews && rssNews.length) {
     data.news = rssNews;
   } else {
     try {
@@ -722,6 +762,20 @@ export async function buildDashboard(symbol: string, options: BuildOptions = {})
     sectorCompanies: [],
     industryCompanies: [],
   };
+
+  // ---- Competitors: live sector peers from the curated universe ----
+  // finalizeKeyMetrics() below backfills industryPe from this table when the
+  // primary provider doesn't supply one, so this must run before that call.
+  if (competitorPeers && competitorPeers.length) {
+    const filtered = competitorPeers.filter((p) => p.symbol.toUpperCase() !== base.toUpperCase()).slice(0, 8);
+    data.competitors.table = filtered.map((p) => ({
+      name: p.companyName || p.symbol,
+      marketCap: p.marketCap,
+      pe: p.pe ?? null,
+      pb: null,
+      roe: null,
+    }));
+  }
 
   // ---- Derived sections (order matters) ----
   if (data.price.change == null && data.price.changePercent != null && data.price.cmp) {

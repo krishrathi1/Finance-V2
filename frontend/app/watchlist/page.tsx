@@ -18,6 +18,7 @@ import {
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { PriceAlertButton } from "@/components/price-alert-button";
 import { WatchlistAnalysisButton } from "@/components/watchlist-analysis-button";
+import { WatchlistDigestCard } from "@/components/sections/watchlist-digest-card";
 import { fetchTickerTape } from "@/lib/api";
 import {
   createWatchlist,
@@ -27,6 +28,7 @@ import {
   getWatchlists,
   removeFromWatchlist,
   setWatchlistNote,
+  WATCHLIST_SYNCED_EVENT,
 } from "@/lib/watchlist";
 import { FeatureAuthWall } from "@/components/sections/feature-auth-wall";
 
@@ -63,6 +65,19 @@ export default function WatchlistPage() {
   useEffect(() => {
     setSymbols(getWatchlist(activeList));
     setNotesBySymbol(getWatchlistNotes(activeList));
+  }, [activeList]);
+
+  useEffect(() => {
+    function handleSynced() {
+      const nextLists = getWatchlists();
+      setLists(nextLists);
+      const nextActive = nextLists.includes(activeList) ? activeList : "My Watchlist";
+      setActiveList(nextActive);
+      setSymbols(getWatchlist(nextActive));
+      setNotesBySymbol(getWatchlistNotes(nextActive));
+    }
+    window.addEventListener(WATCHLIST_SYNCED_EVENT, handleSynced);
+    return () => window.removeEventListener(WATCHLIST_SYNCED_EVENT, handleSynced);
   }, [activeList]);
 
   useEffect(() => {
@@ -205,6 +220,8 @@ export default function WatchlistPage() {
             </Link>
           </CardContent>
         </Card>
+
+        <WatchlistDigestCard listName={activeList} symbols={symbols} />
 
         <Card>
           <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
