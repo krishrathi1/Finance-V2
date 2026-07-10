@@ -43,6 +43,9 @@ import {
 } from "@/lib/portfolio";
 import type { Holding, HoldingWithValue } from "@/lib/portfolio";
 import type { ScreenerResult } from "@/lib/types";
+import { todayIstDateKey as today } from "@/lib/market-status";
+import { useAuth } from "@/hooks/useAuth";
+import { requestAuthPanel } from "@/lib/auth";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -203,10 +206,6 @@ function fmtINR(n: number) {
   if (Math.abs(n) >= 1e7) return `₹${(n / 1e7).toFixed(2)} Cr`;
   if (Math.abs(n) >= 1e5) return `₹${(n / 1e5).toFixed(2)} L`;
   return `₹${fmt(n)}`;
-}
-
-function today() {
-  return new Date().toISOString().slice(0, 10);
 }
 
 function syncPortfolioTargetAlert(symbol: string, targetPrice: number | undefined, referencePrice: number) {
@@ -759,6 +758,7 @@ export default function PortfolioPage() {
     })),
   };
 
+  const { user } = useAuth();
   const [holdings, setHoldings] = useState<HoldingWithValue[]>([]);
   const [loading, setLoading] = useState(true);
   const [mounted, setMounted] = useState(false);
@@ -823,14 +823,18 @@ export default function PortfolioPage() {
     setRiskLoading(true);
     setRiskError(null);
     try {
+      // Fall back to investedValue when a live price hasn't loaded yet, so a
+      // holding never gets sent as a hard 0 (which would zero out its weight
+      // and the portfolio total, per an earlier bug where quantity/buyPrice
+      // were sent instead of the value/weight fields the AI prompt expects).
+      const valueOf = (h: (typeof holdings)[number]) => h.currentValue ?? h.investedValue;
+      const totalValue = holdings.reduce((sum, h) => sum + valueOf(h), 0);
       const payload = await fetchPortfolioRiskAssessment(
         holdings.map((h) => ({
           symbol: h.symbol,
-          quantity: h.quantity,
-          buyPrice: h.buyPrice,
-          currentPrice: h.currentPrice ?? undefined,
-          sector: undefined,
-          beta: undefined,
+          currentValue: valueOf(h),
+          investedValue: h.investedValue,
+          weight: totalValue > 0 ? (valueOf(h) / totalValue) * 100 : 0,
         }))
       );
       const analysis = payload.analysis as RiskAnalysis;
@@ -876,14 +880,18 @@ export default function PortfolioPage() {
         </div>
         <div className="flex flex-wrap gap-2 sm:gap-3">
           <button
-            onClick={() => setShowImportModal(true)}
+            onClick={() => (user ? setShowImportModal(true) : requestAuthPanel("signup"))}
             className="flex items-center gap-2 rounded-xl border border-accent/30 bg-bg px-4 py-2.5 text-sm font-semibold text-accent transition hover:bg-accent/5"
           >
             <Sparkles className="h-4 w-4" />
             Bulk Import AI
           </button>
           <button
-            onClick={() => { setEditTarget(null); setShowModal(true); }}
+            onClick={() => {
+              if (!user) { requestAuthPanel("signup"); return; }
+              setEditTarget(null);
+              setShowModal(true);
+            }}
             className="flex w-fit items-center gap-2 rounded-xl bg-gradient-to-r from-accent to-amber-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
           >
             <Plus className="h-4 w-4" />

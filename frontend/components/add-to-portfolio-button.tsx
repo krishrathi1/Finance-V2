@@ -6,6 +6,7 @@ import { createPortal } from "react-dom";
 
 import { addHolding, hasHolding } from "@/lib/portfolio";
 import { cn } from "@/lib/utils";
+import { todayIstDateKey as today } from "@/lib/market-status";
 
 type Props = {
   symbol: string;
@@ -13,10 +14,6 @@ type Props = {
   currentPrice?: number;
   className?: string;
 };
-
-function today() {
-  return new Date().toISOString().slice(0, 10);
-}
 
 export function AddToPortfolioButton({ symbol, companyName = "", currentPrice = 0, className }: Props) {
   const [inPortfolio, setInPortfolio] = useState(false);

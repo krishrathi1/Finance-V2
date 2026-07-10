@@ -24,6 +24,19 @@ function getJwtSecret(): Uint8Array {
   return cachedJwtSecret;
 }
 
+/**
+ * Trim + lowercase an email before it's used in a lookup or stored.
+ * MySQL's default collation is case-insensitive, so case mismatches mostly
+ * don't break lookups on their own — but untrimmed whitespace does, and
+ * without this, a user who registers via one path (trimmed) and later logs
+ * in / resets a password via a route that queries the raw submitted value
+ * (any incidental leading/trailing whitespace from copy-paste or mobile
+ * autofill) can silently fail to match.
+ */
+export function normalizeEmail(raw: unknown): string {
+  return typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+}
+
 export async function hashPassword(password: string): Promise<string> {
   return bcrypt.hash(password, 10);
 }

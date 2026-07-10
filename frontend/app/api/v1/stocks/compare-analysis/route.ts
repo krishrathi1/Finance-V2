@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { compareAnalysis } from '@/lib/backend/ai/features';
 import { buildDashboard } from '@/lib/backend/dashboard';
+import { requireActiveUser } from '@/lib/current-user';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
 export async function POST(request: NextRequest) {
+  const auth = await requireActiveUser(request);
+  if ('error' in auth) return auth.error;
+
   try {
     const { symbol_a, symbol_b } = await request.json();
 

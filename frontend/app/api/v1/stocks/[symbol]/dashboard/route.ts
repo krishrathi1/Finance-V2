@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { buildDashboard } from "@/lib/backend/dashboard";
 import { getSampleDashboard } from "@/lib/backend/sample";
 import { getFresh, getStale, setCache } from "@/lib/backend/cache";
+import { getCurrentUser } from "@/lib/current-user";
+import { rateLimit, clientIpFromHeaders } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -25,12 +27,30 @@ export async function GET(
   if (!refresh) {
     const fresh = getFresh(cacheKey);
     if (fresh) return NextResponse.json({ cached: true, data: fresh });
+  } else {
+    // refresh=true forces a full live-provider rebuild, bypassing the 30s
+    // cache — and since every distinct symbol is its own cache key, per-key
+    // limits don't bound abuse. Rate-limit by IP instead.
+    const ip = clientIpFromHeaders(request.headers);
+    const limited = await rateLimit(`dashboard-refresh:${ip}`, 20, 60_000);
+    if (!limited.ok) {
+      return NextResponse.json(
+        { detail: "Too many refresh requests. Please try again shortly." },
+        { status: 429, headers: { "Retry-After": String(limited.retryAfterSeconds) } }
+      );
+    }
   }
+
+  // Gemini enrichment hits paid LLM quota — never derive that from a public,
+  // unauthenticated query parameter. `refresh=true` alone no longer enables
+  // it; the caller must also be a logged-in (non-banned) user.
+  const user = refresh ? await getCurrentUser(request) : null;
+  const allowGemini = refresh && Boolean(user);
 
   try {
     let build = inFlightBuilds.get(cacheKey);
     if (!build) {
-      build = buildDashboard(symbol, { timeframe, exchange, allowGemini: refresh });
+      build = buildDashboard(symbol, { timeframe, exchange, allowGemini });
       inFlightBuilds.set(cacheKey, build);
       const clearBuild = () => {
         if (inFlightBuilds.get(cacheKey) === build) inFlightBuilds.delete(cacheKey);

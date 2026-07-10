@@ -5,6 +5,7 @@ import {
   createAccessToken,
   createRefreshToken,
   createVerificationToken,
+  normalizeEmail,
 } from '@/lib/auth-utils';
 import { sendWelcomeEmail } from '@/lib/email';
 
@@ -16,9 +17,9 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const name = body?.name;
     const password = body?.password;
-    const email = typeof body?.email === 'string' ? body.email.trim() : body?.email;
+    const email = normalizeEmail(body?.email);
+    const name = typeof body?.name === 'string' ? body.name.trim().slice(0, 100) : '';
 
     // Validate input
     if (!email || !name || !password) {
@@ -28,7 +29,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (typeof email !== 'string' || email.length > 254 || !EMAIL_RE.test(email)) {
+    if (email.length > 254 || !EMAIL_RE.test(email)) {
       return NextResponse.json(
         { detail: 'Please enter a valid email address' },
         { status: 400 }
@@ -54,11 +55,21 @@ export async function POST(request: NextRequest) {
     // Hash password
     const passwordHash = await hashPassword(password);
 
-    // Create user
-    const result = await query<ResultSetHeader>(
-      'INSERT INTO users (email, name, password_hash, tier, verified_email) VALUES (?, ?, ?, ?, ?)',
-      [email, name, passwordHash, 'free', false]
-    );
+    // Create user. The existence check above is racy (SELECT-then-INSERT);
+    // users.email has a UNIQUE constraint, so a concurrent duplicate
+    // registration is caught here as ER_DUP_ENTRY instead of a generic 500.
+    let result: ResultSetHeader;
+    try {
+      result = await query<ResultSetHeader>(
+        'INSERT INTO users (email, name, password_hash, tier, verified_email) VALUES (?, ?, ?, ?, ?)',
+        [email, name, passwordHash, 'free', false]
+      );
+    } catch (insertError) {
+      if ((insertError as { code?: string })?.code === 'ER_DUP_ENTRY') {
+        return NextResponse.json({ detail: 'Email already registered' }, { status: 409 });
+      }
+      throw insertError;
+    }
 
     const userId = result.insertId;
 

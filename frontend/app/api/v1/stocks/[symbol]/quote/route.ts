@@ -96,7 +96,11 @@ export async function GET(
       });
     }
 
-    const yahooFallbackQuote = await getYahooQuote(baseSymbol);
+    // Use the already-.NS-suffixed marketSymbol, not the bare baseSymbol —
+    // getYahooQuote treats an unsuffixed symbol as "try .NS, then .BO", so a
+    // bare symbol here could silently return real BSE data mislabeled below
+    // as an NSE quote (exchange is hardcoded to the requested "NSE").
+    const yahooFallbackQuote = await getYahooQuote(marketSymbol);
     if (yahooFallbackQuote?.cmp) {
       return NextResponse.json(yahooQuoteResponse(baseSymbol, exchange, yahooFallbackQuote));
     }

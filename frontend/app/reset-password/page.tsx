@@ -248,7 +248,7 @@ export default function ResetPasswordPage() {
                   className="h-11 w-full rounded-xl border border-border/60 bg-bg/60 px-3 pr-10 text-sm text-text outline-none transition focus:border-accent/60 focus:ring-2 focus:ring-accent/20"
                   id="new-password"
                   type={showPassword ? "text" : "password"}
-                  placeholder="At least 6 characters"
+                  placeholder="At least 8 characters"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
                   disabled={loading}

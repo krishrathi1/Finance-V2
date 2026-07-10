@@ -1,10 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query, ResultSetHeader } from '@/lib/db';
-import { createPasswordResetToken } from '@/lib/auth-utils';
+import { createPasswordResetToken, normalizeEmail } from '@/lib/auth-utils';
+import { createHash } from 'node:crypto';
+
+/** Same pattern as refresh-token hashing: password_reset_tokens.otp stores a hash, not the raw code. */
+function hashOtp(otp: string): string {
+  return createHash('sha256').update(otp).digest('hex');
+}
 
 export async function POST(request: NextRequest) {
   try {
-    const { email, otp } = await request.json();
+    const body = await request.json();
+    const email = normalizeEmail(body?.email);
+    const otp = body?.otp;
 
     if (!email || !otp) {
       return NextResponse.json(
@@ -36,7 +44,7 @@ export async function POST(request: NextRequest) {
     }
 
     const otpRecord = otpRecords[0] as any;
-    if (String(otpRecord.otp) !== String(otp)) {
+    if (String(otpRecord.otp) !== hashOtp(String(otp))) {
       await query(
         'UPDATE password_reset_tokens SET failed_attempts = failed_attempts + 1, is_used = (failed_attempts + 1 >= 5) WHERE id = ?',
         [otpRecord.id]

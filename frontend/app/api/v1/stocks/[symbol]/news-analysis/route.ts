@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { newsAnalysis } from '@/lib/backend/ai/features';
+import { requireActiveUser } from '@/lib/current-user';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -8,6 +9,9 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ symbol: string }> }
 ) {
+  const auth = await requireActiveUser(request);
+  if ('error' in auth) return auth.error;
+
   const { symbol } = await params;
 
   try {

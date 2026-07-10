@@ -5,10 +5,7 @@ import { createPortal } from "react-dom";
 import { Sparkles, X, Plus } from "lucide-react";
 import { parsePortfolioDocument } from "@/lib/api";
 import { addHolding } from "@/lib/portfolio";
-
-function today() {
-  return new Date().toISOString().slice(0, 10);
-}
+import { todayIstDateKey as today } from "@/lib/market-status";
 
 /** A valid extracted quantity/price must be a finite, positive number. */
 function parsePositive(value: unknown): number | null {

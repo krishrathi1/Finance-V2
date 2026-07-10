@@ -1217,20 +1217,24 @@ export async function portfolioRisk(
   holdings: AnyObj[],
 ): Promise<{
   overallRisk: string;
-  concentrationRisk: string;
+  riskScore: number;
+  diversificationScore: number;
   sectorConcentration: string;
-  betaScore: number | null;
+  topRisks: string[];
   recommendations: string[];
+  summary: string;
   source: "gemini" | "fallback";
 }> {
   const list = asArr(holdings).slice(0, 20);
   if (!list.length) {
     return {
       overallRisk: "",
-      concentrationRisk: "No holdings provided",
+      riskScore: 0,
+      diversificationScore: 0,
       sectorConcentration: "",
-      betaScore: null,
+      topRisks: [],
       recommendations: [],
+      summary: "No holdings provided",
       source: "fallback",
     };
   }
@@ -1264,10 +1268,12 @@ export async function portfolioRisk(
       if (parsed && typeof parsed === "object" && !Array.isArray(parsed) && parsed.summary) {
         return {
           overallRisk: String(parsed.overallRisk ?? ""),
-          concentrationRisk: String(parsed.summary ?? ""),
+          riskScore: isNum(parsed.riskScore) ? parsed.riskScore : 0,
+          diversificationScore: isNum(parsed.diversificationScore) ? parsed.diversificationScore : 0,
           sectorConcentration: String(parsed.sectorConcentration ?? ""),
-          betaScore: isNum(parsed.riskScore) ? parsed.riskScore : null,
+          topRisks: asArr(parsed.topRisks).map((r: any) => String(r)),
           recommendations: asArr(parsed.recommendations).map((r: any) => String(r)),
+          summary: String(parsed.summary ?? ""),
           source: "gemini",
         };
       }
@@ -1275,14 +1281,7 @@ export async function portfolioRisk(
   }
 
   const fb = fallbackPortfolioRisk(list);
-  return {
-    overallRisk: fb.overallRisk,
-    concentrationRisk: fb.summary,
-    sectorConcentration: fb.sectorConcentration,
-    betaScore: fb.riskScore,
-    recommendations: fb.recommendations,
-    source: "fallback",
-  };
+  return { ...fb, source: "fallback" };
 }
 
 function fallbackPortfolioRisk(holdings: AnyObj[]): {
@@ -1347,15 +1346,29 @@ export async function portfolioRoast(
   holdings: AnyObj[],
   totalValue?: number,
 ): Promise<{
-  analysis: string;
-  positives: string[];
-  concerns: string[];
-  overallScore: string;
+  grade: string;
+  gradeBadge: string;
+  roast: string;
+  praiseOne: string;
+  topRed: string;
+  topGreen: string;
+  fixes: string[];
+  verdict: string;
   source: "gemini" | "fallback";
 }> {
   const list = asArr(holdings);
   if (!list.length) {
-    return { analysis: "No holdings to analyse", positives: [], concerns: [], overallScore: "", source: "fallback" };
+    return {
+      grade: "",
+      gradeBadge: "",
+      roast: "No holdings to analyse",
+      praiseOne: "",
+      topRed: "",
+      topGreen: "",
+      fixes: [],
+      verdict: "",
+      source: "fallback",
+    };
   }
 
   const n = list.length;
@@ -1398,10 +1411,14 @@ export async function portfolioRoast(
       const parsed = extractJson(raw);
       if (parsed && typeof parsed === "object" && !Array.isArray(parsed) && parsed.roast) {
         return {
-          analysis: String(parsed.roast ?? ""),
-          positives: [String(parsed.praiseOne ?? ""), String(parsed.topGreen ?? "")].filter(Boolean),
-          concerns: [String(parsed.topRed ?? ""), ...asArr(parsed.fixes).map((f: any) => String(f))].filter(Boolean),
-          overallScore: String(parsed.grade ?? ""),
+          grade: String(parsed.grade ?? ""),
+          gradeBadge: String(parsed.gradeBadge ?? ""),
+          roast: String(parsed.roast ?? ""),
+          praiseOne: String(parsed.praiseOne ?? ""),
+          topRed: String(parsed.topRed ?? ""),
+          topGreen: String(parsed.topGreen ?? ""),
+          fixes: asArr(parsed.fixes).map((f: any) => String(f)),
+          verdict: String(parsed.verdict ?? ""),
           source: "gemini",
         };
       }
@@ -1412,24 +1429,28 @@ export async function portfolioRoast(
   const losers = list.filter((h) => toFloatDefault(asObj(h).pnl, 0) < 0);
   const winners = list.filter((h) => toFloatDefault(asObj(h).pnl, 0) > 0);
   const grade = losers.length < n * 0.2 ? "A" : losers.length < n * 0.4 ? "B" : "C";
+  const gradeBadges: Record<string, string> = {
+    A: "Balanced Beginner", B: "Steady Holder", C: "Value Hunter", D: "Concentration King", F: "Chaos Agent",
+  };
 
   const byPnlAsc = [...list].sort((a, b) => toFloatDefault(asObj(a).pnl, 0) - toFloatDefault(asObj(b).pnl, 0));
   const byPnlDesc = [...list].sort((a, b) => toFloatDefault(asObj(b).pnl, 0) - toFloatDefault(asObj(a).pnl, 0));
   const topRedSym = byPnlAsc.length ? String(asObj(byPnlAsc[0]).symbol ?? "N/A") : "N/A";
   const topGreenSym = byPnlDesc.length ? String(asObj(byPnlDesc[0]).symbol ?? "N/A") : "N/A";
 
-  const fixes = [
-    "Review your losing positions — cut or average down with conviction, not hope.",
-    "Ensure no single stock exceeds 20% of portfolio value.",
-    "Add 1-2 defensive plays (FMCG/Pharma) to reduce beta.",
-  ];
-
-  const analysis = `You have ${losers.length} losers out of ${n} stocks. Either the market hates you, or you have a gift for buying tops.`;
   return {
-    analysis,
-    positives: [`You have ${winners.length} winning positions — not bad.`, `${topGreenSym} — your top performer.`],
-    concerns: [`${topRedSym} — largest drag on portfolio.`, ...fixes],
-    overallScore: grade,
+    grade,
+    gradeBadge: gradeBadges[grade] ?? "Portfolio Holder",
+    roast: `You have ${losers.length} losers out of ${n} stocks. Either the market hates you, or you have a gift for buying tops.`,
+    praiseOne: `You have ${winners.length} winning positions — not bad.`,
+    topRed: `${topRedSym} — largest drag on portfolio.`,
+    topGreen: `${topGreenSym} — your top performer.`,
+    fixes: [
+      "Review your losing positions — cut or average down with conviction, not hope.",
+      "Ensure no single stock exceeds 20% of portfolio value.",
+      "Add 1-2 defensive plays (FMCG/Pharma) to reduce beta.",
+    ],
+    verdict: `${n} stocks, ${winners.length} winners and ${losers.length} losers. Grade: ${grade}.`,
     source: "fallback",
   };
 }

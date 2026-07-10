@@ -24,14 +24,24 @@ export function useVisibilityPolling(
     let timer: ReturnType<typeof setInterval> | null = null;
     let lastRun = 0;
     let disposed = false;
+    let inFlight = false;
 
     const run = (initial: boolean) => {
+      // Skip this tick if the previous one hasn't resolved yet — without
+      // this, an interval shorter than fn's latency lets multiple calls run
+      // concurrently with no guaranteed resolution order, so a slow older
+      // response can land after a newer one and overwrite it downstream.
+      if (inFlight) return;
+      inFlight = true;
       lastRun = Date.now();
-      try {
-        void fnRef.current(initial);
-      } catch {
-        // Polling must never take the component down.
-      }
+      Promise.resolve()
+        .then(() => fnRef.current(initial))
+        .catch(() => {
+          // Polling must never take the component down.
+        })
+        .finally(() => {
+          inFlight = false;
+        });
     };
 
     const start = () => {

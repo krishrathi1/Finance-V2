@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { query } from '@/lib/db';
+import { query, ResultSetHeader } from '@/lib/db';
 import { createAccessToken, createRefreshToken } from '@/lib/auth-utils';
 import crypto from 'crypto';
 
@@ -39,6 +39,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Atomically claim (single-use) this refresh token: only one concurrent
+    // request can delete it, so a racing duplicate request with the same
+    // cookie gets 0 affected rows here instead of both requests minting
+    // valid replacement token pairs from the same old token.
+    const claim = await query<ResultSetHeader>('DELETE FROM refresh_tokens WHERE id = ?', [tokenRecord.id]);
+    if (!claim || claim.affectedRows !== 1) {
+      return NextResponse.json({ detail: 'Invalid refresh token' }, { status: 401 });
+    }
+
     // Get user
     const users = await query('SELECT * FROM users WHERE id = ?', [tokenRecord.user_id]);
 
@@ -58,12 +67,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Create new tokens
+    // Create new tokens (old one was already atomically claimed/deleted above)
     const newAccessToken = await createAccessToken(user.id, Boolean(user.is_admin), user.tier);
     const { raw: rawRefresh, hash: refreshHash } = await createRefreshToken();
-
-    // Delete old refresh token and store new one
-    await query('DELETE FROM refresh_tokens WHERE id = ?', [tokenRecord.id]);
 
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 30);

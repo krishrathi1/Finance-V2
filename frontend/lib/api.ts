@@ -621,7 +621,7 @@ export async function fetchAIScreenerResults(query: string): Promise<{ results: 
 }
 
 export async function fetchPortfolioRiskAssessment(holdings: Array<{
-  symbol: string; quantity: number; buyPrice: number; currentPrice?: number; sector?: string; beta?: number;
+  symbol: string; currentValue: number; investedValue: number; weight: number; sector?: string; beta?: number;
 }>): Promise<Record<string, unknown>> {
   const url = getApiUrl("/portfolio-risk");
   const res = await fetch(url, {

@@ -8,11 +8,27 @@
 const mysql = require('mysql2/promise');
 
 async function initializeDatabase() {
+  const dbName = process.env.MYSQL_DATABASE || 'financial_forensics';
+
+  // Connect without selecting a database first and create it if missing —
+  // connecting directly to `database: dbName` fails with ER_BAD_DB_ERROR on
+  // a genuinely fresh MySQL server that has no pre-existing database (this
+  // is masked in the docker-compose.yml path, where the mysql:8 image
+  // auto-creates MYSQL_DATABASE on first boot, but bites anyone running this
+  // script standalone against a bare MySQL instance).
+  const bootstrapConnection = await mysql.createConnection({
+    host: process.env.MYSQL_HOST || 'localhost',
+    user: process.env.MYSQL_USER || 'root',
+    password: process.env.MYSQL_PASSWORD || '',
+  });
+  await bootstrapConnection.execute(`CREATE DATABASE IF NOT EXISTS \`${dbName}\``);
+  await bootstrapConnection.end();
+
   const connection = await mysql.createConnection({
     host: process.env.MYSQL_HOST || 'localhost',
     user: process.env.MYSQL_USER || 'root',
     password: process.env.MYSQL_PASSWORD || '',
-    database: process.env.MYSQL_DATABASE || 'financial_forensics',
+    database: dbName,
   });
 
   try {
@@ -60,6 +76,28 @@ async function initializeDatabase() {
         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
       )
     `);
+    // MySQL has no partial/filtered unique index, so a column that's only
+    // non-NULL for pending rows (unique indexes allow multiple NULLs) is the
+    // standard workaround — makes "one pending request per user" an actual DB
+    // constraint instead of a racy SELECT-then-INSERT check. This is a plain
+    // (not generated/STORED) column set explicitly by the app on INSERT —
+    // ADD COLUMN ... GENERATED STORED reliably hit InnoDB's "Cannot add
+    // foreign key constraint" (errno 1215) on this FK-referencing table
+    // across MySQL 8.0 builds, unrelated to FOREIGN_KEY_CHECKS.
+    try {
+      await connection.execute(
+        'ALTER TABLE premium_requests ADD COLUMN pending_marker INT DEFAULT NULL'
+      );
+    } catch (error) {
+      if (error.code !== 'ER_DUP_FIELDNAME') throw error;
+    }
+    try {
+      await connection.execute(
+        'ALTER TABLE premium_requests ADD UNIQUE INDEX unique_pending_request (pending_marker)'
+      );
+    } catch (error) {
+      if (error.code !== 'ER_DUP_KEYNAME') throw error;
+    }
     console.log('✓ premium_requests table created');
 
     // Create watchlists table
@@ -95,11 +133,14 @@ async function initializeDatabase() {
     console.log('✓ portfolios table created');
 
     // Create password reset tokens table
+    // `otp` stores a SHA-256 hex hash (64 chars), not the raw 6-digit code —
+    // same pattern as refresh_tokens.token_hash, so a DB read (backup leak,
+    // read replica, SQLi elsewhere) doesn't hand out live reset credentials.
     await connection.execute(`
       CREATE TABLE IF NOT EXISTS password_reset_tokens (
         id INT AUTO_INCREMENT PRIMARY KEY,
         user_id INT NOT NULL,
-        otp VARCHAR(6) NOT NULL,
+        otp VARCHAR(64) NOT NULL,
         failed_attempts INT NOT NULL DEFAULT 0,
         is_used BOOLEAN DEFAULT FALSE,
         expires_at TIMESTAMP NOT NULL,
@@ -114,6 +155,9 @@ async function initializeDatabase() {
     } catch (error) {
       if (error.code !== 'ER_DUP_FIELDNAME') throw error;
     }
+    // Widen `otp` for any DB created before the hash-instead-of-plaintext
+    // change above; idempotent (no-ops once already VARCHAR(64)).
+    await connection.execute('ALTER TABLE password_reset_tokens MODIFY COLUMN otp VARCHAR(64) NOT NULL');
     console.log('✓ password_reset_tokens table created');
 
     console.log('\n✅ Database initialized successfully!');

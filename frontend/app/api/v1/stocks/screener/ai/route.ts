@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { parseScreenerQuery } from "@/lib/backend/ai/features";
 import { toFloat } from "@/lib/backend/http";
 import { screenUniverse, type UniverseFilters } from "@/lib/backend/providers/universe";
+import { requireActiveUser } from "@/lib/current-user";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -27,6 +28,9 @@ function toFilters(parsed: Record<string, unknown>): UniverseFilters {
 }
 
 export async function POST(request: NextRequest) {
+  const auth = await requireActiveUser(request);
+  if ("error" in auth) return auth.error;
+
   try {
     const body = await request.json().catch(() => ({}));
     const query = String(body?.query || "").trim();

@@ -33,7 +33,11 @@ function read(): WatchlistStore {
 
 function write(store: WatchlistStore) {
   if (typeof window === "undefined") return;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(store));
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(store));
+  } catch {
+    // storage full or unavailable (e.g. Safari private mode)
+  }
 }
 
 /** Get all symbols in a specific watchlist (defaults to "My Watchlist") */

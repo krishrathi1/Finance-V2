@@ -11,6 +11,33 @@ type ParsedHolding = {
 
 const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 const MAX_EXTRACTED_TEXT = 200_000;
+const PARSE_TIMEOUT_MS = 20_000;
+
+/** PDF files start with the literal bytes "%PDF". */
+function hasPdfMagicBytes(buffer: Buffer): boolean {
+  return buffer.length >= 4 && buffer.subarray(0, 4).toString("latin1") === "%PDF";
+}
+
+/** DOCX is a ZIP container; real ZIPs start with a PK local-file-header signature. */
+function hasZipMagicBytes(buffer: Buffer): boolean {
+  return buffer.length >= 4 && buffer[0] === 0x50 && buffer[1] === 0x4b && (buffer[2] === 0x03 || buffer[2] === 0x05 || buffer[2] === 0x07);
+}
+
+/**
+ * Bounds how long the request waits on parsing. Doesn't truly cancel a
+ * CPU-bound parse (Node is single-threaded — full isolation would need a
+ * worker thread), but caps wall-clock exposure for the common case and
+ * combines with the rate limit + size cap to bound repeated abuse.
+ */
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("Document parsing timed out")), ms);
+    promise.then(
+      (value) => { clearTimeout(timer); resolve(value); },
+      (err) => { clearTimeout(timer); reject(err); }
+    );
+  });
+}
 
 /**
  * Extract raw text from a PDF buffer using pdf-parse v2 (PDFParse class API).
@@ -185,6 +212,9 @@ export async function POST(request: NextRequest) {
     const isDocx =
       contentType.includes("officedocument.wordprocessingml") ||
       fileName.endsWith(".docx");
+    // The import modal's copy/accept attribute advertises TXT support; this
+    // used to 415 on it (accepted extension the API silently didn't handle).
+    const isTxt = contentType.includes("text/plain") || fileName.endsWith(".txt");
 
     if (blob.size > MAX_UPLOAD_BYTES) {
       return NextResponse.json(
@@ -192,21 +222,38 @@ export async function POST(request: NextRequest) {
         { status: 413 }
       );
     }
-    if (!isPdf && !isDocx) {
+    if (!isPdf && !isDocx && !isTxt) {
       return NextResponse.json(
-        { holdings: [], detail: "Only PDF and DOCX files are supported" },
+        { holdings: [], detail: "Only PDF, DOCX, and TXT files are supported" },
         { status: 415 }
       );
     }
 
     const arrayBuffer = await blob.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
-    let text = "";
 
+    // Don't trust the client-supplied extension/MIME type to pick the parser
+    // — verify the file's actual magic bytes match what it claims to be.
+    if (isPdf && !hasPdfMagicBytes(buffer)) {
+      return NextResponse.json(
+        { holdings: [], detail: "File does not look like a valid PDF" },
+        { status: 415 }
+      );
+    }
+    if (isDocx && !hasZipMagicBytes(buffer)) {
+      return NextResponse.json(
+        { holdings: [], detail: "File does not look like a valid DOCX" },
+        { status: 415 }
+      );
+    }
+
+    let text = "";
     if (isPdf) {
-      text = await extractPdfText(buffer);
+      text = await withTimeout(extractPdfText(buffer), PARSE_TIMEOUT_MS);
     } else if (isDocx) {
-      text = await extractDocxText(buffer);
+      text = await withTimeout(extractDocxText(buffer), PARSE_TIMEOUT_MS);
+    } else if (isTxt) {
+      text = buffer.toString("utf-8");
     }
 
     const holdings = extractHoldings(text.slice(0, MAX_EXTRACTED_TEXT));

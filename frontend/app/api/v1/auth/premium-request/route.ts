@@ -82,10 +82,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const result = await query<ResultSetHeader>(
-      "INSERT INTO premium_requests (user_id, reason, status) VALUES (?, ?, 'pending')",
-      [user.id, reason]
-    );
+    let result: ResultSetHeader;
+    try {
+      result = await query<ResultSetHeader>(
+        "INSERT INTO premium_requests (user_id, reason, status, pending_marker) VALUES (?, ?, 'pending', ?)",
+        [user.id, reason, user.id]
+      );
+    } catch (insertError) {
+      // The pre-check above is racy (SELECT-then-INSERT); the DB's
+      // unique_pending_request index is the actual guarantee — a concurrent
+      // duplicate submit lands here as ER_DUP_ENTRY instead of a generic 500.
+      if ((insertError as { code?: string })?.code === 'ER_DUP_ENTRY') {
+        return NextResponse.json(
+          { detail: 'You already have a pending premium request' },
+          { status: 409 }
+        );
+      }
+      throw insertError;
+    }
 
     const rows = await query('SELECT * FROM premium_requests WHERE id = ?', [
       result.insertId,

@@ -28,10 +28,51 @@ type ParsedHolding = {
   pnl: number;
 };
 
+/**
+ * RFC-4180-ish single-line CSV split: honors "quoted, fields" (embedded
+ * commas) and "" escaped quotes. Doesn't handle a quoted field spanning
+ * multiple physical lines (embedded newlines) — broker holdings exports
+ * (ticker/qty/price columns) don't have free-text fields that would need it.
+ */
+function splitCsvLine(line: string): string[] {
+  const cells: string[] = [];
+  let cur = "";
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (line[i + 1] === '"') {
+          cur += '"';
+          i++;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        cur += ch;
+      }
+    } else if (ch === '"') {
+      inQuotes = true;
+    } else if (ch === ",") {
+      cells.push(cur.trim());
+      cur = "";
+    } else {
+      cur += ch;
+    }
+  }
+  cells.push(cur.trim());
+  return cells;
+}
+
+/** Parses a number that may use Indian-style thousands separators ("1,23,456"). */
+function parseLocaleNumber(raw: string): number {
+  return parseFloat(String(raw ?? "").replace(/,/g, "").trim());
+}
+
 function parseZerodhaCSV(text: string): ParsedHolding[] {
   const lines = text.trim().split("\n").filter(Boolean);
   if (lines.length < 2) return [];
-  const header = lines[0].split(",").map((h) => h.trim().toLowerCase().replace(/[^a-z0-9]/g, ""));
+  const header = splitCsvLine(lines[0]).map((h) => h.toLowerCase().replace(/[^a-z0-9]/g, ""));
   const idxOf = (keys: string[]) => keys.map((k) => header.indexOf(k)).find((i) => i !== -1) ?? -1;
 
   const symIdx = idxOf(["instrumentname", "symbol", "scripname", "stock", "tradingsymbol"]);
@@ -42,13 +83,13 @@ function parseZerodhaCSV(text: string): ParsedHolding[] {
 
   const results: ParsedHolding[] = [];
   for (let i = 1; i < lines.length; i++) {
-    const cols = lines[i].split(",").map((c) => c.trim().replace(/^"|"$/g, ""));
+    const cols = splitCsvLine(lines[i]);
     const symbol = symIdx >= 0 ? cols[symIdx]?.toUpperCase().replace(/\.(NS|BO)$/i, "") : "";
-    const qty = qtyIdx >= 0 ? parseFloat(cols[qtyIdx]) : NaN;
-    const avg = avgIdx >= 0 ? parseFloat(cols[avgIdx]) : NaN;
+    const qty = qtyIdx >= 0 ? parseLocaleNumber(cols[qtyIdx]) : NaN;
+    const avg = avgIdx >= 0 ? parseLocaleNumber(cols[avgIdx]) : NaN;
     if (!symbol || isNaN(qty) || qty <= 0 || isNaN(avg) || avg <= 0) continue;
-    const cur = curIdx >= 0 ? parseFloat(cols[curIdx]) : qty * avg;
-    const pnl = pnlIdx >= 0 ? parseFloat(cols[pnlIdx]) : cur - qty * avg;
+    const cur = curIdx >= 0 ? parseLocaleNumber(cols[curIdx]) : qty * avg;
+    const pnl = pnlIdx >= 0 ? parseLocaleNumber(cols[pnlIdx]) : cur - qty * avg;
     results.push({ symbol, quantity: qty, avgPrice: avg, currentValue: isNaN(cur) ? qty * avg : cur, pnl: isNaN(pnl) ? 0 : pnl });
   }
   return results;

@@ -36,6 +36,17 @@ function dateKey(pseudoDate: Date) {
   return `${year}-${month}-${day}`;
 }
 
+/**
+ * "Today" in IST as a YYYY-MM-DD key. IST is UTC+5:30, so plain
+ * `new Date().toISOString().slice(0, 10)` is wrong for roughly 18:30-23:59
+ * UTC (00:00-05:29 IST) every day — it reports the previous calendar date,
+ * which can misdate a live candle or default a form's date field to
+ * yesterday during that window.
+ */
+export function todayIstDateKey(now: Date = new Date()): string {
+  return dateKey(toIstPseudo(now));
+}
+
 function isTradingHoliday(pseudoDate: Date) {
   const day = pseudoDate.getUTCDay();
   if (day === 0 || day === 6) return true;

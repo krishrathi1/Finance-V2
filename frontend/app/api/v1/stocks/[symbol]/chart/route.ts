@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { getNseQuote } from '@/lib/backend/providers/nse';
 import { getYahooCandles, getYahooQuote } from '@/lib/backend/providers/yahoo';
+import { todayIstDateKey } from '@/lib/market-status';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 20;
@@ -30,7 +31,7 @@ function syncHistoryWithQuote(
   const price = typeof quote?.cmp === 'number' && Number.isFinite(quote.cmp) ? quote.cmp : null;
   if (price === null || price <= 0) return history;
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayIstDateKey();
   const change = typeof quote?.change === 'number' && Number.isFinite(quote.change) ? quote.change : null;
   const previousClose = change !== null ? price - change : null;
   const rows = [...history];
@@ -70,11 +71,15 @@ export async function GET(
       exchange === 'BSE' ? getYahooQuote(marketSymbol) : getNseQuote(baseSymbol),
     ]);
 
-    if (!candles?.length && exchange !== 'BSE') {
-      candles = await getYahooCandles(baseSymbol, dayCount);
-    }
+    // Quote fallback tries Yahoo (a different provider than the NSE quote
+    // attempted above) using the already-.NS-suffixed marketSymbol, not the
+    // bare baseSymbol — an unsuffixed symbol makes getYahooQuote try .NS then
+    // silently fall back to .BO, returning real BSE data into a response
+    // with no exchange field to catch the mismatch. (No separate candles
+    // fallback: the initial getYahooCandles call above already used
+    // marketSymbol, so retrying with the same symbol would be a no-op.)
     if (!quote?.cmp && exchange !== 'BSE') {
-      quote = await getYahooQuote(baseSymbol);
+      quote = await getYahooQuote(marketSymbol);
     }
 
     if (candles?.length || quote?.cmp) {

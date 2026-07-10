@@ -24,7 +24,11 @@ function read(): PriceAlert[] {
 
 function write(alerts: PriceAlert[]) {
   if (typeof window === "undefined") return;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(alerts));
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(alerts));
+  } catch {
+    // storage full or unavailable (e.g. Safari private mode)
+  }
 }
 
 /** Get all price alerts */

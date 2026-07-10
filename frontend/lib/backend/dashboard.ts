@@ -42,6 +42,7 @@ import {
 } from "@/lib/backend/derivations";
 import { computeSmartScore, computeRiskScore } from "@/lib/backend/scoring";
 import { explainSmartScore, explainRiskScore, extractProfileDetails } from "@/lib/backend/ai/features";
+import { todayIstDateKey } from "@/lib/market-status";
 
 const TIMEFRAME_DAYS: Record<string, number> = { "1D": 1, "1W": 7, "1M": 30, "1Y": 365, "5Y": 1825 };
 
@@ -110,7 +111,7 @@ function syncHistoryWithLiveQuote(price: any) {
   const cmp = num(price?.cmp);
   if (cmp === null || cmp <= 0) return;
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayIstDateKey();
   const change = num(price?.change);
   const previousClose = change !== null ? round2(cmp - change) : null;
   const history = Array.isArray(price.history) ? [...price.history] : [];
@@ -565,7 +566,11 @@ export async function buildDashboard(symbol: string, options: BuildOptions = {})
   // ---- Yahoo quote fallback + always-on metrics ----
   if (yahooQuote) {
     const q: any = yahooQuote;
-    if (!nseQuote) {
+    // nseQuote is fetched unconditionally (even for BSE requests) as an input
+    // to other sections below, so its mere presence must NOT suppress a real
+    // BSE quote here — only treat it as "already have a live price" when the
+    // request is actually for NSE.
+    if (requestedExchange === "BSE" || !nseQuote) {
       if (num(q.cmp) !== null) data.price.cmp = q.cmp;
       if (num(q.change) !== null) data.price.change = q.change;
       if (num(q.changePercent) !== null) data.price.changePercent = q.changePercent;
@@ -578,7 +583,7 @@ export async function buildDashboard(symbol: string, options: BuildOptions = {})
   }
 
   // ---- Yahoo bundle (yfinance-equivalent): metrics, financials, profile, shareholding ----
-  if (bundle.quote && !nseQuote) {
+  if (bundle.quote && (requestedExchange === "BSE" || !nseQuote)) {
     const q: any = bundle.quote;
     if (num(q.cmp) !== null && !data.price.cmp) data.price.cmp = q.cmp;
     if (num(q.change) !== null && !data.price.change) data.price.change = q.change;
@@ -610,7 +615,7 @@ export async function buildDashboard(symbol: string, options: BuildOptions = {})
   if (bundle.shareholding && (num(bundle.shareholding.promoters) || num(bundle.shareholding.fii))) {
     data.shareholding = { ...data.shareholding, ...bundle.shareholding };
   }
-  if (nseShareholdingHistory && nseShareholdingHistory.length) {
+  if (requestedExchange !== "BSE" && nseShareholdingHistory && nseShareholdingHistory.length) {
     // NSE's history only carries Promoter/Public (no historical FII/DII split
     // — see getNseShareholdingHistory); overlay Yahoo's real current-quarter
     // FII/DII onto the latest history point (index 0) so the most recent
@@ -630,7 +635,7 @@ export async function buildDashboard(symbol: string, options: BuildOptions = {})
   }
 
   // ---- FMP quote fallback + profile/keyMetrics/growth/estimates ----
-  if (fmpQuote && !nseQuote) {
+  if (fmpQuote && (requestedExchange === "BSE" || !nseQuote)) {
     const q: any = fmpQuote;
     if (num(q.cmp) !== null && !data.price.cmp) data.price.cmp = q.cmp;
     if (num(q.change) !== null && !data.price.change) data.price.change = q.change;
@@ -679,8 +684,12 @@ export async function buildDashboard(symbol: string, options: BuildOptions = {})
   }
 
   // ---- Corporate actions + quarterly chain ----
-  if (nseEvents) data.corporateActions = { ...data.corporateActions, ...nseEvents };
-  if (nseQuarterly) {
+  // nseEvents/nseQuarterly are fetched unconditionally above (NSE has no
+  // per-exchange endpoint variant), but must not be merged into a BSE
+  // dashboard — for a BSE-only symbol or a ticker collision this would
+  // silently attach another (NSE-listed) company's events/financials.
+  if (requestedExchange !== "BSE" && nseEvents) data.corporateActions = { ...data.corporateActions, ...nseEvents };
+  if (requestedExchange !== "BSE" && nseQuarterly) {
     const q: any = nseQuarterly;
     for (const k of ["quarterly", "quarterlyStandalone", "quarterlyConsolidated", "quarterlyDetailedStandalone", "quarterlyDetailedConsolidated"]) {
       if (q[k] && q[k].length) data.financials[k] = q[k];

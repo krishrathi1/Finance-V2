@@ -9,10 +9,14 @@ const ADMIN_ROUTES = ["/admin"];
 const AUTH_ROUTES = ["/signin", "/signup"];
 
 // Credential endpoints: strict limit to block brute force.
-const STRICT_AUTH_API = /^\/api\/v1\/auth\/(login|register|forgot-password|verify-otp|reset-password)$/;
+const STRICT_AUTH_API = /^\/api\/v1\/auth\/(login|register|forgot-password|verify-otp|reset-password|resend-verification)$/;
 // LLM-backed endpoints: expensive per call, keep abuse bounded.
 const AI_API =
   /^\/api\/v1\/stocks\/(screener\/ai|compare-analysis|portfolio-risk|portfolio-roast|ipo\/[^/]+\/ai-analysis|[^/]+\/(chat|swot|earnings-tldr|competitor-verdict|news-analysis|watchlist-analysis|research-report))$/;
+// CPU/memory-heavy document parsing (PDF/DOCX extraction) — no auth required
+// (portfolio import is intentionally usable without a login) but must be
+// rate-limited so it can't be used as a resource-exhaustion vector.
+const DOCUMENT_PARSE_API = /^\/api\/v1\/portfolio\/parse-document$/;
 
 function tooManyRequests(retryAfterSeconds: number) {
   return NextResponse.json(
@@ -57,6 +61,9 @@ export async function middleware(request: NextRequest) {
       }
 
       const result = await rateLimit(`ai:${ip}`, 20, 60_000);
+      if (!result.ok) return tooManyRequests(result.retryAfterSeconds);
+    } else if (DOCUMENT_PARSE_API.test(pathname) && request.method === "POST") {
+      const result = await rateLimit(`doc-parse:${ip}`, 10, 5 * 60_000);
       if (!result.ok) return tooManyRequests(result.retryAfterSeconds);
     }
 
@@ -111,5 +118,6 @@ export const config = {
     "/email-preview",
     "/api/v1/auth/:path*",
     "/api/v1/stocks/:path*",
+    "/api/v1/portfolio/:path*",
   ],
 };

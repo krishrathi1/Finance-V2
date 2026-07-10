@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { query } from '@/lib/db';
-import { hashPassword, verifyPasswordResetToken } from '@/lib/auth-utils';
+import { query, ResultSetHeader } from '@/lib/db';
+import { hashPassword, verifyPasswordResetToken, normalizeEmail } from '@/lib/auth-utils';
 
 export async function POST(request: NextRequest) {
   try {
-    const { email, resetToken, newPassword, confirmPassword } = await request.json();
+    const body = await request.json();
+    const email = normalizeEmail(body?.email);
+    const { resetToken, newPassword, confirmPassword } = body;
 
     if (!email || !resetToken || !newPassword || !confirmPassword) {
       return NextResponse.json(
@@ -47,11 +49,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const verifiedOtpRows = await query(
-      'SELECT id FROM password_reset_tokens WHERE id = ? AND user_id = ? AND is_used = true AND expires_at > NOW() LIMIT 1',
+    // Atomically claim the reset token row: only one concurrent request can
+    // delete it, so a racing duplicate request (same bearer resetToken) gets
+    // 0 affected rows here instead of both requests setting a password.
+    const claim = await query<ResultSetHeader>(
+      'DELETE FROM password_reset_tokens WHERE id = ? AND user_id = ? AND is_used = true AND expires_at > NOW()',
       [verifiedToken.otpRecordId, user.id]
     );
-    if (!Array.isArray(verifiedOtpRows) || verifiedOtpRows.length === 0) {
+    if (!claim || claim.affectedRows !== 1) {
       return NextResponse.json({ detail: 'Invalid reset token' }, { status: 401 });
     }
 
@@ -61,7 +66,7 @@ export async function POST(request: NextRequest) {
     // Update user password
     await query('UPDATE users SET password_hash = ? WHERE id = ?', [passwordHash, user.id]);
 
-    // Clear all password reset tokens for this user
+    // Clear any other outstanding password reset tokens / sessions for this user.
     await query('DELETE FROM password_reset_tokens WHERE user_id = ?', [user.id]);
     await query('DELETE FROM refresh_tokens WHERE user_id = ?', [user.id]);
 

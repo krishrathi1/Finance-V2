@@ -1,3 +1,4 @@
+import { NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { getAccessTokenFromRequest, verifyAccessToken } from '@/lib/auth-utils';
 
@@ -37,4 +38,25 @@ export async function getCurrentUser(request: Request): Promise<CurrentUser | nu
   if (user.is_banned) return null;
 
   return user;
+}
+
+/**
+ * Authoritative auth check for AI-consuming route handlers. Edge middleware
+ * (middleware.ts) can only verify the JWT *signature* — it has no DB access
+ * there (same constraint as the rate limiter; see lib/rate-limit.ts), so it
+ * can't tell a banned/deleted user from a valid one as long as their token
+ * hasn't expired (up to 30 minutes). This re-checks against the database,
+ * inside the Node runtime, so a ban takes effect immediately instead of
+ * waiting out the token's TTL.
+ *
+ * Usage: `const auth = await requireActiveUser(request); if ('error' in auth) return auth.error;`
+ */
+export async function requireActiveUser(
+  request: Request
+): Promise<{ user: CurrentUser } | { error: NextResponse }> {
+  const user = await getCurrentUser(request);
+  if (!user) {
+    return { error: NextResponse.json({ detail: 'Authentication required.' }, { status: 401 }) };
+  }
+  return { user };
 }

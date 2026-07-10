@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { earningsTldr } from '@/lib/backend/ai/features';
 import { getNseQuote, getNseQuarterlyResults } from '@/lib/backend/providers/nse';
+import { requireActiveUser } from '@/lib/current-user';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -9,6 +10,9 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ symbol: string }> }
 ) {
+  const auth = await requireActiveUser(request);
+  if ('error' in auth) return auth.error;
+
   const { symbol } = await params;
 
   try {

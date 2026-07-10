@@ -1,16 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { sendOtpEmail } from '@/lib/email';
-import { randomInt } from 'node:crypto';
+import { randomInt, createHash } from 'node:crypto';
 import { rateLimit } from '@/lib/rate-limit';
+import { normalizeEmail } from '@/lib/auth-utils';
 
 function generateOTP(): string {
   return randomInt(100000, 1000000).toString();
 }
 
+/** Same pattern as refresh-token hashing: never store the raw OTP. */
+function hashOtp(otp: string): string {
+  return createHash('sha256').update(otp).digest('hex');
+}
+
 export async function POST(request: NextRequest) {
   try {
-    const { email } = await request.json();
+    const body = await request.json();
+    const email = normalizeEmail(body?.email);
 
     if (!email) {
       return NextResponse.json(
@@ -23,8 +30,7 @@ export async function POST(request: NextRequest) {
     // an attacker distributed across many IPs from OTP-bombing one inbox.
     // Applied before the user lookup so it's identical regardless of whether
     // the email is registered (no enumeration signal).
-    const emailKey = String(email).trim().toLowerCase();
-    const emailLimit = await rateLimit(`forgot:email:${emailKey}`, 5, 15 * 60_000);
+    const emailLimit = await rateLimit(`forgot:email:${email}`, 5, 15 * 60_000);
     if (!emailLimit.ok) {
       return NextResponse.json(
         { detail: 'If this email exists, an OTP has been sent' },
@@ -48,7 +54,7 @@ export async function POST(request: NextRequest) {
       );
       await query(
         'INSERT INTO password_reset_tokens (user_id, otp, expires_at) VALUES (?, ?, ?)',
-        [user.id, otp, expiresAt]
+        [user.id, hashOtp(otp), expiresAt]
       );
       // Fire-and-forget: don't let the caller observe SMTP latency (or an SMTP
       // outage) via response time/status — both leak whether the email exists.
