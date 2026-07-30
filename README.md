@@ -7,7 +7,7 @@ A professional-grade quantitative trading platform and AI-powered Indian stock r
 - **Modern Trading Dashboard**: Professional-grade UI featuring glassmorphism, neon accents, and responsive design.
 - **Advanced Charting**: Integrated with the official TradingView Advanced Chart Widget for live, interactive market analysis.
 - **Quantitative Scoring**: Smart Score and Risk Score computed locally from historical market data with AI-generated explanations.
-- **AI-Powered Insights**: AI research reports, interactive chat assistant, SWOT analysis, earnings TL;DRs, and screeners (powered by Gemini).
+- **AI-Powered Insights**: AI research reports, SWOT analysis, earnings TL;DRs, and screeners (powered by Gemini).
 - **Comprehensive Financial Data**: Real-time quotes, financial statements, corporate actions, shareholding patterns, IPO tracking, and news.
 - **Accounts & Premium**: Email/password auth with JWT cookies, email verification, password reset via OTP, and a premium-request flow.
 - **Indian Markets Focus**: NSE/BSE stock analysis with broad global stock search.
@@ -19,7 +19,7 @@ Single application: **Next.js 14 (App Router)** serves both the UI and the entir
 - **UI**: Tailwind CSS, Framer Motion, Radix UI, Recharts, TradingView Widget
 - **API/backend logic**: Next.js route handlers + `frontend/lib/backend/` (dashboard assembly, scoring engine, provider fetchers, AI features)
 - **Database**: MySQL 8 (`mysql2` pool) — users, sessions, premium requests, watchlists, portfolios
-- **AI**: Gemini API (chat, explanations, reports) with rule-based fallbacks
+- **AI**: Gemini API (explanations, reports) with rule-based fallbacks
 - **Data providers**: NSE India, Trendlyne, Financial Modeling Prep, Yahoo Finance, Google News RSS, NewsAPI
 - **Email**: SMTP via nodemailer (verification + password-reset OTP)
 

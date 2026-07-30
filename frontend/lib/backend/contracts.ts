@@ -57,6 +57,8 @@ export interface QuarterlyResults {
   quarterlyConsolidated?: QuarterPoint[];
   quarterlyDetailedStandalone?: QuarterlyDetailedPoint[];
   quarterlyDetailedConsolidated?: QuarterlyDetailedPoint[];
+  /** Company-level constant (₹ per share) carried on the quarterly results feed. */
+  faceValue?: number | null;
 }
 
 export interface AnalystConsensus {

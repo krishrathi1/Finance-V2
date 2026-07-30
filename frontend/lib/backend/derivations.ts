@@ -440,17 +440,181 @@ export function finalizeKeyMetrics(
     }
   }
 
-  if (peg === null && pe !== null) {
-    let growthPct: number | null = null;
-    const quarterly = (financials?.quarterly as any[]) || [];
-    if (quarterly.length >= 5) {
-      const prev = num(quarterly[quarterly.length - 5]?.profit);
-      const curr = num(quarterly[quarterly.length - 1]?.profit);
-      if (prev && curr && prev > 0) {
-        growthPct = ((curr - prev) / prev) * 100;
+  const balanceRows = (financials?.balanceSheet as any[]) || [];
+  const incomeRows = (financials?.incomeStatement as any[]) || [];
+  const detailedRows = ((financials?.quarterlyDetailedStandalone as any[]) || []).length
+    ? (financials?.quarterlyDetailedStandalone as any[])
+    : (financials?.quarterlyDetailedConsolidated as any[]) || [];
+
+  const capitalEmployedAt = (row: any): number | null => {
+    const equity = num(row?.equity);
+    const debt = num(row?.totalDebt);
+    if (equity === null || debt === null) return null;
+    return equity + debt > 0 ? equity + debt : null;
+  };
+
+  // ROCE — EBIT over average capital employed. `incomeStatement.ebit` is
+  // reported for non-financials and null for banks/NBFCs, which makes this
+  // self-selecting with no sector flag: lenders have no meaningful EBIT
+  // (interest is an operating input, not a financing cost) and their ROCE
+  // swings between ~6% and ~20% purely on whether deposits count as capital
+  // employed. Leaving it blank for them beats publishing a number that
+  // contradicts every other screener.
+  if (num(out.roce) === null && incomeRows.length && balanceRows.length) {
+    const ebit = num(incomeRows[incomeRows.length - 1]?.ebit);
+    if (ebit !== null) {
+      // Average opening and closing capital employed — the textbook
+      // denominator, and closer to published ROCE than a point-in-time one.
+      const closing = capitalEmployedAt(balanceRows[balanceRows.length - 1]);
+      const opening = balanceRows.length >= 2 ? capitalEmployedAt(balanceRows[balanceRows.length - 2]) : null;
+      const denominator = closing !== null && opening !== null ? (closing + opening) / 2 : closing;
+      if (denominator !== null && denominator > 0) {
+        out.roce = (ebit / denominator) * 100;
       }
     }
-    if (growthPct && growthPct > 0.01) {
+  }
+
+  if (balanceRows.length) {
+    const latest = balanceRows[balanceRows.length - 1];
+    const previous = balanceRows.length >= 2 ? balanceRows[balanceRows.length - 2] : null;
+    const debt = num(latest?.totalDebt);
+    const equity = num(latest?.equity);
+    const assets = num(latest?.totalAssets);
+
+    if (num(out.totalDebt) === null && debt !== null) {
+      out.totalDebt = debt;
+    }
+
+    // Derive debt/equity from the balance sheet even when a provider already
+    // supplied a value: the upstream numbers arrive inconsistently scaled
+    // (RELIANCE came through as 36.65 — percent-encoded — against a true ratio
+    // of ~0.44, while bank rows arrive as plain ratios), so two stocks could
+    // not be compared on the same tile. Two known quantities divided here beat
+    // one of unknown unit, and this deliberately does not try to guess whether
+    // a large provider figure was a percentage.
+    if (debt !== null && equity !== null && equity > 0) {
+      out.debtToEquity = debt / equity;
+    }
+
+    if (num(out.currentRatio) === null) {
+      const currentAssets = num(latest?.currentAssets);
+      const currentLiabilities = num(latest?.currentLiabilities);
+      if (currentAssets !== null && currentLiabilities !== null && currentLiabilities > 0) {
+        out.currentRatio = currentAssets / currentLiabilities;
+      }
+    }
+
+    // ROE / ROA against average balances, consistent with ROCE above.
+    const latestNetIncome = incomeRows.length ? num(incomeRows[incomeRows.length - 1]?.netIncome) : null;
+    if (latestNetIncome !== null) {
+      const average = (current: number | null, prior: number | null): number | null => {
+        if (current === null) return null;
+        return prior !== null ? (current + prior) / 2 : current;
+      };
+
+      if (num(out.roe) === null) {
+        const avgEquity = average(equity, previous ? num(previous.equity) : null);
+        if (avgEquity !== null && avgEquity > 0) out.roe = (latestNetIncome / avgEquity) * 100;
+      }
+
+      if (num(out.roa) === null) {
+        const avgAssets = average(assets, previous ? num(previous.totalAssets) : null);
+        if (avgAssets !== null && avgAssets > 0) out.roa = (latestNetIncome / avgAssets) * 100;
+      }
+    }
+  }
+
+  // Net Interest Margin — net interest income over average total assets. Only
+  // lenders report both interest legs, so the data's presence is itself the
+  // sector test.
+  //
+  // Two caveats worth knowing. The denominator is total assets rather than
+  // earning assets, because the feed carries no advances/investments balances
+  // — so this reads somewhat below a bank's own disclosed NIM (Axis: ~3.0%
+  // here vs ~3.8% reported on earning assets). And the quarterly results feed
+  // is denominated in lakh while the balance sheet is in crore, so the two
+  // must be reconciled before dividing; rather than hard-coding 100, infer the
+  // factor from net profit, which appears in both feeds, and snap it to the
+  // nearest power of ten. That keeps this correct if a feed ever changes unit.
+  if (num(out.netInterestMargin) === null && detailedRows.length >= 4 && balanceRows.length) {
+    const lastFour = detailedRows.slice(-4);
+    const niiParts = lastFour.map((row) => {
+      const explicit = num(row?.netInterestIncome);
+      if (explicit !== null) return explicit;
+      const earned = num(row?.interestEarned);
+      const expended = num(row?.interestExpended);
+      return earned !== null && expended !== null ? earned - expended : null;
+    });
+
+    const quarterlyProfits = lastFour.map((row) => num(row?.netProfit));
+    const annualNetIncome = num(incomeRows[incomeRows.length - 1]?.netIncome);
+
+    if (niiParts.every((v): v is number => v !== null) && quarterlyProfits.every((v): v is number => v !== null)) {
+      const trailingNii = niiParts.reduce((sum, v) => sum + v, 0);
+      const trailingProfit = quarterlyProfits.reduce((sum, v) => sum + v, 0);
+
+      let unitFactor = 1;
+      if (annualNetIncome !== null && annualNetIncome !== 0 && trailingProfit !== 0) {
+        const ratio = Math.abs(trailingProfit / annualNetIncome);
+        if (ratio > 0) unitFactor = Math.pow(10, Math.round(Math.log10(ratio)));
+      }
+
+      const closingAssets = num(balanceRows[balanceRows.length - 1]?.totalAssets);
+      const openingAssets = balanceRows.length >= 2 ? num(balanceRows[balanceRows.length - 2]?.totalAssets) : null;
+      const averageAssets =
+        closingAssets !== null && openingAssets !== null ? (closingAssets + openingAssets) / 2 : closingAssets;
+
+      if (averageAssets !== null && averageAssets > 0 && unitFactor > 0) {
+        const margin = (trailingNii / unitFactor / averageAssets) * 100;
+        // Guard against a mis-inferred unit factor producing an absurd margin.
+        if (margin > 0 && margin < 25) out.netInterestMargin = margin;
+      }
+    }
+  }
+
+  if (peg === null && pe !== null && pe > 0) {
+    // PEG needs an earnings growth rate. A single quarter's YoY profit swing
+    // (the only basis this used to try) is far too noisy to carry it: one soft
+    // quarter turns growth negative, the positive-growth guard below rejects
+    // it, and PEG silently renders "N/A" even for names with healthy
+    // multi-year growth. RELIANCE.NS was the case in point — Dec'23 -> Dec'24
+    // profit fell 12%, while its 3-year annual CAGR is +6.6%.
+    //
+    // Prefer the longest annual window available, since multi-year CAGR is
+    // both the conventional PEG denominator and stable enough that one weak
+    // year can't flip its sign. Net profit stands in for EPS: per-year EPS
+    // isn't carried in `financials.yearly`, and the two only diverge when
+    // share count moves materially.
+    let growthPct: number | null = null;
+
+    const annualProfits = ((financials?.yearly as any[]) || [])
+      .map((row) => num(row?.profit))
+      .filter((profit): profit is number => profit !== null);
+
+    if (annualProfits.length >= 2) {
+      const first = annualProfits[0];
+      const last = annualProfits[annualProfits.length - 1];
+      const years = annualProfits.length - 1;
+      if (first > 0 && last > 0) {
+        growthPct = (Math.pow(last / first, 1 / years) - 1) * 100;
+      }
+    }
+
+    // Quarterly YoY — the original basis, kept as a fallback for names that
+    // report no usable annual history.
+    if (growthPct === null || growthPct <= 0.01) {
+      const quarterly = (financials?.quarterly as any[]) || [];
+      if (quarterly.length >= 5) {
+        const prev = num(quarterly[quarterly.length - 5]?.profit);
+        const curr = num(quarterly[quarterly.length - 1]?.profit);
+        if (prev && curr && prev > 0) {
+          const quarterlyGrowth = ((curr - prev) / prev) * 100;
+          if (quarterlyGrowth > 0.01) growthPct = quarterlyGrowth;
+        }
+      }
+    }
+
+    if (growthPct !== null && growthPct > 0.01) {
       out.pegRatio = pe / growthPct;
     }
   }
@@ -466,6 +630,14 @@ export function finalizeKeyMetrics(
   const evSales = num(out.evToSales);
   if (evSales !== null && evSales > 100) {
     out.evToSales = null;
+  }
+
+  // Yahoo reports ebitdaMargins: 0 for banks and insurers rather than omitting
+  // it, since EBITDA is not a line they produce. An exactly-zero EBITDA margin
+  // is not a real business state, so treat it as absent — "N/A" is honest where
+  // "0%" reads as a measured result.
+  if (num(out.ebitdaMargin) === 0) {
+    out.ebitdaMargin = null;
   }
 
   if (num(out.profitMargin) === null) {

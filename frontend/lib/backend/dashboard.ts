@@ -734,6 +734,11 @@ export async function buildDashboard(symbol: string, options: BuildOptions = {})
     for (const k of ["quarterly", "quarterlyStandalone", "quarterlyConsolidated", "quarterlyDetailedStandalone", "quarterlyDetailedConsolidated"]) {
       if (q[k] && q[k].length) data.financials[k] = q[k];
     }
+    // NSE's results feed is the only provider here that reports face value for
+    // Indian listings — FMP's Indian coverage omits it.
+    if (q.faceValue != null && data.metrics.faceValue == null) {
+      data.metrics.faceValue = q.faceValue;
+    }
   }
   if (fmpQuarterly && fmpQuarterly.length) {
     data.financials.fmpQuarterly = fmpQuarterly;

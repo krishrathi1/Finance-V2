@@ -65,7 +65,7 @@ export interface StockQuote {
   netInterestMargin: number | null;
 
   // Additional Info
-  faceValue: number;
+  faceValue: number | null;
   isin: string;
   listingDate: string;
   tradingStatus: string;

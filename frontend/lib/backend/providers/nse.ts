@@ -223,14 +223,31 @@ export async function getNseQuarterlyResults(
     }));
 
     // Build detailed rows where the comparison feed exposes the field.
+    //
+    // `results-comparision` returns two different schemas: non-financials use
+    // one set of keys (re_total_inc, re_int_new, re_curr_tax + re_deff_tax...)
+    // and banks/NBFCs another (re_tot_inc, re_int_earned, re_int_expd,
+    // re_tax...). Every key exists on both payloads, but only the shape
+    // matching the filer's industry is populated — so reading a single name
+    // silently yields null for half the market. Banks were the visible
+    // casualty: no interest lines meant Net Interest Margin could never be
+    // computed. Take the first non-null across both spellings.
     const detailed: QuarterlyDetailedPoint[] = rows.map((item: any) => {
-      const totalRevenue = num(item.re_total_inc);
+      const pick = (...keys: string[]): number | null => {
+        for (const key of keys) {
+          const value = num(item[key]);
+          if (value !== null) return value;
+        }
+        return null;
+      };
+
+      const totalRevenue = pick("re_total_inc", "re_tot_inc");
       const netProfit = num(item.re_net_profit);
       const pbt = num(item.re_pro_loss_bef_tax);
       const tax = (() => {
         const current = num(item.re_curr_tax);
         const deferred = num(item.re_deff_tax);
-        if (current === null && deferred === null) return null;
+        if (current === null && deferred === null) return num(item.re_tax);
         return (current ?? 0) + (deferred ?? 0);
       })();
       const taxPct = tax !== null && pbt !== null && pbt !== 0 ? (tax / pbt) * 100 : null;
@@ -239,25 +256,45 @@ export async function getNseQuarterlyResults(
           ? (netProfit / totalRevenue) * 100
           : null;
 
+      const interestEarned = pick("re_int_new", "re_int_earned");
+      const interestExpended = pick("re_int_exp", "re_int_expended", "re_int_expd");
+
       return {
         period: periodLabel(item),
         totalRevenue,
         operatingRevenue: num(item.re_net_sale),
-        interestEarned: num(item.re_int_new),
-        otherIncome: num(item.re_oth_inc_new),
-        expenses: num(item.re_oth_tot_exp),
-        interestExpended: num(item.re_int_exp ?? item.re_int_expended),
-        operatingExpenses: num(item.re_oth_exp),
+        interestEarned,
+        otherIncome: pick("re_oth_inc_new", "re_oth_inc"),
+        expenses: pick("re_oth_tot_exp", "re_tot_exp_exc_pro_cont"),
+        interestExpended,
+        operatingExpenses: pick("re_oth_exp", "re_oper_exp", "re_oth_oper_exp"),
+        // Banks report both interest legs, so net interest income is a real
+        // figure here rather than a derived guess; non-financials leave it null.
+        netInterestIncome:
+          interestEarned !== null && interestExpended !== null
+            ? interestEarned - interestExpended
+            : null,
         depreciations: num(item.re_depr_und_exp),
         profitBeforeTax: pbt,
         tax,
         taxPct,
         netProfit,
         netProfitMarginPct,
-        basicEps: num(item.re_basic_eps_for_cont_dic_opr),
-        dilutedEps: num(item.re_dilut_eps_for_cont_dic_opr),
+        basicEps: pick("re_basic_eps_for_cont_dic_opr", "re_basic_eps", "re_bsc_eps_bfr_exi"),
+        dilutedEps: pick("re_dilut_eps_for_cont_dic_opr", "re_diluted_eps", "re_dil_eps_bfr_exi"),
       };
     });
+
+    // Face value is a company-level constant the feed repeats on every row, and
+    // is populated for both schemas — the metrics grid was rendering 0 purely
+    // because nothing read it.
+    const faceValue = (() => {
+      for (const item of rows) {
+        const value = num(item?.re_face_val);
+        if (value !== null && value > 0) return value;
+      }
+      return null;
+    })();
 
     // Keep the last ~8 quarters. The feed is generally newest-first, so the
     // "last 8" are the leading 8 entries; preserve feed order otherwise.
@@ -272,6 +309,7 @@ export async function getNseQuarterlyResults(
     return {
       quarterly: summaryTrim,
       quarterlyDetailedStandalone: detailedTrim,
+      faceValue,
     };
   } catch {
     return null;

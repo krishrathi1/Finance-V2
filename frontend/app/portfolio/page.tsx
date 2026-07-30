@@ -26,7 +26,6 @@ import { createPortal } from "react-dom";
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { FaqSection } from "@/components/seo/faq-section";
 import { FeatureAuthWall } from "@/components/sections/feature-auth-wall";
 import { PortfolioDoctor } from "@/components/sections/portfolio-doctor";
 import { useVisibilityPolling } from "@/hooks/useVisibilityPolling";
@@ -728,36 +727,6 @@ type RiskAnalysis = {
 };
 
 export default function PortfolioPage() {
-  const portfolioFaqs = [
-    {
-      question: "What can I track with the portfolio page?",
-      answer:
-        "You can track holdings, average buy price, current value, allocation, profit and loss, price alerts, and AI portfolio risk commentary for Indian stocks.",
-    },
-    {
-      question: "Does the portfolio tracker require a login?",
-      answer:
-        "The current portfolio workflow stores data locally in your browser, so it is designed as a lightweight no-login experience for quick tracking and review.",
-    },
-    {
-      question: "Can I use the portfolio page for stock market analysis?",
-      answer:
-        "Yes. The portfolio view is not just a holdings ledger. It also helps you review concentration, target levels, and AI risk insights so you can manage the portfolio with more context.",
-    },
-  ];
-  const portfolioFaqJsonLd = {
-    "@context": "https://schema.org",
-    "@type": "FAQPage",
-    mainEntity: portfolioFaqs.map((item) => ({
-      "@type": "Question",
-      name: item.question,
-      acceptedAnswer: {
-        "@type": "Answer",
-        text: item.answer,
-      },
-    })),
-  };
-
   const { user } = useAuth();
   const [holdings, setHoldings] = useState<HoldingWithValue[]>([]);
   const [loading, setLoading] = useState(true);
@@ -861,10 +830,6 @@ export default function PortfolioPage() {
 
   return (
     <div className="stagger-fade space-y-6 py-4 sm:space-y-8 sm:py-8">
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(portfolioFaqJsonLd) }}
-      />
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
@@ -1119,11 +1084,6 @@ export default function PortfolioPage() {
             </article>
           </section>
 
-          <FaqSection
-            title="Portfolio Tracker FAQs"
-            intro="These answers cover the main questions users search for when looking for a stock portfolio tracker in India."
-            items={portfolioFaqs}
-          />
         </>
       )}
 

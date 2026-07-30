@@ -36,7 +36,6 @@ Base path: `/api/v1`
 | `GET /stocks/ipo`, `/ipo/{symbol}/ai-analysis` | IPO tracking + AI analysis |
 | `GET /stocks/{symbol}/dashboard` | Full stock dashboard payload |
 | `GET /stocks/{symbol}/quote`, `/chart`, `/news`, `/quarterly-results` | Individual data slices |
-| `POST /stocks/{symbol}/chat` | AI chat (answers include `source: gemini\|fallback`) |
 | `GET /stocks/{symbol}/research-report` | Markdown research report |
 | `GET /stocks/{symbol}/returns-projection` | ROI projection |
 | `GET /stocks/{symbol}/swot`, `/earnings-tldr`, `/competitor-verdict`, `/news-analysis`, `/watchlist-analysis` | AI feature endpoints |

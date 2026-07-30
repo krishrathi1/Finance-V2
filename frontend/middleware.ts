@@ -12,7 +12,7 @@ const AUTH_ROUTES = ["/signin", "/signup"];
 const STRICT_AUTH_API = /^\/api\/v1\/auth\/(login|register|forgot-password|verify-otp|reset-password|resend-verification)$/;
 // LLM-backed endpoints: expensive per call, keep abuse bounded.
 const AI_API =
-  /^\/api\/v1\/stocks\/(screener\/ai|compare-analysis|portfolio-risk|portfolio-roast|ipo\/[^/]+\/ai-analysis|[^/]+\/(chat|swot|earnings-tldr|competitor-verdict|news-analysis|watchlist-analysis|research-report))$/;
+  /^\/api\/v1\/stocks\/(screener\/ai|compare-analysis|portfolio-risk|portfolio-roast|ipo\/[^/]+\/ai-analysis|[^/]+\/(swot|earnings-tldr|competitor-verdict|news-analysis|watchlist-analysis|research-report))$/;
 // CPU/memory-heavy document parsing (PDF/DOCX extraction) — no auth required
 // (portfolio import is intentionally usable without a login) but must be
 // rate-limited so it can't be used as a resource-exhaustion vector.

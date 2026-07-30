@@ -34,8 +34,6 @@ const QuarterlyResultsSection = dynamic(
   () => import("@/components/sections/quarterly-results-section").then((m) => m.QuarterlyResultsSection),
   { ssr: false }
 );
-const AIChat = dynamic(() => import("@/components/sections/ai-chat").then((m) => m.AIChat), { ssr: false });
-
 const LIVE_REFRESH_MS = 30_000;
 
 function mergeDashboardData(current: DashboardData, next: DashboardData): DashboardData {
@@ -252,7 +250,6 @@ export function LiveStockDetails({ initialData, symbol, exchange }: { initialDat
         </section>
 
         <NewsSectionLive symbol={symbol} fallbackNews={data.news} />
-        <AIChat symbol={symbol} />
       </StockAuthWall>
     </>
   );

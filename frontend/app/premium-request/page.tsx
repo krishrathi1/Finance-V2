@@ -239,7 +239,6 @@ export default function PremiumRequestPage() {
                   "Unlimited Watchlist",
                   "Portfolio Tracking",
                   "Custom Price Alerts",
-                  "AI Chat Analysis",
                   "Export Reports",
                   "Priority Support",
                 ].map((feature) => (

@@ -172,27 +172,6 @@ export async function searchStocks(query: string): Promise<Array<{ symbol: strin
   }
 }
 
-export async function sendAiQuestion(symbol: string, question: string): Promise<{ answer: string; source: "gemini" | "fallback" }> {
-  try {
-    const res = await fetch(getApiUrl(`/${symbol}/chat`), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ question })
-    });
-    if (!res.ok) throw new Error("chat failed");
-    const payload = await res.json();
-    return {
-      answer: payload.answer || "No response.",
-      source: payload.source === "gemini" ? "gemini" : "fallback"
-    };
-  } catch {
-    return {
-      answer: "AI engine unavailable right now.",
-      source: "fallback"
-    };
-  }
-}
-
 export async function fetchWatchlistAnalysis(symbol: string): Promise<{ answer: string; source: "gemini" | "fallback" }> {
   try {
     const res = await fetch(getApiUrl(`/${symbol}/watchlist-analysis`), {

@@ -69,7 +69,6 @@ const FEATURE_CARDS = [
 const FEATURE_TAGS = [
   "Smart Score",
   "Risk Analysis",
-  "AI Chat",
   "Brokerage Reports",
   "Live Heatmap",
   "Earnings TL;DR",

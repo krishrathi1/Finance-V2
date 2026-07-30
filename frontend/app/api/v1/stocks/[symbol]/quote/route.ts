@@ -50,7 +50,7 @@ function yahooQuoteResponse(symbol: string, exchange: string, quote: Awaited<Ret
     debtEquityRatio: 0,
     casaRatio: null,
     netInterestMargin: null,
-    faceValue: 0,
+    faceValue: null,
     isin: '',
     listingDate: '',
     tradingStatus: quote?.cmp ? 'Active' : 'Unavailable',
@@ -90,7 +90,7 @@ export async function GET(
         fiftytwoWeekLow: providerQuote.fiftyTwoWeekLow || 0,
         peRatio: providerQuote.peRatio || null,
         industryPE: providerQuote.industryPe || null,
-        faceValue: providerQuote.faceValue || 0,
+        faceValue: providerQuote.faceValue || null,
         outstandingSharesCr: providerQuote.outstandingShares || null,
         source: 'nse',
       });
@@ -159,7 +159,11 @@ export async function GET(
 
     // Calculate metrics from quarterly results
     const lastPrice = priceInfo.lastPrice || 0;
-    const faceValue = securityInfo.faceValue || 10;
+    // No default: ₹10 is only the most common denomination, not a safe guess
+    // (Axis is ₹2, HDFC Bank and TCS are ₹1). The metrics grid merges this over
+    // the dashboard's NSE-sourced face value with `??`, so any non-null stand-in
+    // here would mask the real figure rather than fall through to it.
+    const faceValue = securityInfo.faceValue || null;
     const outstandingShares = securityInfo.issuedSize || 0;
 
     // Market Cap = Last Price * Outstanding Shares / 10000000 (to get in Crores)

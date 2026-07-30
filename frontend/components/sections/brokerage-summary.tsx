@@ -15,8 +15,13 @@ export function BrokerageSummary({ brokerage }: { brokerage?: BrokeragePayload }
   const summary = brokerage?.summary || { "1D": 0, "1W": 0, "1M": 0, buy: 0, hold: 0, sell: 0, total: 0 };
   const reports = brokerage?.reports || [];
 
+  // The card height is capped rather than fixed. It is full-width with no
+  // sibling column to line up with, so the previous `xl:h-[54rem]` forced 864px
+  // of shell regardless of content and the flex-1 report list stretched to fill
+  // it — leaving a large dead area whenever a stock had only a handful of
+  // reports. A max-height still hands long lists to the inner scroller.
   return (
-    <Card className="flex max-h-[80vh] flex-col overflow-hidden p-3 sm:p-4 xl:h-[54rem] xl:max-h-none">
+    <Card className="flex max-h-[80vh] flex-col overflow-hidden p-3 sm:p-4 xl:max-h-[54rem]">
       <div className="flex items-start justify-between gap-3">
         <div>
           <h3 className="text-lg font-semibold">Brokerage Summary</h3>
@@ -50,8 +55,10 @@ export function BrokerageSummary({ brokerage }: { brokerage?: BrokeragePayload }
       </div>
 
       {reports.length ? (
-        <div className="mt-4 flex min-h-0 flex-1 flex-col rounded-xl border border-border/60 bg-bg/55 p-2">
-          <div className="brokerage-scroll min-h-0 flex-1 overflow-y-auto pr-1">
+        <div className="mt-4 flex min-h-0 flex-col rounded-xl border border-border/60 bg-bg/55 p-2">
+          {/* Cap the scroller directly instead of stretching it with flex-1, so
+              the wrapper height follows the report count. */}
+          <div className="brokerage-scroll min-h-0 max-h-[44rem] overflow-y-auto pr-1">
             <div className="space-y-2">
               {reports.map((row, idx) => (
                 <div key={`${row.broker}-${row.date}-${idx}`} className="rounded-lg border border-border/70 bg-bg p-3">
@@ -74,7 +81,7 @@ export function BrokerageSummary({ brokerage }: { brokerage?: BrokeragePayload }
           </div>
         </div>
       ) : (
-        <div className="mt-4 flex min-h-0 flex-1 items-center rounded-xl border border-dashed border-border/80 bg-bg/40 p-3 text-sm text-muted">
+        <div className="mt-4 flex min-h-0 items-center rounded-xl border border-dashed border-border/80 bg-bg/40 p-3 text-sm text-muted">
           No brokerage reports were found for this stock right now.
         </div>
       )}
