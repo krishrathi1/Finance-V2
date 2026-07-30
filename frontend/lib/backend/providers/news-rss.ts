@@ -32,7 +32,66 @@ export function scoreSentiment(text: string): number {
   return Math.max(0, Math.min(1, Math.round(s * 100) / 100));
 }
 
-function parseRssItems(xml: string): Array<{ title: string; link: string; pubDate: string; source: string; description: string }> {
+/** Recognised HTML tags only — leaves prose like "<XYZ>" intact. */
+const HTML_TAG = /<\/?(?:a|b|i|em|strong|u|s|p|br|hr|div|span|ol|ul|li|dl|dt|dd|font|small|big|table|thead|tbody|tr|td|th|img|figure|figcaption|blockquote|code|pre|h[1-6])\b[^>]*>/gi;
+
+function decodeEntities(s: string): string {
+  return (
+    s
+      // Whitespace entities collapse to a plain space.
+      .replace(/&(?:nbsp|ensp|emsp|thinsp|#160|#xa0);/gi, " ")
+      .replace(/&lt;/gi, "<")
+      .replace(/&gt;/gi, ">")
+      .replace(/&quot;|&#34;/gi, '"')
+      .replace(/&apos;|&#39;|&rsquo;|&lsquo;/gi, "'")
+      .replace(/&(?:ndash|mdash|#8211|#8212);/gi, "-")
+      .replace(/&hellip;|&#8230;/gi, "...")
+      // `&amp;` must come last: decoding it earlier would turn `&amp;lt;` into
+      // `&lt;` and then into a real `<`, re-introducing markup from text that
+      // was only ever meant to read as an ampersand.
+      .replace(/&amp;/gi, "&")
+  );
+}
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+const normalizeForCompare = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+
+/**
+ * Google's <description> is usually just the headline followed by the
+ * publisher name — the same two things the card already shows above it. Once
+ * that is removed there is often nothing left, and echoing the title back is
+ * worse than showing no summary at all. Returns "" when the description adds
+ * nothing, and the genuine extra prose when it does (some items carry a couple
+ * of related headlines).
+ */
+export function meaningfulSummary(description: string, title: string, source: string): string {
+  if (!description) return "";
+
+  // Google titles end in " - Publisher"; the description repeats the headline
+  // without that suffix, so compare against the bare headline.
+  const titleCore = source
+    ? title.replace(new RegExp(`\\s*[-–|]\\s*${escapeRegExp(source)}\\s*$`, "i"), "").trim()
+    : title;
+
+  let rest = description;
+  const normalizedTitle = normalizeForCompare(titleCore);
+  if (normalizedTitle && normalizeForCompare(description).startsWith(normalizedTitle)) {
+    // Walk forward through the original string by word count so the slice
+    // lands on a real boundary rather than a normalized-length offset.
+    const words = titleCore.split(/\s+/).filter(Boolean).length;
+    rest = description.split(/\s+/).slice(words).join(" ");
+  }
+
+  if (source) rest = rest.replace(new RegExp(escapeRegExp(source), "gi"), " ");
+  rest = rest.replace(/\s+/g, " ").trim();
+
+  return normalizeForCompare(rest).length < 30 ? "" : rest;
+}
+
+export function parseRssItems(xml: string): Array<{ title: string; link: string; pubDate: string; source: string; description: string }> {
   const out: Array<{ title: string; link: string; pubDate: string; source: string; description: string }> = [];
   const clean = (s: string) => {
     // Extract CDATA content verbatim and skip the tag-stripping pass entirely
@@ -42,16 +101,38 @@ function parseRssItems(xml: string): Array<{ title: string; link: string; pubDat
     if (cdata) return cdata[1].replace(/\s+/g, " ").trim();
     return s.replace(/<[^>]+>/g, " ").replace(/&#?\w+;/g, " ").replace(/\s+/g, " ").trim();
   };
+  // Google News sends <description> as entity-escaped HTML
+  // (`&lt;a href="..."&gt;headline&lt;/a&gt;&amp;nbsp;&lt;font&gt;Source&lt;/font&gt;`),
+  // never as CDATA. `clean` above therefore found no literal tags to strip and
+  // then replaced every `&lt;`/`&gt;` with a space, which erased the brackets
+  // but kept the attribute text — rendering as
+  // `a href="..." target="_blank" headline /a nbsp; font color="#6f6f6f"`.
+  // Order is the whole fix: decode entities first, *then* strip markup.
+  const cleanDescription = (s: string) => {
+    const raw = s.match(/<!\[CDATA\[([\s\S]*?)\]\]>/)?.[1] ?? s;
+    // Only strip recognised HTML tags, so a literal "<XYZ>" in prose survives
+    // the same way it does in a title.
+    const stripped = decodeEntities(raw).replace(HTML_TAG, " ");
+    // Decode once more: Google double-encodes the inner markup, so entities
+    // like `&amp;nbsp;` only become `&nbsp;` after the first pass.
+    return decodeEntities(stripped).replace(/\s+/g, " ").trim();
+  };
   // Tolerate attributes/namespace prefixes on the item tag itself (e.g. RDF's <item rdf:about="...">).
-  const pick = (b: string, tag: string) => {
+  const pick = (b: string, tag: string, transform: (s: string) => string = clean) => {
     // Allow an optional namespace prefix on the tag name (e.g. <media:title>).
     const m = b.match(new RegExp(`<(?:\\w+:)?${tag}[^>]*>([\\s\\S]*?)<\\/(?:\\w+:)?${tag}>`, "i"));
-    return m ? clean(m[1]) : "";
+    return m ? transform(m[1]) : "";
   };
   for (const b of xml.split(/<item[^>]*>/i).slice(1).slice(0, 25)) {
     const title = pick(b, "title");
     if (!title) continue;
-    out.push({ title, link: pick(b, "link"), pubDate: pick(b, "pubDate"), source: pick(b, "source") || "Google News", description: pick(b, "description") });
+    out.push({
+      title,
+      link: pick(b, "link"),
+      pubDate: pick(b, "pubDate"),
+      source: pick(b, "source") || "Google News",
+      description: pick(b, "description", cleanDescription),
+    });
   }
   return out;
 }
@@ -78,7 +159,7 @@ export async function getGoogleNews(query: string, limit = 12): Promise<NewsItem
       source: it.source,
       publishedAt,
       url: it.link,
-      summary: it.description || it.title,
+      summary: meaningfulSummary(it.description, it.title, it.source),
       sentimentScore: scoreSentiment(`${it.title} ${it.description}`),
     };
   });

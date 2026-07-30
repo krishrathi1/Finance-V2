@@ -81,7 +81,10 @@ export function NewsSection({ symbol, news }: { symbol: string; news: NewsItem[]
                 <p className="mt-1 text-xs text-muted">
                   {item.source} | {item.publishedAt}
                 </p>
-                <p className="mt-2 text-sm text-muted">{item.summary}</p>
+                {/* Feeds often carry no summary beyond a repeat of the headline,
+                    in which case the provider returns "" — render nothing rather
+                    than an empty paragraph that still contributes its margin. */}
+                {item.summary?.trim() ? <p className="mt-2 text-sm text-muted">{item.summary}</p> : null}
                 <div className="mt-3 flex flex-wrap gap-2">
                   <Button
                     type="button"

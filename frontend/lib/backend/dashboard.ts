@@ -15,6 +15,11 @@ import { baseSymbol, round2, safeCall, getText, DESKTOP_UA } from "@/lib/backend
 import { getSampleDashboard } from "@/lib/backend/sample";
 import { getNseQuote, getNseCorporateEvents, getNseQuarterlyResults, getNseShareholdingHistory } from "@/lib/backend/providers/nse";
 import { getTrendlyneSupplement } from "@/lib/backend/providers/trendlyne";
+// Shared with the /news route. This file used to carry a byte-for-byte copy of
+// the RSS parser, so a fix to one silently left the other broken — which is how
+// the dashboard kept rendering raw `a href="..."` markup after the provider was
+// corrected.
+import { parseRssItems, meaningfulSummary } from "@/lib/backend/providers/news-rss";
 import { getYahooQuote, getYahooCandles, getYahooBundle, getYahooTimeseriesFinancials } from "@/lib/backend/providers/yahoo";
 import { screenUniverse } from "@/lib/backend/providers/universe";
 import {
@@ -216,36 +221,6 @@ function scoreSentiment(text: string): number {
   return Math.max(0, Math.min(1, Math.round(s * 100) / 100));
 }
 
-function parseRssItems(xml: string): Array<{ title: string; link: string; pubDate: string; source: string; description: string }> {
-  const out: Array<{ title: string; link: string; pubDate: string; source: string; description: string }> = [];
-  const blocks = xml.split(/<item[^>]*>/i).slice(1);
-  const clean = (s: string) => {
-    // Extract CDATA content verbatim and skip the tag-stripping pass entirely
-    // for it — a title like "Firm <XYZ> profit" inside CDATA is literal text,
-    // not markup, so "<XYZ>" must survive.
-    const cdata = s.match(/<!\[CDATA\[([\s\S]*?)\]\]>/);
-    if (cdata) return cdata[1].replace(/\s+/g, " ").trim();
-    return s.replace(/<[^>]+>/g, " ").replace(/&#?\w+;/g, " ").replace(/\s+/g, " ").trim();
-  };
-  const pick = (b: string, tag: string) => {
-    // Allow an optional namespace prefix on the tag name (e.g. <media:title>).
-    const m = b.match(new RegExp(`<(?:\\w+:)?${tag}[^>]*>([\\s\\S]*?)<\\/(?:\\w+:)?${tag}>`, "i"));
-    return m ? clean(m[1]) : "";
-  };
-  for (const b of blocks.slice(0, 20)) {
-    const title = pick(b, "title");
-    if (!title) continue;
-    out.push({
-      title,
-      link: pick(b, "link"),
-      pubDate: pick(b, "pubDate"),
-      source: pick(b, "source") || "Google News",
-      description: pick(b, "description"),
-    });
-  }
-  return out;
-}
-
 /** Live company news via Google News RSS (keyless, reliable). Returns NewsItem[]. */
 async function fetchSymbolNews(company: string, symbol: string, signal?: AbortSignal): Promise<DashboardData["news"]> {
   const q = encodeURIComponent(`${company || symbol} stock`);
@@ -271,7 +246,7 @@ async function fetchSymbolNews(company: string, symbol: string, signal?: AbortSi
         source: it.source,
         publishedAt,
         url: it.link,
-        summary: it.description || it.title,
+        summary: meaningfulSummary(it.description, it.title, it.source),
         sentimentScore: scoreSentiment(`${it.title} ${it.description}`),
       };
     });
