@@ -786,6 +786,79 @@ export async function getNseShareholdingHistory(
   }
 }
 
+export type NseMarketStatusSnapshot = {
+  capitalMarketOpen: boolean;
+  anyMarketOpen: boolean;
+  openMarkets: string[];
+  asOf: string;
+};
+
+function displayMarketName(value: unknown): string {
+  const raw = String(value ?? "").trim();
+  const normalized = raw.toLowerCase().replace(/\s+/g, "");
+  if (normalized === "capitalmarket") return "Capital Market";
+  if (normalized === "currency" || normalized === "currencyfuture") return "Currency";
+  if (normalized === "commodity") return "Commodity";
+  if (normalized === "debt") return "Debt";
+  return raw;
+}
+
+export function parseNseMarketStatus(payload: unknown): NseMarketStatusSnapshot | null {
+  if (!payload || typeof payload !== "object") return null;
+  const rows = (payload as { marketState?: unknown }).marketState;
+  if (!Array.isArray(rows)) return null;
+
+  const openMarkets = new Set<string>();
+  let capitalMarketOpen = false;
+  let asOf = "";
+  let sawMarket = false;
+
+  for (const row of rows) {
+    if (!row || typeof row !== "object") continue;
+    const record = row as Record<string, unknown>;
+    const market = displayMarketName(record.market);
+    const status = String(record.marketStatus ?? "").trim();
+    if (!market || !status) continue;
+    sawMarket = true;
+    const isOpen = /\bopen\b/i.test(status) && !/\bclosed\b/i.test(status);
+    if (isOpen) openMarkets.add(market);
+    if (market === "Capital Market") {
+      capitalMarketOpen = isOpen;
+      asOf = String(record.tradeDate ?? "").trim();
+    } else if (!asOf) {
+      asOf = String(record.tradeDate ?? "").trim();
+    }
+  }
+
+  if (!sawMarket) return null;
+  return {
+    capitalMarketOpen,
+    anyMarketOpen: openMarkets.size > 0,
+    openMarkets: Array.from(openMarkets),
+    asOf,
+  };
+}
+
+let marketStatusCache: { loadedAt: number; value: NseMarketStatusSnapshot } | null = null;
+let marketStatusPending: Promise<NseMarketStatusSnapshot | null> | null = null;
+
+export async function getNseMarketStatus(signal?: AbortSignal): Promise<NseMarketStatusSnapshot | null> {
+  if (marketStatusCache && Date.now() - marketStatusCache.loadedAt < 15_000) {
+    return marketStatusCache.value;
+  }
+  if (marketStatusPending) return marketStatusPending;
+
+  marketStatusPending = (async () => {
+    const payload = await nseGetJson(`${NSE_BASE}/api/marketStatus`, 6000, signal);
+    const parsed = parseNseMarketStatus(payload);
+    if (parsed) marketStatusCache = { loadedAt: Date.now(), value: parsed };
+    return parsed;
+  })().finally(() => {
+    marketStatusPending = null;
+  });
+  return marketStatusPending;
+}
+
 // ---------------------------------------------------------------------------
 // Default export implementing the NseProviderApi contract.
 // ---------------------------------------------------------------------------

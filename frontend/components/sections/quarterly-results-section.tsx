@@ -150,6 +150,32 @@ export function QuarterlyResultsSection({
     setExpandedRows((current) => ({ ...current, [rowId]: !current[rowId] }));
   };
 
+  // Export the table exactly as displayed — same rows, same column order — so a
+  // spreadsheet reconciles against what is on screen. Values go out unformatted
+  // so Excel reads them as numbers rather than text.
+  const downloadCsv = () => {
+    if (!tableData.length || !availableRows.length) return;
+    const escape = (cell: string | number | null) => {
+      const text = cell === null || cell === undefined ? "" : String(cell);
+      return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+    };
+    const lines = [
+      ["Particulars (Rs lakh)", ...tableData.map((col) => col.period)].map(escape).join(","),
+      ...availableRows.map((row) =>
+        [row.label, ...tableData.map((point) => (point as Record<string, any>)[row.key] ?? "")]
+          .map(escape)
+          .join(","),
+      ),
+    ];
+    const blob = new Blob([`﻿${lines.join("\n")}`], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `quarterly-results-${view}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <Card className="space-y-3 p-4">
       <div className="mb-3 flex flex-wrap items-center gap-1.5 text-base font-semibold sm:gap-2 sm:text-lg">
@@ -168,6 +194,18 @@ export function QuarterlyResultsSection({
         >
           / Standalone
         </button>
+        {/* The feed reports in rupees lakh, and nothing on screen said so — a
+            reader could take 31,22,832 for crore and be out by 100x. */}
+        <span className="text-xs font-normal text-muted">(₹ lakh)</span>
+        {tableData.length ? (
+          <button
+            type="button"
+            onClick={downloadCsv}
+            className="ml-auto rounded-md border border-border px-2 py-1 text-xs font-medium text-muted transition hover:border-primary hover:text-primary"
+          >
+            Download CSV
+          </button>
+        ) : null}
       </div>
       {/* Keyed on the view so switching tabs remounts the chart and replays the
           bar animation from zero. Without it recharts keeps the same instance

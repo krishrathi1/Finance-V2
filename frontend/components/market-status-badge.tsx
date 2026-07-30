@@ -4,12 +4,48 @@ import { useState } from "react";
 
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useVisibilityPolling } from "@/hooks/useVisibilityPolling";
-import { getIndianMarketStatus } from "@/lib/market-status";
+import {
+  getExchangeBackedMarketStatus,
+  getIndianMarketStatus,
+  type ExchangeMarketSnapshot,
+  type MarketStatusScope,
+} from "@/lib/market-status";
 
-export function MarketStatusBadge({ compact = false }: { compact?: boolean }) {
+let snapshotCache: { loadedAt: number; value: ExchangeMarketSnapshot } | null = null;
+let snapshotPending: Promise<ExchangeMarketSnapshot> | null = null;
+
+async function fetchMarketSnapshot(): Promise<ExchangeMarketSnapshot> {
+  if (snapshotCache && Date.now() - snapshotCache.loadedAt < 15_000) return snapshotCache.value;
+  if (snapshotPending) return snapshotPending;
+  snapshotPending = (async () => {
+    const response = await fetch("/api/v1/stocks/market-status", { cache: "no-store" });
+    if (!response.ok) throw new Error("Market status unavailable");
+    const value = (await response.json()) as ExchangeMarketSnapshot;
+    snapshotCache = { loadedAt: Date.now(), value };
+    return value;
+  })().finally(() => {
+    snapshotPending = null;
+  });
+  return snapshotPending;
+}
+
+export function MarketStatusBadge({
+  compact = false,
+  scope = "capital",
+}: {
+  compact?: boolean;
+  scope?: MarketStatusScope;
+}) {
   const [status, setStatus] = useState(() => getIndianMarketStatus());
 
-  useVisibilityPolling(() => setStatus(getIndianMarketStatus()), 30_000);
+  useVisibilityPolling(async () => {
+    try {
+      const snapshot = await fetchMarketSnapshot();
+      setStatus(getExchangeBackedMarketStatus(snapshot, scope));
+    } catch {
+      setStatus(getIndianMarketStatus());
+    }
+  }, 30_000);
 
   return (
     <TooltipProvider>

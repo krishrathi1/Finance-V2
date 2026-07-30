@@ -18,11 +18,19 @@ const NSE_TRADING_HOLIDAYS_2026 = new Set([
   "2026-12-25"
 ]);
 
-type MarketStatus = {
+export type MarketStatus = {
   isOpen: boolean;
   dotClassName: string;
   label: string;
   tooltip: string;
+};
+
+export type MarketStatusScope = "capital" | "all";
+
+export type ExchangeMarketSnapshot = {
+  capitalMarketOpen: boolean;
+  anyMarketOpen: boolean;
+  openMarkets: string[];
 };
 
 function toIstPseudo(now: Date) {
@@ -119,5 +127,36 @@ export function getIndianMarketStatus(now: Date = new Date()): MarketStatus {
     dotClassName: "bg-slate-400 shadow-[0_0_0_4px_rgba(148,163,184,0.16)]",
     label: "Closed",
     tooltip: `NSE cash market is closed. Opens in ${timeLeft} at ${formatPseudoDateTime(nextOpen)}.`
+  };
+}
+
+export function getExchangeBackedMarketStatus(
+  snapshot: ExchangeMarketSnapshot,
+  scope: MarketStatusScope,
+  now: Date = new Date(),
+): MarketStatus {
+  const isOpen = scope === "all" ? snapshot.anyMarketOpen : snapshot.capitalMarketOpen;
+  if (isOpen) {
+    const scheduled = getIndianMarketStatus(now);
+    const openMarkets = snapshot.openMarkets.filter(Boolean);
+    const tooltip =
+      scope === "all"
+        ? `NSE markets live: ${openMarkets.join(", ") || "active trading session"}.`
+        : scheduled.isOpen
+          ? scheduled.tooltip
+          : "NSE cash market reports a live trading session.";
+    return {
+      isOpen: true,
+      dotClassName: "bg-emerald-500 shadow-[0_0_0_4px_rgba(16,185,129,0.18)] animate-pulse",
+      label: "Live",
+      tooltip,
+    };
+  }
+
+  return {
+    isOpen: false,
+    dotClassName: "bg-slate-400 shadow-[0_0_0_4px_rgba(148,163,184,0.16)]",
+    label: "Closed",
+    tooltip: scope === "all" ? "All NSE market segments are closed." : "NSE cash market is closed.",
   };
 }

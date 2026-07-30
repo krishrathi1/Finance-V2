@@ -695,6 +695,7 @@ export async function fetchScreenerResults(filters: ScreenerFilters): Promise<Sc
   if (filters.dividend_min) params.set("dividend_min", String(filters.dividend_min));
   if (filters.volume_min) params.set("volume_min", String(filters.volume_min));
   if (filters.limit) params.set("limit", String(filters.limit));
+  if (filters.query && filters.query.trim()) params.set("query", filters.query.trim());
 
   const url = getApiUrl(`/screener?${params.toString()}`);
   const res = await fetch(url, { cache: "no-store" });

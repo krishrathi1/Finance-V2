@@ -148,6 +148,7 @@ const DEFAULT_FILTERS: ScreenerFilters = {
   dividend_min: 0,
   volume_min: 0,
   limit: 100,
+  query: "",
 };
 
 function formatMarketCap(usd: number): string {
@@ -339,6 +340,7 @@ export default function ScreenerPage() {
     filters.price_min || filters.price_max,
     filters.dividend_min,
     filters.volume_min,
+    filters.query && filters.query.trim(),
   ].filter(Boolean).length;
 
   return (
@@ -562,6 +564,23 @@ export default function ScreenerPage() {
                 className="w-full rounded-lg border border-border/50 bg-bg/60 px-2 py-1.5 text-xs text-text outline-none focus:border-accent/40"
               />
             </div>
+          </FilterSection>
+
+          {/* Custom query — the Screener.in-style free-text filter. Applied on
+              top of the structured filters above, so the two compose. */}
+          <FilterSection icon={Filter} title="Custom Query" defaultOpen={false}>
+            <textarea
+              rows={3}
+              placeholder={"pe < 20 and\nmarket cap > 50000 and\ndividend yield >= 1.5"}
+              value={filters.query || ""}
+              onChange={(e) => updateFilter("query", e.target.value)}
+              className="w-full resize-y rounded-lg border border-border/50 bg-bg/60 px-2 py-1.5 font-mono text-xs text-text outline-none focus:border-accent/40"
+            />
+            <p className="mt-1.5 text-[11px] leading-snug text-muted">
+              Fields: pe, pb, roe, market cap, price, dividend yield, beta, volume, change percent.
+              Operators: {">"} {">="} {"<"} {"<="} = !=. Join with <span className="font-mono">and</span>.
+              Accepts 2cr / 500 lakh / 100k.
+            </p>
           </FilterSection>
 
           {/* Dividend */}

@@ -280,6 +280,8 @@ export type ScreenerFilters = {
   dividend_min: number;
   volume_min: number;
   limit: number;
+  /** Free-text custom query, e.g. "pe < 20 and market cap > 50000". */
+  query?: string;
 };
 
 export type ScreenerResult = {

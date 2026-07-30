@@ -215,6 +215,7 @@ export function LiveStockDetails({ initialData, symbol, exchange }: { initialDat
             incomeStatement={data.financials.incomeStatement}
             balanceSheet={data.financials.balanceSheet}
             cashFlow={data.financials.cashFlow}
+            outstandingSharesCr={data.metrics?.outstandingShares ?? null}
           />
         </section>
 

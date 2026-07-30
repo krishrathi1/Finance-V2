@@ -115,6 +115,21 @@ export function MetricsGrid({
     return true;
   });
 
+  // SEBI's classification is rank-based (top 100 large, 101-250 mid, rest
+  // small), which needs the whole ranked universe. These crore thresholds are
+  // the widely used proxy and are what Indian screeners display.
+  const marketCapCr = mergedMetrics.marketCap;
+  const marketCapCategory =
+    typeof marketCapCr === "number" && Number.isFinite(marketCapCr) && marketCapCr > 0
+      ? marketCapCr >= 100_000
+        ? "Large Cap"
+        : marketCapCr >= 20_000
+          ? "Mid Cap"
+          : marketCapCr >= 5_000
+            ? "Small Cap"
+            : "Micro Cap"
+      : null;
+
   return (
     <TooltipProvider>
       <div className="grid grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-4">
@@ -134,6 +149,11 @@ export function MetricsGrid({
             <p className="mt-2 text-lg font-semibold sm:mt-3 sm:text-2xl">
               {metric.type === "bookValuePb" ? bookValuePb : metricText(mergedMetrics[metric.key], metric.type)}
             </p>
+            {/* SEBI size class, shown the way every peer platform does — a bare
+                market cap in crore doesn't tell a reader where the company sits. */}
+            {metric.key === "marketCap" && marketCapCategory ? (
+              <p className="mt-1 text-xs font-medium text-muted">{marketCapCategory}</p>
+            ) : null}
           </Card>
         ))}
       </div>
