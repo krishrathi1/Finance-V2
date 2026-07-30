@@ -169,7 +169,11 @@ export function QuarterlyResultsSection({
           / Standalone
         </button>
       </div>
-      <FinancialBarChart data={chartData} firstKey="revenue" secondKey="profit" />
+      {/* Keyed on the view so switching tabs remounts the chart and replays the
+          bar animation from zero. Without it recharts keeps the same instance
+          and tweens between the two datasets, which reads as "nothing
+          happened" — especially while both views resolve to the same series. */}
+      <FinancialBarChart key={view} data={chartData} firstKey="revenue" secondKey="profit" />
 
       {tableData.length ? (
         <div className="overflow-auto rounded-xl border border-border/70">

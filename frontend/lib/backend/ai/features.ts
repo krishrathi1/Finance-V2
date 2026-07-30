@@ -1670,3 +1670,101 @@ function fallbackWatchlistDigest(entries: WatchlistDigestEntry[]): Omit<Watchlis
 
   return { headline, movers, themes, focusList, summary };
 }
+
+// ===========================================================================
+// FEATURE 16 — Research report
+// ===========================================================================
+
+/**
+ * Long-form research note for a single stock.
+ *
+ * The `/api/v1/stocks/[symbol]/research-report` route has imported this since
+ * it was added, but the function was never written — so the module failed to
+ * typecheck and CI could not go green on main. The route only ever supplies a
+ * light context (`symbol`, optional `companyName`, optional
+ * `metrics.peRatio`), so this stays deliberately undemanding about input and
+ * always returns a usable shape, matching the "never 500" contract the route
+ * documents.
+ */
+export async function researchReport(
+  symbol: string,
+  context: AnyObj = {},
+): Promise<{
+  title: string;
+  report: string;
+  recommendations: string[];
+  targetPrice: number | null;
+  riskLevel: "low" | "medium" | "high";
+  source: "gemini" | "fallback";
+}> {
+  const ctx = asObj(context);
+  const companyName = String(ctx.companyName ?? "").trim();
+  const name = companyName || symbol.toUpperCase();
+  const metrics = asObj(ctx.metrics);
+  const peRatio = metrics.peRatio === null || metrics.peRatio === undefined ? null : toFloatDefault(metrics.peRatio, 0);
+  const title = `${name} Research Report`;
+
+  const peLine = peRatio !== null && peRatio > 0 ? `Trailing P/E is ${fixed(peRatio, 2)}.` : "Trailing P/E is unavailable.";
+
+  const question =
+    `You are a senior equity research analyst writing a note on ${name} (${symbol.toUpperCase()}), listed in India.\n` +
+    `Known context: ${peLine}\n\n` +
+    "Respond with ONLY a JSON object with keys:\n" +
+    "  report (str: 3 short paragraphs — business overview, what the valuation implies, what to watch),\n" +
+    "  recommendations (list of 3-5 strings: concrete, actionable checks for a retail investor),\n" +
+    "  targetPrice (number or null: only if you can justify one from the context, else null),\n" +
+    "  riskLevel (str: 'low'|'medium'|'high').\n" +
+    "Be specific and balanced — no hype, no markdown. Numbers in Indian format (Cr, L).";
+
+  if (isGeminiConfigured()) {
+    const raw = await generateText(question);
+    if (raw) {
+      const parsed = extractJson(raw);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed) && parsed.report) {
+        const level = String(parsed.riskLevel ?? "").toLowerCase();
+        return {
+          title,
+          report: String(parsed.report),
+          recommendations: asArr(parsed.recommendations).map((r: any) => String(r)),
+          targetPrice:
+            parsed.targetPrice === null || parsed.targetPrice === undefined
+              ? null
+              : toFloatDefault(parsed.targetPrice, 0) || null,
+          riskLevel: level === "low" || level === "high" ? level : "medium",
+          source: "gemini",
+        };
+      }
+    }
+  }
+
+  // Rule-based fallback. P/E is the only quantitative input the route passes,
+  // so it is the only thing this claims anything about.
+  const valuation =
+    peRatio === null || peRatio <= 0
+      ? "Valuation cannot be assessed without a trailing P/E."
+      : peRatio > 40
+        ? `At a P/E of ${fixed(peRatio, 2)} the market is pricing in sustained high growth, which leaves little room for disappointment.`
+        : peRatio < 15
+          ? `A P/E of ${fixed(peRatio, 2)} is undemanding — worth checking whether it reflects value or a structural problem.`
+          : `A P/E of ${fixed(peRatio, 2)} is broadly in line with the market, so returns likely track earnings delivery.`;
+
+  const report = [
+    `${name} trades on the Indian market under ${symbol.toUpperCase()}.`,
+    valuation,
+    "Read this alongside the quarterly results, peer comparison, and shareholding sections on this page before acting — an automated note is a starting point, not a recommendation.",
+  ].join("\n\n");
+
+  return {
+    title,
+    report,
+    recommendations: [
+      "Compare the P/E against sector peers rather than the broad index.",
+      "Check revenue and profit direction across the last four quarters.",
+      "Review debt and interest cover before sizing any position.",
+      "Confirm promoter and institutional holding trends for conviction.",
+    ],
+    targetPrice: null,
+    riskLevel: peRatio !== null && peRatio > 40 ? "high" : "medium",
+    source: "fallback",
+  };
+}

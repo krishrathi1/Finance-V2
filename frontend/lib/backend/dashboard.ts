@@ -14,6 +14,7 @@ import type { AnalystConsensus } from "@/lib/backend/contracts";
 import { baseSymbol, round2, safeCall, getText, DESKTOP_UA } from "@/lib/backend/http";
 import { getSampleDashboard } from "@/lib/backend/sample";
 import { getNseQuote, getNseCorporateEvents, getNseQuarterlyResults, getNseShareholdingHistory } from "@/lib/backend/providers/nse";
+import { getTrendlyneSupplement } from "@/lib/backend/providers/trendlyne";
 import { getYahooQuote, getYahooCandles, getYahooBundle, getYahooTimeseriesFinancials } from "@/lib/backend/providers/yahoo";
 import { screenUniverse } from "@/lib/backend/providers/universe";
 import {
@@ -535,6 +536,7 @@ export async function buildDashboard(symbol: string, options: BuildOptions = {})
     fmpStatements,
     fmpGrowth,
     fmpEstimates,
+    trendlyneSupplement,
   ] = await Promise.all([
     safeCall((signal) => getNseQuote(base, signal), 6000, "nseQuote"),
     safeCall((signal) => getNseCorporateEvents(base, signal), 8000, "nseEvents"),
@@ -552,6 +554,7 @@ export async function buildDashboard(symbol: string, options: BuildOptions = {})
     safeCall((signal) => getFmpFinancialStatements(marketSymbol, signal), 9000, "fmpStatements"),
     safeCall((signal) => getFmpFinancialGrowth(marketSymbol, signal), 6000, "fmpGrowth"),
     safeCall((signal) => getFmpAnalystEstimates(marketSymbol, signal), 6000, "fmpEstimates"),
+    safeCall((signal) => getTrendlyneSupplement(base, signal), 13_000, "trendlyneSupplement"),
   ]);
 
   const bundle: any = yahooBundle || {};
@@ -694,6 +697,15 @@ export async function buildDashboard(symbol: string, options: BuildOptions = {})
   }
   if (fmpGrowth && fmpGrowth.length) data.fmpFinancialGrowth = fmpGrowth;
   if (fmpEstimates && fmpEstimates.length) data.analystEstimates = fmpEstimates;
+  if (trendlyneSupplement?.keyRatioTrends) {
+    data.financials.keyRatioTrends = trendlyneSupplement.keyRatioTrends;
+  }
+  if (trendlyneSupplement?.documents) {
+    for (const key of ["annualReports", "investorPresentations", "creditRatings", "exchangeFilings"] as const) {
+      const rows = trendlyneSupplement.documents[key];
+      if (rows.length) data.documents[key] = rows;
+    }
+  }
 
   // Keep the visual chart, returns, heatmap, and technicals aligned with the
   // current live quote even when historical providers lag by a few sessions.
