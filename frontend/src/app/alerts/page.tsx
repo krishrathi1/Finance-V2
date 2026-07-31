@@ -178,7 +178,7 @@ export default function AlertsPage() {
                 return (
                   <div
                     key={row.id}
-                    className={`glow-card group grid grid-cols-[auto_1fr_auto_auto] items-center gap-3 rounded-xl border bg-panel/60 px-4 py-3 backdrop-blur-sm transition sm:grid-cols-[auto_1fr_auto_auto_auto_auto] sm:gap-4 ${
+                    className={`glow-card group grid grid-cols-[auto_1fr_auto] items-center gap-3 rounded-xl border bg-panel/60 px-3 py-3 backdrop-blur-sm transition sm:grid-cols-[auto_1fr_auto_auto_auto_auto] sm:gap-4 sm:px-4 ${
                       row.triggered
                         ? "border-success/30 bg-success/5"
                         : "border-border/50"
@@ -195,46 +195,62 @@ export default function AlertsPage() {
                       />
                     </div>
 
-                    {/* Symbol + note */}
-                    <div>
-                      <div className="flex items-center gap-2">
+                    {/* Symbol + note. min-w-0 lets the note truncate against the
+                        real column width instead of a fixed pixel cap. */}
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                         <Link
                           href={`/stocks/${row.symbol}`}
                           className="text-sm font-semibold transition hover:text-accent"
                         >
                           {row.symbol}
                         </Link>
-                        <span
-                          className={`rounded-md px-1.5 py-0.5 text-[10px] font-semibold uppercase ${conditionColor} bg-current/10`}
-                          style={{ backgroundColor: undefined }}
-                        >
-                          <span className={`${conditionColor} text-[10px] font-semibold`}>
-                            {row.condition === "above" ? "↑ Above" : "↓ Below"}
-                          </span>
+                        <span className={`${conditionColor} text-[10px] font-semibold uppercase`}>
+                          {row.condition === "above" ? "↑ Above" : "↓ Below"}
                         </span>
+                        {/* Status is desktop-only in its own column, so surface it
+                            here on phones — otherwise the only cue that an alert
+                            fired is a faint border tint, and the legend above
+                            promises a Triggered/Watching distinction. */}
+                        {row.triggered ? (
+                          <span className="flex items-center gap-0.5 rounded-md bg-success/10 px-1.5 py-0.5 text-[10px] font-semibold text-success sm:hidden">
+                            {row.condition === "above" ? (
+                              <TrendingUp className="h-2.5 w-2.5" />
+                            ) : (
+                              <TrendingDown className="h-2.5 w-2.5" />
+                            )}
+                            Triggered
+                          </span>
+                        ) : diffPercent !== null ? (
+                          <span className="text-[10px] text-muted sm:hidden">
+                            {(((row.currentPrice ?? row.targetPrice) - row.targetPrice) / row.targetPrice * 100).toFixed(1)}% away
+                          </span>
+                        ) : null}
                       </div>
                       {row.note && (
-                        <p className="mt-0.5 text-[11px] text-muted truncate max-w-[180px]">
-                          {row.note}
-                        </p>
+                        <p className="mt-0.5 truncate text-[11px] text-muted">{row.note}</p>
                       )}
                     </div>
 
                     {/* Mobile: target + remove */}
-                    <div className="flex items-center gap-2 sm:hidden">
-                      <div className="text-right">
-                        <p className="text-xs font-semibold">{formatPrice(row.targetPrice)}</p>
+                    <div className="flex shrink-0 items-center gap-1 sm:hidden">
+                      <div className="text-right leading-tight">
+                        <p className="text-xs font-semibold tabular-nums">{formatPrice(row.targetPrice)}</p>
                         {row.currentPrice !== null && (
-                          <p className={`text-[10px] ${row.triggered ? "text-success" : "text-muted"}`}>
+                          <p className={`text-[10px] tabular-nums ${row.triggered ? "text-success" : "text-muted"}`}>
                             {formatPrice(row.currentPrice)}
                           </p>
                         )}
                       </div>
+                      {/* 44x44 hit area (the icon stays small) — the previous
+                          p-1.5 wrapper was ~26px, below the minimum comfortable
+                          touch target and easy to miss on a destructive action. */}
                       <button
                         onClick={() => handleRemove(row.id)}
-                        className="rounded-lg p-1.5 text-muted transition hover:bg-danger/15 hover:text-danger"
+                        aria-label={`Remove alert for ${row.symbol}`}
+                        className="-mr-1.5 flex h-11 w-11 items-center justify-center rounded-lg text-muted transition active:bg-danger/15 active:text-danger"
                       >
-                        <Trash2 className="h-3.5 w-3.5" />
+                        <Trash2 className="h-4 w-4" />
                       </button>
                     </div>
 
