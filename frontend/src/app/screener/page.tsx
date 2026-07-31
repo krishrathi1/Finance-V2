@@ -62,13 +62,6 @@ function peColor(pe: number | null | undefined): string {
   if (pe < 50) return "text-amber-400"; // slightly expensive
   return "text-danger"; // very expensive
 }
-function roeColor(roe: number | null | undefined): string {
-  if (roe === null || roe === undefined) return "text-muted";
-  if (roe >= 20) return "text-success font-semibold";
-  if (roe >= 12) return "text-text";
-  if (roe >= 5) return "text-amber-400";
-  return "text-danger";
-}
 function divColor(div: number | null | undefined): string {
   if (div === null || div === undefined) return "text-muted";
   if (div >= 3) return "text-success font-semibold";
@@ -107,10 +100,13 @@ const SECTORS = [
   "Real Estate",
 ];
 
+// Thresholds are in rupees crore, matching ScreenerResult.marketCap. They were
+// previously USD-scaled (600_000_000 …), so compared against crore values
+// "Smallcap" matched every row and "Largecap" matched none.
 const MARKET_CAP_PRESETS = [
-  { label: "Smallcap", subtitle: "<5K Cr", min: 0, max: 600_000_000 },
-  { label: "Midcap", subtitle: "5K-20K Cr", min: 600_000_000, max: 2_400_000_000 },
-  { label: "Largecap", subtitle: ">20K Cr", min: 2_400_000_000, max: 0 },
+  { label: "Smallcap", subtitle: "<5K Cr", min: 0, max: 5_000 },
+  { label: "Midcap", subtitle: "5K-20K Cr", min: 5_000, max: 20_000 },
+  { label: "Largecap", subtitle: ">20K Cr", min: 20_000, max: 0 },
 ] as const;
 
 // Goal-based quick screens (for beginners — results are AI-generated suggestions)
@@ -132,7 +128,7 @@ const PRESET_SCREENS = [
 
 type SortKey = keyof Pick<
   ScreenerResult,
-  "symbol" | "companyName" | "price" | "changePercent" | "marketCap" | "pe" | "roe" | "dividendYield" | "sector"
+  "symbol" | "companyName" | "price" | "changePercent" | "marketCap" | "pe" | "pb" | "dividendYield" | "sector"
 >;
 
 const DEFAULT_FILTERS: ScreenerFilters = {
@@ -151,13 +147,19 @@ const DEFAULT_FILTERS: ScreenerFilters = {
   query: "",
 };
 
-function formatMarketCap(usd: number): string {
-  if (!usd) return "-";
-  // FMP returns market cap in USD — convert at approx rate. Use ~ to indicate estimate.
-  const crore = Math.round((usd * 84) / 1e7);
-  if (crore >= 100_000) return `~₹${(crore / 100_000).toFixed(2)}L Cr`;
-  if (crore >= 1_000) return `~₹${(crore / 1_000).toFixed(1)}K Cr`;
-  return `~₹${crore} Cr`;
+/**
+ * `crore` arrives already denominated in rupees crore — the screener universe
+ * converts it (`marketCap: q.marketCap / 1e7`) before the row ever reaches the
+ * client. This used to re-apply a USD->INR rate and a second /1e7 left over
+ * from when the rows came from FMP in dollars, which rendered HDFC Bank's
+ * ₹11.6 lakh crore as "~₹10 Cr" — wrong by five orders of magnitude, and
+ * plausible enough on screen to pass unnoticed.
+ */
+function formatMarketCap(crore: number): string {
+  if (!crore) return "-";
+  if (crore >= 100_000) return `₹${(crore / 100_000).toFixed(2)}L Cr`;
+  if (crore >= 1_000) return `₹${(crore / 1_000).toFixed(1)}K Cr`;
+  return `₹${Math.round(crore)} Cr`;
 }
 
 function formatNumber(value: number | null | undefined, decimals = 2): string {
@@ -770,7 +772,7 @@ export default function ScreenerPage() {
                         { key: "price", label: "Close Price", align: "right", tip: "Last traded price of the stock in INR." },
                         { key: "pe", label: "PE Ratio", align: "right", tip: "Price-to-Earnings ratio. Lower = cheaper stock. Green (<15), Normal (15–30), Expensive (>50)." },
                         { key: "changePercent", label: "1D Return", align: "right", tip: "Today's price change in %. Green = up, Red = down." },
-                        { key: "roe", label: "ROE %", align: "right", tip: "Return on Equity. How much profit the company makes on shareholders' money. ≥20% is excellent." },
+                        { key: "pb", label: "P/B", align: "right", tip: "Price-to-Book. Price against book value per share. Below 1 can signal value; banks typically trade 1-3." },
                         { key: "dividendYield", label: "Div Yield %", align: "right", tip: "Annual dividend paid as % of current price. ≥3% is high. Great for income investors." },
                         { key: "sector", label: "Sector", align: "left", tip: "" },
                       ] as { key: SortKey; label: string; align: string; tip: string }[]
@@ -782,7 +784,7 @@ export default function ScreenerPage() {
                           align === "right" ? "text-right" : ""
                         } ${
                           key === "sector" ? "hidden lg:table-cell" :
-                          key === "roe" || key === "dividendYield" ? "hidden md:table-cell" : ""
+                          key === "pb" || key === "dividendYield" ? "hidden md:table-cell" : ""
                         }`}
                       >
                         {tip ? (
@@ -842,8 +844,8 @@ export default function ScreenerPage() {
                           {formatNumber(stock.changePercent)}%
                         </span>
                       </td>
-                      <td className={`hidden px-4 py-3 text-right text-sm tabular-nums md:table-cell ${roeColor(stock.roe)}`}>
-                        {stock.roe != null ? `${formatNumber(stock.roe)}%` : "-"}
+                      <td className="hidden px-4 py-3 text-right text-sm tabular-nums text-text md:table-cell">
+                        {stock.pb != null ? formatNumber(stock.pb) : "-"}
                       </td>
                       <td className={`hidden px-4 py-3 text-right text-sm tabular-nums md:table-cell ${divColor(stock.dividendYield)}`}>
                         {stock.dividendYield != null ? `${formatNumber(stock.dividendYield)}%` : "-"}

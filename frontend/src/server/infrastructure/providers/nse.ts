@@ -131,7 +131,10 @@ export async function nseGetJson<T = any>(
       return null;
     }
     return parsed as T;
-  } catch {
+  } catch (error) {
+    // Named so a throttled/blocked NSE is distinguishable from a company
+    // that genuinely has no data — both used to return silently.
+    console.warn(`[nse] nseGetJson failed: ${String(error)}`);
     return null;
   }
 }
@@ -175,7 +178,10 @@ export async function getNseQuote(base: string, signal?: AbortSignal): Promise<R
     };
 
     return quote;
-  } catch {
+  } catch (error) {
+    // Named so a throttled/blocked NSE is distinguishable from a company
+    // that genuinely has no data — both used to return silently.
+    console.warn(`[nse] getNseQuote failed: ${String(error)}`);
     return null;
   }
 }
@@ -184,7 +190,12 @@ export async function getNseQuote(base: string, signal?: AbortSignal): Promise<R
 // 2. QUARTERLY RESULTS — getNseQuarterlyResults (api/results-comparision)
 // ---------------------------------------------------------------------------
 
-/** Coerce an NSE numeric field that is already in CRORE (re_net_sale etc.). */
+/**
+ * Coerce an NSE numeric field. Note the results feed reports in rupees LAKH,
+ * not crore — Axis Bank's `re_int_earned` of 3095394 is ₹30,954 Cr — so
+ * anything dividing these against the crore-denominated balance sheet has to
+ * reconcile the two first.
+ */
 function num(value: unknown): number | null {
   return toFloat(value);
 }
@@ -311,7 +322,10 @@ export async function getNseQuarterlyResults(
       quarterlyDetailedStandalone: detailedTrim,
       faceValue,
     };
-  } catch {
+  } catch (error) {
+    // Named so a throttled/blocked NSE is distinguishable from a company
+    // that genuinely has no data — both used to return silently.
+    console.warn(`[nse] getNseQuarterlyResults failed: ${String(error)}`);
     return null;
   }
 }
@@ -781,7 +795,10 @@ export async function getNseShareholdingHistory(
     return Array.from(byQuarter.values())
       .sort((a, b) => (a.quarter < b.quarter ? 1 : a.quarter > b.quarter ? -1 : 0))
       .slice(0, 20);
-  } catch {
+  } catch (error) {
+    // Named so a throttled/blocked NSE is distinguishable from a company
+    // that genuinely has no data — both used to return silently.
+    console.warn(`[nse] getNseShareholdingHistory failed: ${String(error)}`);
     return null;
   }
 }

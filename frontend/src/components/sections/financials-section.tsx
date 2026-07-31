@@ -199,7 +199,13 @@ export function FinancialsSection({
       ) : null}
 
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-lg font-semibold">Financial Statements</h3>
+        <h3 className="text-lg font-semibold">
+          Financial Statements{" "}
+          {/* Figures are crore; unlabelled they read as absolute rupees. */}
+          <span className="text-xs font-normal text-muted">
+            ({perShare ? "₹ per share" : "₹ crore"})
+          </span>
+        </h3>
         {/* Per-share view (a StockAnalysis.com staple): dividing by share count
             makes companies of very different size directly comparable. Hidden
             when share count is unknown rather than shown inert. */}

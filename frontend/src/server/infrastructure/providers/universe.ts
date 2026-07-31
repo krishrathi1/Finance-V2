@@ -121,6 +121,8 @@ export interface UniverseQuote {
   volume: number;
   marketCap: number; // crore
   pe: number | null;
+  pb: number | null;
+  beta: number | null;
   dividendYield: number | null; // percent
 }
 
@@ -161,6 +163,12 @@ export async function getBatchQuotes(symbols: string[]): Promise<Map<string, Uni
             volume: Number(q.regularMarketVolume) || 0,
             marketCap: q.marketCap ? Math.round(q.marketCap / 1e7) : 0,
             pe: typeof q.trailingPE === "number" ? round2(q.trailingPE) : null,
+            // Yahoo's v7 quote carries these alongside PE; they were simply
+            // never mapped, so the screener's P/B and Beta columns were always
+            // blank. ROE is not on this endpoint (it needs a per-symbol
+            // quoteSummary call, which won't scale across the universe).
+            pb: typeof q.priceToBook === "number" ? round2(q.priceToBook) : null,
+            beta: typeof q.beta === "number" ? round2(q.beta) : null,
             dividendYield: typeof q.trailingAnnualDividendYield === "number" ? round2(q.trailingAnnualDividendYield * 100) : null,
           });
         }
@@ -213,10 +221,10 @@ export async function screenUniverse(filters: UniverseFilters): Promise<Screener
       sector,
       industry: sector,
       pe: q.pe,
-      pb: null,
+      pb: q.pb,
       roe: null,
       dividendYield: q.dividendYield,
-      beta: null,
+      beta: q.beta,
     });
   }
 

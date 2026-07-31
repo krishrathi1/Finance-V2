@@ -127,6 +127,15 @@ export function QuarterlyResultsSection({
     return normalizeQuarterlyPoints(view === "consolidated" ? consolidatedData : standaloneData);
   }, [consolidatedDetailed, standaloneDetailed, view]);
 
+  // NSE's results-comparision feed does not separate standalone from
+  // consolidated, so for most stocks both tabs resolve to the same series and
+  // the toggle only pretends to do something. Show it when the two bases are
+  // genuinely distinct; otherwise render a static label for whichever basis we
+  // actually have.
+  const hasDistinctBases =
+    Boolean(consolidatedDetailed?.length && standaloneDetailed?.length) ||
+    Boolean(consolidated?.length && standalone?.length);
+
   const availableRows = useMemo(() => TABLE_ROWS.filter((row) => hasValue(row, tableData)), [tableData]);
 
   const parentRows = useMemo(() => {
@@ -180,20 +189,28 @@ export function QuarterlyResultsSection({
     <Card className="space-y-3 p-4">
       <div className="mb-3 flex flex-wrap items-center gap-1.5 text-base font-semibold sm:gap-2 sm:text-lg">
         <span>Quarterly Results</span>
-        <button
-          type="button"
-          onClick={() => setView("consolidated")}
-          className={`text-sm sm:text-base ${view === "consolidated" ? "text-primary" : "text-muted hover:text-text"}`}
-        >
-          / Consolidated
-        </button>
-        <button
-          type="button"
-          onClick={() => setView("standalone")}
-          className={`text-sm sm:text-base ${view === "standalone" ? "text-primary" : "text-muted hover:text-text"}`}
-        >
-          / Standalone
-        </button>
+        {hasDistinctBases ? (
+          <>
+            <button
+              type="button"
+              onClick={() => setView("consolidated")}
+              className={`text-sm sm:text-base ${view === "consolidated" ? "text-primary" : "text-muted hover:text-text"}`}
+            >
+              / Consolidated
+            </button>
+            <button
+              type="button"
+              onClick={() => setView("standalone")}
+              className={`text-sm sm:text-base ${view === "standalone" ? "text-primary" : "text-muted hover:text-text"}`}
+            >
+              / Standalone
+            </button>
+          </>
+        ) : (
+          <span className="text-sm font-normal text-muted sm:text-base">
+            / {standaloneDetailed?.length || standalone?.length ? "Standalone" : "Consolidated"}
+          </span>
+        )}
         {/* The feed reports in rupees lakh, and nothing on screen said so — a
             reader could take 31,22,832 for crore and be out by 100x. */}
         <span className="text-xs font-normal text-muted">(₹ lakh)</span>
