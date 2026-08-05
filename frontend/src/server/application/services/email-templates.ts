@@ -1,10 +1,16 @@
 /**
- * Reusable HTML email templates for the Financial Forensics AI platform.
+ * Reusable HTML email templates for the platform.
  * Pure functions that return HTML strings so they can be previewed
  * (see /email-preview) and sent via the SMTP transporter in lib/email.ts.
  */
 
-const BRAND = "Financial Forensics AI";
+import { SITE_NAME } from "@/shared/seo";
+
+// Derived from SITE_NAME rather than hardcoded: these templates previously said
+// "Financial Forensics AI" — a name the site no longer uses anywhere in its UI —
+// so the first thing every new signup saw was a verification email for a
+// product that appeared unrelated to the one they had just signed up for.
+const BRAND = SITE_NAME;
 const YEAR = 2026;
 
 function shell(title: string, headerSubtitle: string, body: string): string {

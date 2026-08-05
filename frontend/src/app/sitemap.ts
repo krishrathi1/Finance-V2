@@ -48,6 +48,27 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: "weekly",
       priority: 0.68,
     },
+    // Legal pages change rarely and shouldn't compete with product pages for
+    // crawl budget, but they must be indexable: search engines and app/payment
+    // reviewers check that a service publishes reachable policy pages.
+    {
+      url: `${SITE_URL}/disclaimer`,
+      lastModified: now,
+      changeFrequency: "yearly",
+      priority: 0.3,
+    },
+    {
+      url: `${SITE_URL}/privacy`,
+      lastModified: now,
+      changeFrequency: "yearly",
+      priority: 0.3,
+    },
+    {
+      url: `${SITE_URL}/terms`,
+      lastModified: now,
+      changeFrequency: "yearly",
+      priority: 0.3,
+    },
   ];
 
   const stockPages: MetadataRoute.Sitemap = POPULAR_STOCK_SYMBOLS.map((symbol) => ({

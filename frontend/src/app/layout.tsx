@@ -306,9 +306,26 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 </div>
 
                 <div className="mt-8 flex flex-col items-start justify-between gap-3 border-t border-border/30 pt-5 sm:flex-row sm:items-center">
-                  <p className="text-[11px] text-muted/60">
-                    Data sourced from NSE, BSE and public APIs. Not investment advice.
-                  </p>
+                  <div className="flex flex-col gap-2">
+                    <p className="text-[11px] text-muted/60">
+                      Data sourced from NSE, BSE and public APIs. Not investment advice.
+                    </p>
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                      {[
+                        { href: "/disclaimer", label: "Disclaimer" },
+                        { href: "/privacy", label: "Privacy Policy" },
+                        { href: "/terms", label: "Terms of Service" },
+                      ].map((item) => (
+                        <Link
+                          key={item.href}
+                          href={item.href}
+                          className="text-[11px] text-muted/70 underline-offset-2 transition-colors hover:text-accent hover:underline"
+                        >
+                          {item.label}
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
                   <div className="flex items-center gap-3">
                     <span className="rounded-full border border-border/50 bg-panel/60 px-2 py-0.5 text-[10px] font-medium text-muted">
                       Beta v1.0

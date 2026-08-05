@@ -21,6 +21,8 @@
  *     returns null (timeout/error/empty) -> live_failed=true.
  */
 
+import { SITE_NAME } from "@/shared/seo";
+
 import { generateText, isGeminiConfigured } from "./gemini";
 
 type AnyObj = Record<string, any>;
@@ -201,7 +203,9 @@ function buildSwotPrompt(symbol: string, companyName: string, context: AnyObj): 
     news: asArr(context.news).slice(0, 5),
   });
   return (
-    "You are Financial Forensics AI, a senior Indian stock market analyst.\n" +
+    // Named from SITE_NAME so the model never introduces itself to a user as a
+    // product that doesn't exist — the model does echo this persona name back.
+    `You are ${SITE_NAME}, a senior Indian stock market analyst.\n` +
     `Stock symbol: ${symbol}\n` +
     `Context JSON: ${compactContext}\n\n` +
     "Task: Generate a SWOT analysis and bull/bear case for this stock.\n" +
@@ -523,7 +527,7 @@ function buildNewsAnalysisPrompt(symbol: string, article: AnyObj, context: AnyOb
     },
   });
   return (
-    "You are Financial Forensics AI, summarizing one stock news item for a retail investor.\n" +
+    `You are ${SITE_NAME}, summarizing one stock news item for a retail investor.\n` +
     `Stock symbol: ${symbol}\n` +
     `Context JSON: ${compactContext}\n\n` +
     "Task: Return strict JSON only with these keys:\n" +

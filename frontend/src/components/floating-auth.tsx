@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { AUTH_STORAGE_KEY, OPEN_AUTH_PANEL_EVENT, type AuthPanelMode, notifyAuthSessionChanged } from "@/lib/auth";
 import { cn } from "@/shared/utils";
@@ -317,6 +318,14 @@ export function FloatingAuth() {
             {signedInAs ? (
               <>
                 <p className="mt-1 rounded-lg px-3 py-2 text-sm font-semibold text-text">{signedInAs}</p>
+                <Link
+                  className="mt-1 block w-full rounded-lg border border-border/60 px-3 py-2 text-left text-sm font-medium text-text transition hover:bg-bg/70 hover:text-accent"
+                  href="/settings"
+                  onClick={() => setOpen(false)}
+                  role="menuitem"
+                >
+                  Account settings
+                </Link>
                 <button
                   className="mt-1 block w-full rounded-lg border border-border/60 px-3 py-2 text-left text-sm font-medium text-text transition hover:bg-bg/70 hover:text-accent"
                   onClick={signOut}

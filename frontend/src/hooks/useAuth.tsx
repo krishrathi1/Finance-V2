@@ -11,8 +11,39 @@ import {
 import {
   AUTH_SESSION_CHANGED_EVENT,
   AUTH_STORAGE_KEY,
+  SESSION_REFRESH_INTERVAL_MS,
+  authedFetch,
   notifyAuthSessionChanged,
+  refreshSession,
 } from "@/lib/auth";
+
+/**
+ * Turn a failed auth response into something a user can act on.
+ *
+ * The status matters as much as the body: a 5xx means the server broke and
+ * retrying may work, while a 401 means the credentials were wrong and
+ * retrying the same ones won't. Collapsing both into one generic string (as
+ * this used to) makes a database outage indistinguishable from a typo.
+ */
+async function authFailureMessage(res: Response, fallback: string): Promise<string> {
+  let detail = "";
+  try {
+    // An error response isn't guaranteed to be JSON — a proxy timeout or a
+    // crash before the handler runs returns HTML, and parsing that throws.
+    const body = await res.json();
+    detail = typeof body?.detail === "string" ? body.detail : "";
+  } catch {
+    detail = "";
+  }
+
+  if (res.status >= 500) {
+    return "Something went wrong on our end. Please try again in a moment.";
+  }
+  if (res.status === 401) {
+    return detail || "Invalid email or password";
+  }
+  return detail || fallback;
+}
 
 export type User = {
   id: number;
@@ -63,7 +94,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const restoreSession = async () => {
       try {
-        const res = await fetch("/api/v1/auth/me", { credentials: "include" });
+        // authedFetch, not fetch: an access_token that expired while the tab
+        // was closed answers 401 here, and the 30-day refresh_token cookie can
+        // still mint a new one. Plain fetch treated that as "signed out" and
+        // dropped a session that was actually still valid.
+        const res = await authedFetch("/api/v1/auth/me");
         if (!cancelled && res.ok) {
           persistSession(await res.json(), false);
         } else if (!cancelled) {
@@ -84,6 +119,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [persistSession]);
 
+  // Keep the access_token cookie alive while the app is open.
+  //
+  // Most data fetching in the app calls fetch() directly rather than
+  // authedFetch, so it has no 401-retry of its own. Rotating on a timer keeps
+  // the cookie valid underneath those callers, which is what stops a session
+  // from lapsing after 30 idle minutes with a page sitting open.
+  // Keyed on the user id, not the user object: every session restore builds a
+  // fresh object, and depending on it would tear down and restart the timer
+  // each time — repeatedly pushing the next rotation back to a full interval
+  // away and, on a page that restores often, starving it indefinitely.
+  const userId = user?.id ?? null;
+
+  useEffect(() => {
+    if (userId === null) return;
+
+    let lastRefresh = Date.now();
+
+    const rotate = () => {
+      lastRefresh = Date.now();
+      void refreshSession();
+    };
+
+    const interval = setInterval(rotate, SESSION_REFRESH_INTERVAL_MS);
+
+    // A background tab gets its timers throttled, and a suspended machine
+    // stops them entirely — either way the interval above can miss its slot
+    // and the token expires unnoticed. Re-check whenever the tab comes back.
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      if (Date.now() - lastRefresh < SESSION_REFRESH_INTERVAL_MS) return;
+      rotate();
+    };
+
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [userId]);
+
   const signIn = async (email: string, password: string) => {
     setLoading(true);
     setError(null);
@@ -96,10 +171,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
 
       if (!res.ok) {
-        const errorData = await res.json();
-        const errorMsg = errorData.detail || errorData.error || "Login failed";
-        console.error('Login error response:', errorData);
-        throw new Error(errorMsg);
+        throw new Error(await authFailureMessage(res, "Login failed"));
       }
 
       const userData = await res.json();
@@ -127,8 +199,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
 
       if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.detail || "Registration failed");
+        throw new Error(await authFailureMessage(res, "Registration failed"));
       }
 
       const userData = await res.json();

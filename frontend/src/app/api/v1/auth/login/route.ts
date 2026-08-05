@@ -71,6 +71,18 @@ export async function POST(request: NextRequest) {
       [user.id, refreshHash, expiresAt]
     );
 
+    // Sweep this account's dead sessions. A row is otherwise only removed if
+    // that exact token is presented again, so every abandoned session (closed
+    // tab, cleared cookies, replaced device) leaves one behind permanently and
+    // the table grows once per login forever. Scoped to user_id so it uses the
+    // index instead of scanning — expires_at isn't indexed. Best-effort: a
+    // failed cleanup must not fail an otherwise successful login.
+    try {
+      await query('DELETE FROM refresh_tokens WHERE user_id = ? AND expires_at < NOW()', [user.id]);
+    } catch (cleanupError) {
+      console.error('Expired refresh token cleanup failed:', cleanupError);
+    }
+
     // Set cookies
     const response = NextResponse.json(
       {
@@ -104,13 +116,14 @@ export async function POST(request: NextRequest) {
 
     return response;
   } catch (error) {
+    // The full error (stack, SQL state, connection details) goes to the server
+    // log only. It must not travel to the client: `error.message` on a driver
+    // failure carries schema and infrastructure detail — e.g. "ER_NO_SUCH_TABLE:
+    // Table 'financial_forensics.users' doesn't exist" — to anyone who can hit
+    // this endpoint. Matches the constant-detail shape the register route uses.
     console.error('Login error:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Login failed';
     return NextResponse.json(
-      {
-        detail: errorMessage,
-        error: process.env.NODE_ENV === 'development' ? String(error) : 'Internal server error'
-      },
+      { detail: 'Login failed. Please try again.' },
       { status: 500 }
     );
   }

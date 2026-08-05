@@ -1,5 +1,7 @@
 import nodemailer from 'nodemailer';
 
+import { SITE_NAME } from '@/shared/seo';
+
 /** Escape untrusted text before interpolating into an HTML email template. */
 function escapeHtml(value: string): string {
   return String(value ?? '')
@@ -48,7 +50,7 @@ export async function sendOtpEmail(email: string, otp: string, userName: string)
         <body>
           <div class="container">
             <div class="header">
-              <h1>Financial Forensics AI</h1>
+              <h1>${SITE_NAME}</h1>
               <p>Password Reset Request</p>
             </div>
             <div class="content">
@@ -71,7 +73,7 @@ export async function sendOtpEmail(email: string, otp: string, userName: string)
               <p>If you have any issues, contact our support team.</p>
 
               <div class="footer">
-                <p>&copy; 2026 Financial Forensics AI. All rights reserved.</p>
+                <p>&copy; ${new Date().getFullYear()} ${SITE_NAME}. All rights reserved.</p>
               </div>
             </div>
           </div>
@@ -82,7 +84,7 @@ export async function sendOtpEmail(email: string, otp: string, userName: string)
     await transporter.sendMail({
       from: process.env.SMTP_EMAIL || 'noreply@mystockvision.com',
       to: email,
-      subject: 'Password Reset OTP - Financial Forensics AI',
+      subject: `Password Reset OTP - ${SITE_NAME}`,
       html: htmlContent,
     });
 
@@ -117,7 +119,7 @@ export async function sendWelcomeEmail(email: string, userName: string, verifica
         <body>
           <div class="container">
             <div class="header">
-              <h1>Welcome to Financial Forensics AI!</h1>
+              <h1>Welcome to ${SITE_NAME}!</h1>
             </div>
             <div class="content">
               <p>Hi ${safeUserName},</p>
@@ -131,7 +133,7 @@ export async function sendWelcomeEmail(email: string, userName: string, verifica
               <p>Once verified, you can start exploring stocks, building portfolios, and getting AI-powered insights!</p>
 
               <div class="footer">
-                <p>&copy; 2026 Financial Forensics AI. All rights reserved.</p>
+                <p>&copy; ${new Date().getFullYear()} ${SITE_NAME}. All rights reserved.</p>
               </div>
             </div>
           </div>
@@ -142,7 +144,7 @@ export async function sendWelcomeEmail(email: string, userName: string, verifica
     await transporter.sendMail({
       from: process.env.SMTP_EMAIL || 'noreply@mystockvision.com',
       to: email,
-      subject: 'Welcome to Financial Forensics AI - Verify Your Email',
+      subject: `Welcome to ${SITE_NAME} - Verify Your Email`,
       html: htmlContent,
     });
 
