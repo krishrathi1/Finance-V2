@@ -1,15 +1,15 @@
 "use client";
 
 import {
+  Activity,
   AlertTriangle,
   ArrowDownRight,
-  ArrowUpRight,
   BarChart3,
   Bell,
   CheckCircle,
   Edit2,
-  Minus,
   Plus,
+  Receipt,
   Search,
   ShieldAlert,
   Sparkles,
@@ -33,7 +33,9 @@ import { fetchAIScreenerResults, fetchTickerTape, fetchPortfolioRiskAssessment, 
 import { addAlert, getAlertsForSymbol, removeAlert } from "@/lib/alerts";
 import { ImportModal } from "@/components/modals/import-modal";
 import {
+  PORTFOLIO_SYNCED_EVENT,
   addHolding,
+  backfillLedgerFromHoldings,
   enrichHoldings,
   getHoldings,
   portfolioSummary,
@@ -41,6 +43,11 @@ import {
   updateHolding,
 } from "@/lib/portfolio";
 import type { Holding, HoldingWithValue } from "@/lib/portfolio";
+import { TRANSACTIONS_SYNCED_EVENT, getTransactions } from "@/lib/transactions";
+import type { Transaction } from "@/lib/transactions";
+import { SellHoldingModal } from "@/components/modals/sell-holding-modal";
+import { TransactionHistory } from "@/components/sections/transaction-history";
+import { matchFifo, portfolioCashFlows, xirr } from "@/shared/portfolio-returns";
 import type { ScreenerResult } from "@/shared/types";
 import { todayIstDateKey as today } from "@/shared/market-status";
 import { useAuth } from "@/hooks/useAuth";
@@ -217,7 +224,8 @@ function syncPortfolioTargetAlert(symbol: string, targetPrice: number | undefine
     symbol,
     targetPrice,
     targetPrice >= referencePrice ? "above" : "below",
-    "Portfolio target alert"
+    "Portfolio target alert",
+    referencePrice
   );
 }
 
@@ -519,11 +527,13 @@ function HoldingRow({
   totalValue,
   onEdit,
   onRemove,
+  onSell,
 }: {
   h: HoldingWithValue;
   totalValue: number;
   onEdit: (h: Holding) => void;
   onRemove: (id: string) => void;
+  onSell: (h: HoldingWithValue) => void;
 }) {
   const isPos = h.pnl !== null ? h.pnl >= 0 : true;
   const weight = totalValue > 0 && h.currentValue ? (h.currentValue / totalValue) * 100 : 0;
@@ -574,10 +584,17 @@ function HoldingRow({
           )}
         </div>
         <div className="flex gap-1">
-          <button onClick={() => onEdit(h)} className="rounded-lg p-1.5 text-muted hover:bg-accent/10 hover:text-accent">
+          <button
+            onClick={() => onSell(h)}
+            aria-label={`Sell ${h.symbol}`}
+            className="rounded-lg p-1.5 text-muted hover:bg-danger/10 hover:text-danger"
+          >
+            <ArrowDownRight className="h-3.5 w-3.5" />
+          </button>
+          <button onClick={() => onEdit(h)} aria-label={`Edit ${h.symbol}`} className="rounded-lg p-1.5 text-muted hover:bg-accent/10 hover:text-accent">
             <Edit2 className="h-3.5 w-3.5" />
           </button>
-          <button onClick={() => onRemove(h.id)} className="rounded-lg p-1.5 text-muted hover:bg-danger/10 hover:text-danger">
+          <button onClick={() => onRemove(h.id)} aria-label={`Delete ${h.symbol}`} className="rounded-lg p-1.5 text-muted hover:bg-danger/10 hover:text-danger">
             <Trash2 className="h-3.5 w-3.5" />
           </button>
         </div>
@@ -616,14 +633,25 @@ function HoldingRow({
 
       {/* Desktop actions */}
       <div className="hidden items-center gap-1 sm:flex">
+        {/* Sell stays visible rather than hover-revealed: it's the primary
+            action on a position, and the only one that preserves history. */}
+        <button
+          onClick={() => onSell(h)}
+          className="flex items-center gap-1 rounded-lg border border-border/60 px-2 py-1 text-[11px] font-semibold text-muted transition hover:border-danger/40 hover:bg-danger/10 hover:text-danger"
+        >
+          <ArrowDownRight className="h-3 w-3" />
+          Sell
+        </button>
         <button
           onClick={() => onEdit(h)}
+          aria-label={`Edit ${h.symbol}`}
           className="rounded-lg p-1.5 text-muted opacity-0 transition hover:bg-accent/10 hover:text-accent group-hover:opacity-100"
         >
           <Edit2 className="h-3.5 w-3.5" />
         </button>
         <button
           onClick={() => onRemove(h.id)}
+          aria-label={`Delete ${h.symbol}`}
           className="rounded-lg p-1.5 text-muted opacity-0 transition hover:bg-danger/10 hover:text-danger group-hover:opacity-100"
         >
           <Trash2 className="h-3.5 w-3.5" />
@@ -729,10 +757,12 @@ type RiskAnalysis = {
 export default function PortfolioPage() {
   const { user } = useAuth();
   const [holdings, setHoldings] = useState<HoldingWithValue[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [mounted, setMounted] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [editTarget, setEditTarget] = useState<Holding | null>(null);
+  const [sellTarget, setSellTarget] = useState<HoldingWithValue | null>(null);
   const [riskAnalysis, setRiskAnalysis] = useState<RiskAnalysis | null>(null);
   const [riskLoading, setRiskLoading] = useState(false);
   const [riskError, setRiskError] = useState<string | null>(null);
@@ -742,6 +772,12 @@ export default function PortfolioPage() {
 
   const loadPortfolio = useCallback(async (options: { force?: boolean; keepLoading?: boolean } = {}) => {
     const { force = false, keepLoading = true } = options;
+    // Holdings created before the ledger existed get their opening purchase
+    // written here, so realised P&L and XIRR work for existing users rather
+    // than looking broken until they re-enter everything. Idempotent.
+    backfillLedgerFromHoldings();
+    setTransactions(getTransactions());
+
     const raw = getHoldings();
     if (raw.length === 0) {
       setHoldings([]);
@@ -772,7 +808,36 @@ export default function PortfolioPage() {
     void loadPortfolio({ force: true, keepLoading: false });
   }, 20_000);
 
+  // Sign-in hydration replaces localStorage after this page may already have
+  // rendered from an empty local store, so re-read when that lands.
+  useEffect(() => {
+    const handler = () => void loadPortfolio({ keepLoading: false });
+    window.addEventListener(PORTFOLIO_SYNCED_EVENT, handler);
+    window.addEventListener(TRANSACTIONS_SYNCED_EVENT, handler);
+    return () => {
+      window.removeEventListener(PORTFOLIO_SYNCED_EVENT, handler);
+      window.removeEventListener(TRANSACTIONS_SYNCED_EVENT, handler);
+    };
+  }, [loadPortfolio]);
+
   const summary = useMemo(() => portfolioSummary(holdings), [holdings]);
+
+  /** Profit actually booked from sales, FIFO-matched across the whole ledger. */
+  const realised = useMemo(() => matchFifo(transactions), [transactions]);
+
+  /**
+   * Money-weighted annualised return. Null when there aren't enough flows to
+   * solve for one (nothing sold and nothing currently valued), in which case
+   * the card is hidden rather than showing a confident 0%.
+   */
+  const xirrRate = useMemo(
+    () => xirr(portfolioCashFlows(transactions, summary.totalCurrentValue, today())),
+    [transactions, summary.totalCurrentValue]
+  );
+
+  const reloadLedger = useCallback(() => {
+    void loadPortfolio({ keepLoading: false });
+  }, [loadPortfolio]);
 
   const handleRemove = useCallback((id: string) => {
     const removed = holdings.find((holding) => holding.id === id);
@@ -840,7 +905,7 @@ export default function PortfolioPage() {
             My Portfolio
           </h1>
           <p className="mt-1 text-xs text-muted sm:text-sm">
-            Holdings, P&amp;L, and allocation — stored in your browser
+            Holdings, P&amp;L, and allocation — saved to your account, on every device
           </p>
         </div>
         <div className="flex flex-wrap gap-2 sm:gap-3">
@@ -906,11 +971,16 @@ export default function PortfolioPage() {
       {/* Portfolio content */}
       {!loading && hasHoldings && (
         <>
-          {/* Summary cards */}
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {/* Summary cards.
+              "Return" used to sit here restating Total P&L as a percentage —
+              the same fact twice. It's now XIRR, which accounts for *when*
+              money went in and is the number that actually answers "how is
+              this portfolio doing". */}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
             <SummaryCard
               label="Invested"
               value={fmtINR(summary.totalInvested)}
+              sub="in open positions"
               icon={Wallet}
             />
             <SummaryCard
@@ -920,18 +990,33 @@ export default function PortfolioPage() {
               icon={BarChart3}
             />
             <SummaryCard
-              label="Total P&L"
+              label="Unrealised P&L"
               value={(isGain ? "+" : "") + fmtINR(summary.totalPnl)}
-              sub={`${isGain ? "+" : ""}${summary.totalPnlPercent.toFixed(2)}% overall`}
+              sub={`${isGain ? "+" : ""}${summary.totalPnlPercent.toFixed(2)}% on paper`}
               isPositive={isGain}
               icon={isGain ? TrendingUp : TrendingDown}
             />
             <SummaryCard
-              label="Return"
-              value={`${isGain ? "+" : ""}${summary.totalPnlPercent.toFixed(2)}%`}
-              sub={`${isGain ? "+" : ""}${fmtINR(summary.totalPnl)} in rupees`}
-              isPositive={isGain}
-              icon={isGain ? ArrowUpRight : ArrowDownRight}
+              label="Realised P&L"
+              value={
+                (realised.totalRealisedPnl >= 0 ? "+" : "") + fmtINR(realised.totalRealisedPnl)
+              }
+              sub={
+                realised.lots.length > 0
+                  ? `booked over ${realised.lots.length} sale${realised.lots.length === 1 ? "" : "s"}`
+                  : "no sales recorded yet"
+              }
+              // Neutral styling with nothing booked — a green "+₹0.00" reads as
+              // a result, when in fact there's simply no data.
+              isPositive={realised.lots.length === 0 ? undefined : realised.totalRealisedPnl >= 0}
+              icon={Receipt}
+            />
+            <SummaryCard
+              label="XIRR"
+              value={xirrRate === null ? "—" : `${(xirrRate * 100).toFixed(1)}%`}
+              sub={xirrRate === null ? "needs more history" : "annualised, time-weighted"}
+              isPositive={xirrRate === null ? undefined : xirrRate >= 0}
+              icon={Activity}
             />
           </div>
 
@@ -1050,15 +1135,18 @@ export default function PortfolioPage() {
                   totalValue={summary.totalCurrentValue}
                   onEdit={handleEdit}
                   onRemove={handleRemove}
+                  onSell={setSellTarget}
                 />
               ))}
             </div>
           </div>
 
+          <TransactionHistory transactions={transactions} onChanged={reloadLedger} />
+
           {/* Disclaimer */}
           <p className="text-center text-[11px] text-muted/60">
-            Portfolio data is stored locally in your browser. Prices are fetched live and may be delayed.
-            This is not investment advice.
+            Portfolio data is saved to your account and kept in this browser for offline access.
+            Prices are fetched live and may be delayed. This is not investment advice.
           </p>
 
           <section className="grid gap-4 lg:grid-cols-2">
@@ -1095,6 +1183,13 @@ export default function PortfolioPage() {
       )}
       {mounted && showImportModal && (
         <ImportModal onClose={() => setShowImportModal(false)} onSave={loadPortfolio} />
+      )}
+      {mounted && sellTarget && (
+        <SellHoldingModal
+          holding={sellTarget}
+          onClose={() => setSellTarget(null)}
+          onSold={reloadLedger}
+        />
       )}
     </div>
   );

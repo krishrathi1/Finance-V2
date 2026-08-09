@@ -56,7 +56,7 @@ function write(store: WatchlistStore) {
 let authenticated = false;
 let hydrated = false;
 
-/** Set by the auth layer (see components/watchlist-sync.tsx) whenever sign-in
+/** Set by the auth layer (see components/account-sync.tsx) whenever sign-in
  * state changes, so mutations know whether it's worth calling the server. */
 export function setWatchlistAuthState(isAuthenticated: boolean) {
   authenticated = isAuthenticated;

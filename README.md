@@ -10,6 +10,8 @@ A professional-grade quantitative trading platform and AI-powered Indian stock r
 - **AI-Powered Insights**: AI research reports, SWOT analysis, earnings TL;DRs, and screeners (powered by Gemini).
 - **Comprehensive Financial Data**: Real-time quotes, financial statements, corporate actions, shareholding patterns, IPO tracking, and news.
 - **Accounts & Premium**: Email/password auth with JWT cookies, email verification, password reset via OTP, and a premium-request flow.
+- **Synced Watchlist, Portfolio & Alerts**: All three persist to MySQL and follow the same offline-first model — localStorage stays the synchronous source of truth, mutations sync in the background, and signing in merges anything created while signed out.
+- **Price Alert Notifications**: Alerts are evaluated server-side and emailed when a target is crossed, so they fire with the app closed. Alerts arm on a genuine crossing rather than firing the instant they're created.
 - **Indian Markets Focus**: NSE/BSE stock analysis with broad global stock search.
 
 ## 🛠 Tech Stack
@@ -18,10 +20,10 @@ Single application: **Next.js 14 (App Router)** serves both the UI and the entir
 
 - **UI**: Tailwind CSS, Framer Motion, Radix UI, Recharts, TradingView Widget
 - **API/backend logic**: Next.js route handlers + `frontend/lib/backend/` (dashboard assembly, scoring engine, provider fetchers, AI features)
-- **Database**: MySQL 8 (`mysql2` pool) — users, sessions, premium requests, watchlists, portfolios
+- **Database**: MySQL 8 (`mysql2` pool) — users, sessions, premium requests, watchlists, portfolios, price alerts
 - **AI**: Gemini API (explanations, reports) with rule-based fallbacks
 - **Data providers**: NSE India, Trendlyne, Financial Modeling Prep, Yahoo Finance, Google News RSS, NewsAPI
-- **Email**: SMTP via nodemailer (verification + password-reset OTP)
+- **Email**: SMTP via nodemailer (verification, password-reset OTP, price alert notifications)
 
 ## 📂 Monorepo Structure
 
@@ -77,6 +79,23 @@ docker compose -f docker-compose.prod.yml up -d --build
 
 nginx terminates TLS and proxies everything to the Next.js app on port 3000
 (`deploy/nginx/mystockvision.conf`). Health check: `GET /api/health`.
+
+### Price alert delivery (scheduled)
+
+Alert emails are sent by a sweep endpoint, so they need a scheduler. Set
+`ALERTS_CRON_SECRET` in `frontend/.env.prod`, then add a cron entry that POSTs
+to it during market hours:
+
+```cron
+# every 5 min, 09:00-16:00 IST (03:30-10:30 UTC), Mon-Fri
+*/5 3-10 * * 1-5 curl -fsS -X POST http://127.0.0.1:3000/api/v1/alerts/evaluate \
+  -H "x-cron-secret: $ALERTS_CRON_SECRET" >/dev/null
+```
+
+Without it, alerts are still evaluated — but only while a signed-in user has
+the alerts page open, which defeats the purpose of an alert. Notifications go
+only to verified, unbanned accounts, and delivery is claimed before sending so
+a triggered alert is emailed once rather than once per sweep.
 
 ## 🏗 Architecture & Data Flow
 

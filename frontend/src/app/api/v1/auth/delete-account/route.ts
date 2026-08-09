@@ -54,9 +54,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ detail: 'Incorrect password.' }, { status: 401 });
     }
 
-    // portfolios, watchlists, premium_requests, refresh_tokens and
-    // password_reset_tokens all declare ON DELETE CASCADE against users.id, so
-    // this single statement removes the account and every row belonging to it.
+    // portfolios, watchlists, watchlist_lists, price_alerts, premium_requests,
+    // refresh_tokens and password_reset_tokens all declare ON DELETE CASCADE
+    // against users.id, so this single statement removes the account and every
+    // row belonging to it.
     const result = await query<ResultSetHeader>('DELETE FROM users WHERE id = ?', [user.id]);
     if (!result || result.affectedRows !== 1) {
       return NextResponse.json({ detail: 'Could not delete the account.' }, { status: 500 });

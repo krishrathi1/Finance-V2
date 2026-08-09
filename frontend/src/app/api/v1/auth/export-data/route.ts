@@ -24,17 +24,25 @@ export async function GET(request: NextRequest) {
   const { user } = auth;
 
   try {
-    const [portfolios, watchlists, premiumRequests] = await Promise.all([
+    const [portfolios, watchlists, premiumRequests, priceAlerts] = await Promise.all([
       query(
-        'SELECT symbol, quantity, buy_price, sector, added_at, updated_at FROM portfolios WHERE user_id = ? ORDER BY added_at',
+        `SELECT symbol, company_name, quantity, buy_price, buy_date, notes, target_price,
+                sector, added_at, updated_at
+         FROM portfolios WHERE user_id = ? ORDER BY added_at`,
         [user.id]
       ),
       query(
-        'SELECT symbol, exchange, added_at FROM watchlists WHERE user_id = ? ORDER BY added_at',
+        'SELECT list_name, symbol, exchange, note, added_at FROM watchlists WHERE user_id = ? ORDER BY added_at',
         [user.id]
       ),
       query(
         'SELECT status, reason, requested_at, updated_at FROM premium_requests WHERE user_id = ? ORDER BY requested_at',
+        [user.id]
+      ),
+      query(
+        `SELECT symbol, target_price, alert_condition, note, armed,
+                triggered_at, triggered_price, notified_at, created_at
+         FROM price_alerts WHERE user_id = ? ORDER BY created_at`,
         [user.id]
       ),
     ]);
@@ -51,10 +59,12 @@ export async function GET(request: NextRequest) {
       },
       portfolio: Array.isArray(portfolios) ? portfolios : [],
       watchlist: Array.isArray(watchlists) ? watchlists : [],
+      price_alerts: Array.isArray(priceAlerts) ? priceAlerts : [],
       premium_requests: Array.isArray(premiumRequests) ? premiumRequests : [],
       notes:
-        'Price alerts are stored only in your browser and are not included here. ' +
-        'Security credentials (password hash, session tokens) are intentionally excluded.',
+        'Holdings and alerts created before you signed in may exist only in that ' +
+        'browser until it syncs. Security credentials (password hash, session ' +
+        'tokens) are intentionally excluded.',
     };
 
     // Content-Disposition makes the browser save this rather than render it,

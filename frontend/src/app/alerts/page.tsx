@@ -2,13 +2,13 @@
 
 import { Bell, BellOff, TrendingDown, TrendingUp, Trash2 } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { FeatureAuthWall } from "@/components/sections/feature-auth-wall";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useVisibilityPolling } from "@/hooks/useVisibilityPolling";
 import { fetchTickerTape } from "@/lib/api";
-import { checkAlerts, getAlerts, removeAlert } from "@/lib/alerts";
+import { ALERTS_SYNCED_EVENT, checkAlerts, getAlerts, refreshAlertsFromServer, removeAlert } from "@/lib/alerts";
 import type { PriceAlert } from "@/lib/alerts";
 
 type AlertRow = PriceAlert & {
@@ -22,6 +22,13 @@ export default function AlertsPage() {
 
   const loadAlerts = useCallback(async (options: { force?: boolean; keepLoading?: boolean } = {}) => {
     const { force = false, keepLoading = true } = options;
+
+    // Ask the server to evaluate first. It owns trigger state because it's the
+    // only side that can record a crossing that happened while this page was
+    // closed — and the only side that sends the email. Falls back to local
+    // evaluation when signed out or offline.
+    const synced = await refreshAlertsFromServer();
+
     const alerts = getAlerts();
     if (alerts.length === 0) {
       setRows([]);
@@ -41,8 +48,12 @@ export default function AlertsPage() {
     } catch {
       // ignore fetch errors — prices stay null
     }
-    const triggered = checkAlerts(priceMap);
-    const triggeredIds = new Set(triggered.map((t) => t.id));
+    // Server state is sticky: an alert that fired at 3am stays flagged even
+    // though price has since moved back. Local evaluation can only ever report
+    // "true right now", which is why it's the fallback rather than the default.
+    const triggeredIds = synced
+      ? new Set(alerts.filter((a) => a.triggeredAt).map((a) => a.id))
+      : new Set(checkAlerts(priceMap).map((t) => t.id));
     const enriched: AlertRow[] = alerts.map((a) => ({
       ...a,
       currentPrice: priceMap[a.symbol] ?? null,
@@ -53,6 +64,14 @@ export default function AlertsPage() {
     setRows(enriched);
     setLoading(false);
   }, []);
+
+  // Hydration on sign-in replaces localStorage after this page may already
+  // have rendered from an empty local store, so re-read when that lands.
+  useEffect(() => {
+    const handler = () => void loadAlerts({ keepLoading: false });
+    window.addEventListener(ALERTS_SYNCED_EVENT, handler);
+    return () => window.removeEventListener(ALERTS_SYNCED_EVENT, handler);
+  }, [loadAlerts]);
 
   useVisibilityPolling((initial) => {
     if (initial) {
@@ -70,6 +89,11 @@ export default function AlertsPage() {
     },
     []
   );
+
+  /** Trigger timestamps come from MySQL as "YYYY-MM-DD HH:MM:SS" (server time,
+   *  no zone). Rendering the date and time as-is avoids the Date parser
+   *  guessing a timezone and shifting the moment the alert actually fired. */
+  const formatTriggerTime = (value: string) => value.replace("T", " ").slice(0, 16);
 
   const formatPrice = (p: number | null) =>
     p !== null
@@ -90,7 +114,7 @@ export default function AlertsPage() {
             </span>
           </h1>
           <p className="mt-1 text-xs text-muted sm:text-sm">
-            Track your target prices — alerts are stored locally in your browser
+            Track your target prices — saved to your account and emailed to you when a target is hit
           </p>
         </div>
         <div className="flex items-center gap-2 text-xs text-muted">
@@ -109,7 +133,12 @@ export default function AlertsPage() {
         title="Sign up to use Alerts"
         description="Create and track custom price alerts for your stocks with live trigger status."
         ctaLabel="Sign up to use alerts"
-        points={["Create multiple price alerts", "Auto refresh status", "Triggered vs watching tags", "Quick jump to stock pages"]}
+        points={[
+          "Create multiple price alerts",
+          "Email when a target is hit",
+          "Saved to your account, on every device",
+          "Triggered vs watching tags",
+        ]}
       >
         <Card>
           <CardHeader>
@@ -140,8 +169,8 @@ export default function AlertsPage() {
               </div>
               <h3 className="text-lg font-semibold">No active alerts</h3>
               <p className="mt-1 max-w-sm text-sm text-muted">
-                Open any stock page and tap the bell icon to set a price alert. You can track
-                multiple alerts across different symbols here.
+                Open any stock page and tap the bell icon to set a price alert. We&apos;ll watch the
+                price for you and email you when a target is hit — even with this page closed.
               </p>
               <Link
                 href="/"
@@ -221,6 +250,10 @@ export default function AlertsPage() {
                             )}
                             Triggered
                           </span>
+                        ) : row.armed === false ? (
+                          <span className="rounded-md bg-amber-400/10 px-1.5 py-0.5 text-[10px] font-semibold text-amber-500 sm:hidden">
+                            Waiting to arm
+                          </span>
                         ) : diffPercent !== null ? (
                           <span className="text-[10px] text-muted sm:hidden">
                             {(((row.currentPrice ?? row.targetPrice) - row.targetPrice) / row.targetPrice * 100).toFixed(1)}% away
@@ -230,6 +263,16 @@ export default function AlertsPage() {
                       {row.note && (
                         <p className="mt-0.5 truncate text-[11px] text-muted">{row.note}</p>
                       )}
+                      {row.triggered && row.triggeredPrice ? (
+                        <p className="mt-0.5 text-[10px] text-success/80">
+                          Hit {formatPrice(row.triggeredPrice)}
+                          {row.triggeredAt ? ` on ${formatTriggerTime(row.triggeredAt)}` : ""}
+                        </p>
+                      ) : row.armed === false ? (
+                        <p className="mt-0.5 text-[10px] text-muted/80">
+                          Price is already past this target — arms once it moves back
+                        </p>
+                      ) : null}
                     </div>
 
                     {/* Mobile: target + remove */}
@@ -274,6 +317,10 @@ export default function AlertsPage() {
                             <TrendingDown className="h-3 w-3" />
                           )}
                           Triggered
+                        </span>
+                      ) : row.armed === false ? (
+                        <span className="rounded-lg bg-amber-400/10 px-2 py-1 text-xs font-semibold text-amber-500">
+                          Waiting
                         </span>
                       ) : diffPercent !== null ? (
                         <span className="text-xs text-muted">

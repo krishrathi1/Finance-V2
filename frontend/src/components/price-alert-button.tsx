@@ -49,11 +49,15 @@ export function PriceAlertButton({ symbol, currentPrice, className }: Props) {
   const handleSave = useCallback(() => {
     const price = parseFloat(targetPrice);
     if (!price || price <= 0) return;
-    addAlert(symbol, price, condition, note);
+    // Pass the observed price so the server can decide whether this alert
+    // starts armed. The target input is pre-filled with the current price, so
+    // without this a user who doesn't edit it gets an instant "triggered"
+    // email for a threshold they never actually crossed.
+    addAlert(symbol, price, condition, note, currentPrice > 0 ? currentPrice : undefined);
     setHasAlert(true);
     setSaved(true);
     setTimeout(() => setOpen(false), 900);
-  }, [symbol, targetPrice, condition, note]);
+  }, [symbol, targetPrice, condition, note, currentPrice]);
 
   const handleRemoveAll = useCallback(() => {
     const alerts = getAlertsForSymbol(symbol);

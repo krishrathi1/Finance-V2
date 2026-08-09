@@ -1,6 +1,6 @@
 import nodemailer from 'nodemailer';
 
-import { SITE_NAME } from '@/shared/seo';
+import { SITE_NAME, SITE_URL } from '@/shared/seo';
 
 /** Escape untrusted text before interpolating into an HTML email template. */
 function escapeHtml(value: string): string {
@@ -91,6 +91,132 @@ export async function sendOtpEmail(email: string, otp: string, userName: string)
     return true;
   } catch (error) {
     console.error('Email sending error:', error);
+    return false;
+  }
+}
+
+export type TriggeredAlertEmailItem = {
+  symbol: string;
+  condition: 'above' | 'below';
+  targetPrice: number;
+  triggeredPrice: number;
+  note?: string | null;
+};
+
+const inrFormatter = new Intl.NumberFormat('en-IN', {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
+function formatInr(value: number): string {
+  return Number.isFinite(value) ? `Rs ${inrFormatter.format(value)}` : '--';
+}
+
+/**
+ * Notify a user that one or more price alerts fired.
+ *
+ * Sent as a single digest rather than one mail per alert: a broad market move
+ * can trip a dozen alerts in the same sweep, and twelve separate emails is how
+ * a useful notification turns into something the user filters to spam.
+ *
+ * Every interpolated value is escaped even though symbols and prices are
+ * server-derived — `note` is free text the user typed, and it reaches this
+ * template unchanged.
+ */
+export async function sendPriceAlertEmail(
+  email: string,
+  userName: string,
+  alerts: TriggeredAlertEmailItem[]
+) {
+  if (alerts.length === 0) return false;
+
+  try {
+    const safeUserName = escapeHtml(userName);
+    const alertsUrl = `${SITE_URL}/alerts`;
+
+    const rows = alerts
+      .map((alert) => {
+        const safeSymbol = escapeHtml(alert.symbol);
+        const direction = alert.condition === 'above' ? 'rose above' : 'fell below';
+        const color = alert.condition === 'above' ? '#16a34a' : '#dc2626';
+        const safeNote = alert.note ? escapeHtml(alert.note) : '';
+        return `
+          <tr>
+            <td style="padding:12px 0;border-bottom:1px solid #eee;">
+              <div style="font-size:15px;font-weight:bold;">${safeSymbol}</div>
+              <div style="font-size:13px;color:#555;">
+                ${direction} your target of ${escapeHtml(formatInr(alert.targetPrice))}
+              </div>
+              ${safeNote ? `<div style="font-size:12px;color:#888;font-style:italic;">${safeNote}</div>` : ''}
+            </td>
+            <td style="padding:12px 0;border-bottom:1px solid #eee;text-align:right;">
+              <div style="font-size:15px;font-weight:bold;color:${color};">
+                ${escapeHtml(formatInr(alert.triggeredPrice))}
+              </div>
+              <div style="font-size:11px;color:#999;">at trigger</div>
+            </td>
+          </tr>`;
+      })
+      .join('');
+
+    const heading =
+      alerts.length === 1
+        ? '1 price alert triggered'
+        : `${alerts.length} price alerts triggered`;
+
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header { background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: white; padding: 20px; border-radius: 5px 5px 0 0; text-align: center; }
+            .content { background: #f9f9f9; padding: 20px; border-radius: 0 0 5px 5px; }
+            .button { background: #f59e0b; color: white; padding: 12px 30px; border-radius: 5px; text-decoration: none; display: inline-block; margin: 20px 0; }
+            .footer { color: #999; font-size: 12px; margin-top: 20px; text-align: center; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1>${SITE_NAME}</h1>
+              <p>${escapeHtml(heading)}</p>
+            </div>
+            <div class="content">
+              <p>Hi ${safeUserName},</p>
+              <p>The following price ${alerts.length === 1 ? 'target has' : 'targets have'} been reached:</p>
+
+              <table style="width:100%;border-collapse:collapse;margin:16px 0;">
+                ${rows}
+              </table>
+
+              <a href="${escapeHtmlAttr(alertsUrl)}" class="button">View all alerts</a>
+
+              <p style="font-size:12px;color:#777;">
+                Prices are sourced from public market data and may be delayed. This is an
+                automated notification, not investment advice.
+              </p>
+
+              <div class="footer">
+                <p>&copy; ${new Date().getFullYear()} ${SITE_NAME}. All rights reserved.</p>
+              </div>
+            </div>
+          </div>
+        </body>
+      </html>
+    `;
+
+    await transporter.sendMail({
+      from: process.env.SMTP_EMAIL || 'noreply@mystockvision.com',
+      to: email,
+      subject: `${heading} - ${SITE_NAME}`,
+      html: htmlContent,
+    });
+
+    return true;
+  } catch (error) {
+    console.error('Price alert email error:', error);
     return false;
   }
 }
