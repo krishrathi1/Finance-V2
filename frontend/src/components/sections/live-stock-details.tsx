@@ -21,6 +21,7 @@ import { RiskScore } from "@/components/sections/risk-score";
 import { ShareholdingSection } from "@/components/sections/shareholding-section";
 import { FundamentalSignals } from "@/components/sections/fundamental-signals";
 import { PriceRiskProfile } from "@/components/sections/price-risk-profile";
+import { PeerValuation } from "@/components/sections/peer-valuation";
 import { QualityScore } from "@/components/sections/quality-score";
 import { ReturnAnalysis } from "@/components/sections/return-analysis";
 import { StatementQuality } from "@/components/sections/statement-quality";
@@ -179,6 +180,13 @@ export function LiveStockDetails({ initialData, symbol, exchange }: { initialDat
         </div>
 
         <StatementQuality financials={data.financials} marketCap={data.metrics?.marketCap} />
+
+        <PeerValuation
+          metrics={data.metrics}
+          competitors={data.competitors}
+          brokerageResearch={data.brokerageResearch}
+          currentPrice={data.price?.cmp}
+        />
 
         <PriceRiskProfile
           history={data.price?.history}
