@@ -22,6 +22,9 @@ import { ShareholdingSection } from "@/components/sections/shareholding-section"
 import { FundamentalSignals } from "@/components/sections/fundamental-signals";
 import { PriceRiskProfile } from "@/components/sections/price-risk-profile";
 import { QualityScore } from "@/components/sections/quality-score";
+import { ReturnAnalysis } from "@/components/sections/return-analysis";
+import { StatementQuality } from "@/components/sections/statement-quality";
+import { TechnicalAnalysis } from "@/components/sections/technical-analysis";
 import { SmartScore } from "@/components/sections/smart-score";
 import { StockAuthWall } from "@/components/sections/stock-auth-wall";
 import { SwotAnalysis } from "@/components/sections/swot-analysis";
@@ -175,12 +178,19 @@ export function LiveStockDetails({ initialData, symbol, exchange }: { initialDat
           <FundamentalSignals financials={data.financials} />
         </div>
 
+        <StatementQuality financials={data.financials} marketCap={data.metrics?.marketCap} />
+
         <PriceRiskProfile
           history={data.price?.history}
           currentPrice={data.price?.cmp}
           fiftyTwoWeekLow={data.price?.fiftyTwoWeekLow}
           fiftyTwoWeekHigh={data.price?.fiftyTwoWeekHigh}
         />
+
+        <div className="grid gap-4 xl:grid-cols-2">
+          <ReturnAnalysis history={data.price?.history} />
+          <TechnicalAnalysis history={data.price?.history} />
+        </div>
 
         <section id="swot">
           <SwotAnalysis symbol={symbol} />
