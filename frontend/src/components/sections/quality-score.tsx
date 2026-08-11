@@ -19,15 +19,19 @@ function zoneTone(zone: AltmanZone) {
 export function QualityScore({
   metrics,
   financials,
+  sector,
 }: {
   metrics?: Record<string, number | null>;
   financials?: { incomeStatement?: any[]; balanceSheet?: any[]; growthSnapshot?: any };
+  /** Suppresses Altman Z for banks/NBFCs, where the model doesn't hold. */
+  sector?: string | null;
 }) {
   const result = computeQuality({
     metrics,
     incomeStatement: financials?.incomeStatement,
     balanceSheet: financials?.balanceSheet,
     growthSnapshot: financials?.growthSnapshot,
+    sector,
   });
 
   const nothing = result.total === 0 && result.altmanZ === null;

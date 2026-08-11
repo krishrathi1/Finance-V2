@@ -16,6 +16,26 @@ export interface QualityInput {
   incomeStatement?: Row[]; // { period, revenue, netIncome }
   balanceSheet?: Row[]; // optional, for Altman Z
   growthSnapshot?: { periods?: Array<{ label?: string; metrics?: Array<{ label?: string; value?: number | null }> }> };
+  /** Used only to suppress Altman Z where the model doesn't apply — see altmanAppliesTo. */
+  sector?: string | null;
+}
+
+/**
+ * Altman's 1968 model was fitted to public *manufacturers*. Banks, NBFCs and
+ * insurers hold structurally high liabilities and have no working capital in
+ * the industrial sense, so terms A and D drag the score down and the formula
+ * reports "distress" for institutions that are perfectly sound — and that
+ * verdict then propagates into the red-flag list.
+ *
+ * Suppressing the score for those sectors is the honest option: showing
+ * nothing beats showing a confident, wrong bankruptcy rating.
+ */
+export function altmanAppliesTo(sector: string | null | undefined): boolean {
+  const normalized = String(sector ?? "").toLowerCase();
+  if (!normalized) return true;
+  return !["financial", "bank", "insurance", "capital market", "nbfc", "asset management"].some(
+    (term) => normalized.includes(term)
+  );
 }
 
 export interface QualityCheck {
@@ -136,7 +156,7 @@ export function computeQuality(input: QualityInput): QualityResult {
 
   let altmanZ: number | null = null;
   let altmanZone: AltmanZone | null = null;
-  if (bs && isCur) {
+  if (bs && isCur && altmanAppliesTo(input.sector)) {
     const ta = num(bs.totalAssets);
     const tl = num(bs.totalLiabilities);
     const ca = num(bs.currentAssets);

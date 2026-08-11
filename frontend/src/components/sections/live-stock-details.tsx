@@ -19,6 +19,8 @@ import { SimpleReturnsCalculator } from "@/components/sections/simple-returns-ca
 import { ReturnsPanel } from "@/components/sections/returns-panel";
 import { RiskScore } from "@/components/sections/risk-score";
 import { ShareholdingSection } from "@/components/sections/shareholding-section";
+import { FundamentalSignals } from "@/components/sections/fundamental-signals";
+import { PriceRiskProfile } from "@/components/sections/price-risk-profile";
 import { QualityScore } from "@/components/sections/quality-score";
 import { SmartScore } from "@/components/sections/smart-score";
 import { StockAuthWall } from "@/components/sections/stock-auth-wall";
@@ -165,7 +167,20 @@ export function LiveStockDetails({ initialData, symbol, exchange }: { initialDat
           />
         </div>
 
-        <QualityScore metrics={data.metrics} financials={data.financials} />
+        {/* Quality & Safety scores today's ratios against fixed thresholds;
+            these two answer the questions it can't — did the business improve
+            on last year, and what has owning it actually felt like. */}
+        <div className="grid gap-4 xl:grid-cols-2">
+          <QualityScore metrics={data.metrics} financials={data.financials} sector={data.sector} />
+          <FundamentalSignals financials={data.financials} />
+        </div>
+
+        <PriceRiskProfile
+          history={data.price?.history}
+          currentPrice={data.price?.cmp}
+          fiftyTwoWeekLow={data.price?.fiftyTwoWeekLow}
+          fiftyTwoWeekHigh={data.price?.fiftyTwoWeekHigh}
+        />
 
         <section id="swot">
           <SwotAnalysis symbol={symbol} />
