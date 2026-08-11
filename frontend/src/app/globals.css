@@ -57,6 +57,22 @@ html {
   scroll-behavior: smooth;
   scroll-padding-top: 5rem;
   text-rendering: optimizeLegibility;
+  /* Always reserve the scrollbar gutter. The page shell is centred
+     (`mx-auto max-w-[1640px]`), so a tall page showing a scrollbar and a short
+     one not showing it centre against different widths — every navigation
+     between the two shifted the whole layout sideways by the scrollbar width.
+     Reserving it unconditionally makes that shift impossible. */
+  scrollbar-gutter: stable;
+}
+
+/* Smooth scrolling is for in-page anchors, not for changing route.
+   Next scrolls to the top on navigation, and with `scroll-behavior: smooth`
+   the browser *animates* that scroll — so leaving a page scrolled halfway
+   down visibly slid the new page upward while it was still rendering.
+   SmoothExperience already marks the navigation window on <html>, so scoping
+   to it restores an instant jump exactly when it's needed. */
+html[data-route-transition="active"] {
+  scroll-behavior: auto;
 }
 
 @layer base {
@@ -461,9 +477,25 @@ body > * { position: relative; z-index: 1; }
   animation: route-glow-slide 520ms var(--ease-route) both;
 }
 
-html[data-route-transition="active"] main {
+/* One animation on <main>, never two.
+   `.page-enter` (page-content-enter) and this rule both animate `transform`
+   on the same element during a navigation. Two transform animations on one
+   element don't blend — the cascade picks a winner mid-flight while the
+   children are separately sliding via `.stagger-fade`, which is what read as
+   jitter. During a route change this is the only animation on <main>; on a
+   cold load, where the attribute is absent, `.page-enter` still runs. */
+html[data-route-transition="active"] main.page-enter {
   animation: route-soft-settle 360ms var(--ease-route);
   will-change: opacity, transform, filter;
+}
+
+/* Fade children in place on a route change instead of sliding them.
+   The staggered translate is a nice first-load flourish, but replaying a
+   14px lift on up to 12 children — with delays running to ~300ms — on every
+   navigation stacks movement on top of <main>'s own animation. Opacity alone
+   keeps the entrance without anything shifting position. */
+html[data-route-transition="active"] .stagger-fade > * {
+  animation-name: stagger-fade-in-place;
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
@@ -827,6 +859,13 @@ textarea:focus {
 @keyframes stagger-fade-in {
   from { opacity: 0; transform: translateY(14px); }
   to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Same entrance, no vertical travel — used during route changes so content
+   doesn't shift while <main> is already animating. */
+@keyframes stagger-fade-in-place {
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 
 @keyframes route-progress-fill {

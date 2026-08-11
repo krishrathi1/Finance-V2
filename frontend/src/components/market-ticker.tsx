@@ -71,12 +71,22 @@ export function MarketTicker() {
     return Math.max(minDuration, Math.min(maxDuration, Math.round(tape.length * secondsPerItem)));
   }, [tape.length]);
 
+  // Reserve the strip's height rather than collapsing to nothing. This lives in
+  // the sticky header, so returning null made the header ~30px shorter until
+  // quotes arrived and then taller again — shoving every page's content down
+  // mid-load. An empty shell of the same height keeps the header a fixed size
+  // whether or not the tape has data.
   if (!tape.length) {
-    return null;
+    return (
+      <div
+        className="ticker-shell min-h-[29px] border-t border-border/60 bg-panel/70 sm:min-h-[37px]"
+        aria-hidden="true"
+      />
+    );
   }
 
   return (
-    <div className="ticker-shell border-t border-border/60 bg-panel/70">
+    <div className="ticker-shell min-h-[29px] border-t border-border/60 bg-panel/70 sm:min-h-[37px]">
       <div className="ticker-track py-1.5 sm:py-2" style={{ animationDuration: `${durationSeconds}s` }}>
         {tape.map((item, idx) => {
           const up = item.change >= 0;

@@ -1,16 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
-import { buildDashboard } from "@/server/application/dashboard";
-import { getSampleDashboard } from "@/server/domain/sample";
-import { getFresh, getStale, setCache } from "@/server/infrastructure/cache";
+import { loadDashboardEnvelope } from "@/server/application/dashboard-envelope";
 import { getCurrentUser } from "@/lib/current-user";
 import { rateLimit, clientIpFromHeaders } from "@/server/infrastructure/rate-limit";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-const FRESH_TTL_MS = 30_000;
-const inFlightBuilds = new Map<string, ReturnType<typeof buildDashboard>>();
-
+/**
+ * HTTP surface for the stock dashboard.
+ *
+ * Caching, single-flight and the stale/sample fallback ladder live in
+ * `loadDashboardEnvelope`, shared with the server-rendered stock page so both
+ * behave identically. What stays here is what only makes sense for an
+ * untrusted HTTP caller: rate limiting, and gating paid Gemini enrichment on a
+ * real session.
+ */
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ symbol: string }> }
@@ -21,13 +25,7 @@ export async function GET(
   const exchange = (sp.get("exchange") || "NSE").trim().toUpperCase() || "NSE";
   const refresh = sp.get("refresh") === "true";
 
-  const sym = symbol.toUpperCase();
-  const cacheKey = `dashboard:${sym}:${timeframe}:${exchange}`;
-
-  if (!refresh) {
-    const fresh = getFresh(cacheKey);
-    if (fresh) return NextResponse.json({ cached: true, data: fresh });
-  } else {
+  if (refresh) {
     // refresh=true forces a full live-provider rebuild, bypassing the 30s
     // cache — and since every distinct symbol is its own cache key, per-key
     // limits don't bound abuse. Rate-limit by IP instead.
@@ -42,38 +40,23 @@ export async function GET(
   }
 
   // Gemini enrichment hits paid LLM quota — never derive that from a public,
-  // unauthenticated query parameter. `refresh=true` alone no longer enables
-  // it; the caller must also be a logged-in (non-banned) user.
+  // unauthenticated query parameter. `refresh=true` alone doesn't enable it;
+  // the caller must also be a logged-in (non-banned) user.
   const user = refresh ? await getCurrentUser(request) : null;
   const allowGemini = refresh && Boolean(user);
 
-  try {
-    let build = inFlightBuilds.get(cacheKey);
-    if (!build) {
-      build = buildDashboard(symbol, { timeframe, exchange, allowGemini });
-      inFlightBuilds.set(cacheKey, build);
-      const clearBuild = () => {
-        if (inFlightBuilds.get(cacheKey) === build) inFlightBuilds.delete(cacheKey);
-      };
-      void build.then(clearBuild, clearBuild);
-    }
-    const data = await build;
-    setCache(cacheKey, data, FRESH_TTL_MS);
-    return NextResponse.json({ cached: false, data });
-  } catch (error) {
-    console.error(`[dashboard] build failed for ${sym}:`, error);
-    const stale = getStale(cacheKey);
-    if (stale) {
-      return NextResponse.json({ cached: true, stale: true, data: stale });
-    }
-    const fallback = getSampleDashboard(symbol);
-    (fallback as any).timeframe = timeframe;
-    return NextResponse.json({
-      cached: true,
-      stale: true,
-      fallback: true,
-      warning: "Live dashboard data is temporarily unavailable. Showing a placeholder while we reconnect to market data.",
-      data: fallback,
-    });
-  }
+  const envelope = await loadDashboardEnvelope(symbol, {
+    timeframe,
+    exchange,
+    refresh,
+    allowGemini,
+  });
+
+  return NextResponse.json({
+    cached: envelope.cached,
+    data: envelope.data,
+    ...(envelope.stale ? { stale: true } : {}),
+    ...(envelope.fallback ? { fallback: true } : {}),
+    ...(envelope.warning ? { warning: envelope.warning } : {}),
+  });
 }

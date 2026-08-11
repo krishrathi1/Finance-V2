@@ -8,7 +8,13 @@ import { PageHero } from "@/components/page-hero";
 import { DashboardAutoRefresh } from "@/components/sections/dashboard-auto-refresh";
 import { LiveStockDetails } from "@/components/sections/live-stock-details";
 import { StockSectionTabs } from "@/components/sections/stock-section-tabs";
-import { fetchDashboardEnvelope } from "@/lib/api";
+// Server-side data access, not the HTTP client in lib/api.ts. This page runs
+// on the server, so it calls the dashboard builder directly instead of making
+// the app issue an HTTP request to its own API — that round trip broke
+// whenever INTERNAL_API_BASE wasn't reachable from inside the app (during
+// `next build`, on a non-default port, or in a container), surfacing as
+// "TypeError: fetch failed" on a page whose data layer was perfectly healthy.
+import { loadDashboardEnvelope } from "@/server/application/dashboard-envelope";
 import { POPULAR_STOCK_SYMBOLS, SITE_NAME, SITE_URL, buildBreadcrumbJsonLd } from "@/shared/seo";
 import type { DashboardData } from "@/shared/types";
 
@@ -30,7 +36,7 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
   const canonicalUrl = `${SITE_URL}${canonicalPath}`;
 
   try {
-    const envelope = await fetchDashboardEnvelope(symbol, { exchange });
+    const envelope = await loadDashboardEnvelope(symbol, { exchange });
     const raw = envelope.data as Record<string, unknown>;
     const companyName = String(raw?.companyName || symbol);
     const sector = String(raw?.sector || "Equity");
@@ -262,7 +268,7 @@ export default async function StockDetailsPage({ params, searchParams }: Props) 
   let refreshWarning = "";
   let shouldAutoRefresh = false;
   try {
-    const envelope = await fetchDashboardEnvelope(symbol, { exchange });
+    const envelope = await loadDashboardEnvelope(symbol, { exchange });
     data = normalizeDashboardData(envelope.data, symbol);
     refreshWarning = envelope.warning || "";
     shouldAutoRefresh = Boolean(envelope.fallback || envelope.stale);
