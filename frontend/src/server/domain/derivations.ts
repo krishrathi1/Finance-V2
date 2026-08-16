@@ -1644,8 +1644,25 @@ export function hasLiveDashboardCore(data: DashboardData): boolean {
       : false;
   const hasNews = Array.isArray(news) && news.length > 0;
 
+  // A stock page is usable when we know what the share costs, or what it has
+  // cost. That is the irreducible core; news, filings and corporate actions
+  // are supporting detail around a price, not a substitute for one.
+  //
+  // They used to each qualify on their own, and news is the one that leaks:
+  // the news provider matches on a name string and will happily return
+  // articles for a symbol no exchange still quotes. A renamed ticker —
+  // ZOMATO, after Zomato Ltd became Eternal Ltd — therefore returned a
+  // complete page built on cmp 0, an empty history and twenty-one null
+  // metrics, because ten articles still mentioned the old name. Rejecting it
+  // here lets the caller fail cleanly and tell the user the symbol has no
+  // data, instead of rendering a company priced at zero.
+  const hasPrice = Boolean(cmpValue && cmpValue > 0);
+  if (!hasPrice && !hasPartialHistory) return false;
+
   return Boolean(
-    (cmpValue && cmpValue > 0 && (hasHistory || hasPartialHistory || hasRealCompanyName)) ||
+    hasHistory ||
+      hasPartialHistory ||
+      hasRealCompanyName ||
       hasNews ||
       hasDocuments ||
       hasCorporateActions,

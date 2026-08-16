@@ -29,6 +29,7 @@ import { SipSimulator } from "@/components/sections/sip-simulator";
 import { UnderwaterHistory } from "@/components/sections/underwater-history";
 import { DividendTrackRecord } from "@/components/sections/dividend-track-record";
 import { ShareholdingTrend } from "@/components/sections/shareholding-trend";
+import { InvestmentThesis } from "@/components/sections/investment-thesis";
 import { StatementQuality } from "@/components/sections/statement-quality";
 import { TechnicalAnalysis } from "@/components/sections/technical-analysis";
 import { SmartScore } from "@/components/sections/smart-score";
@@ -183,6 +184,11 @@ export function LiveStockDetails({ initialData, symbol, exchange }: { initialDat
           <QualityScore metrics={data.metrics} financials={data.financials} sector={data.sector} />
           <FundamentalSignals financials={data.financials} />
         </div>
+
+        {/* Placed high: it synthesises the cards below into two cases and
+            names where they disagree, which is the question a reader is
+            actually here to answer. */}
+        <InvestmentThesis data={data} />
 
         <StatementQuality financials={data.financials} marketCap={data.metrics?.marketCap} />
 
