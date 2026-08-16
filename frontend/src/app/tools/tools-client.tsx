@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useId, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   Area,
   AreaChart,
@@ -2470,8 +2470,33 @@ function groupFromHash(): GroupKey | null {
 export function ToolsClient() {
   const [group, setGroup] = useState<GroupKey>("trading");
   const [query, setQuery] = useState("");
+  const searchRef = useRef<HTMLInputElement>(null);
   const active = GROUPS.find((entry) => entry.key === group)!;
   const searching = query.trim().length > 0;
+
+  // "/" jumps to the search box, the convention every tool with a lot of
+  // things in it has settled on. Ignored while a field already has focus, so
+  // it never swallows a slash someone is genuinely typing — including into
+  // the search box itself.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "/" || event.ctrlKey || event.metaKey || event.altKey) return;
+      const target = event.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      event.preventDefault();
+      searchRef.current?.focus();
+      searchRef.current?.select();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   // Applied after mount rather than as the initial state: the server has no
   // hash to read, so seeding state from it directly would make the first
@@ -2515,6 +2540,7 @@ export function ToolsClient() {
       <div className="relative">
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
         <input
+          ref={searchRef}
           type="search"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
