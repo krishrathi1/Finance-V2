@@ -7,6 +7,19 @@
 
 const mysql = require('mysql2/promise');
 
+// Load .env.local / .env exactly as `next dev` does.
+//
+// This script runs under plain Node, which — unlike the Next server — does not
+// read .env files on its own. Without this, every MYSQL_* lookup below fell
+// back to its default and the script connected as root with an empty password,
+// failing with "Access denied (using password: NO)" on a setup where the app
+// itself connects perfectly. That is a confusing way to discover the problem,
+// and `npm run init-db` is the documented first step in the README.
+//
+// @next/env ships with Next and applies the same file precedence, so the
+// script and the app can never disagree about which database they mean.
+require('@next/env').loadEnvConfig(process.cwd(), true, { info: () => {}, error: console.error });
+
 async function initializeDatabase() {
   const dbName = process.env.MYSQL_DATABASE || 'financial_forensics';
 

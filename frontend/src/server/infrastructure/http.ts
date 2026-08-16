@@ -54,6 +54,25 @@ function wait(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/**
+ * How long to hold off before the next attempt.
+ *
+ * The absent-header case is the one that matters and the one that used to
+ * break: `Headers.get` returns `null` when the header is missing, `Number(null)`
+ * is `0`, and `0` passes `Number.isFinite`. A plain finite check therefore read
+ * "no Retry-After" as "retry after 0ms" and skipped the exponential backoff
+ * entirely — retrying instantly against an upstream that had just answered 429
+ * or 503, which is exactly when backing off matters.
+ *
+ * Retry-After may also be an HTTP-date rather than a number of seconds; that
+ * parses to NaN here and correctly falls back to the exponential schedule.
+ */
+export function retryDelayMs(retryAfterHeader: string | null, attempt: number): number {
+  const seconds = retryAfterHeader === null ? Number.NaN : Number(retryAfterHeader.trim());
+  if (Number.isFinite(seconds) && seconds > 0) return Math.min(2000, seconds * 1000);
+  return 250 * (attempt + 1);
+}
+
 /** GET JSON with retries. Returns null on any failure (never throws). */
 export async function getJson<T = any>(url: string, opts: FetchOpts = {}): Promise<T | null> {
   const retries = opts.retries ?? 1;
@@ -67,8 +86,7 @@ export async function getJson<T = any>(url: string, opts: FetchOpts = {}): Promi
         // Retry only on transient/blocking statuses
         if (![401, 403, 429, 500, 502, 503, 504].includes(res.status)) break;
         if (attempt < retries) {
-          const retryAfter = Number(res.headers.get("retry-after"));
-          await wait(Number.isFinite(retryAfter) ? Math.min(2000, retryAfter * 1000) : 250 * (attempt + 1));
+          await wait(retryDelayMs(res.headers.get("retry-after"), attempt));
         }
         continue;
       }
@@ -93,8 +111,7 @@ export async function getText(url: string, opts: FetchOpts = {}): Promise<string
         lastErr = new Error(`HTTP ${res.status} for ${url}`);
         if (![401, 403, 429, 500, 502, 503, 504].includes(res.status)) break;
         if (attempt < retries) {
-          const retryAfter = Number(res.headers.get("retry-after"));
-          await wait(Number.isFinite(retryAfter) ? Math.min(2000, retryAfter * 1000) : 250 * (attempt + 1));
+          await wait(retryDelayMs(res.headers.get("retry-after"), attempt));
         }
         continue;
       }

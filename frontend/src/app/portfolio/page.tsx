@@ -47,6 +47,9 @@ import { TRANSACTIONS_SYNCED_EVENT, getTransactions } from "@/lib/transactions";
 import type { Transaction } from "@/lib/transactions";
 import { SellHoldingModal } from "@/components/modals/sell-holding-modal";
 import { TransactionHistory } from "@/components/sections/transaction-history";
+import { CapitalGainsStatement } from "@/components/sections/capital-gains-statement";
+import { ConcentrationRisk } from "@/components/sections/concentration-risk";
+import { RebalancePlan } from "@/components/sections/rebalance-plan";
 import { matchFifo, portfolioCashFlows, xirr } from "@/shared/portfolio-returns";
 import type { ScreenerResult } from "@/shared/types";
 import { todayIstDateKey as today } from "@/shared/market-status";
@@ -1111,6 +1114,14 @@ export default function PortfolioPage() {
             )}
           </div>
 
+          {/* Measured concentration, paired with the AI commentary above rather
+              than folded into it — "you are over-concentrated" is arithmetic,
+              and it should hold when the model is unavailable. */}
+          <ConcentrationRisk holdings={holdings} />
+
+          {/* Diagnosis above, prescription here. */}
+          <RebalancePlan holdings={holdings} />
+
           {/* Portfolio Doctor */}
           <PortfolioDoctor />
 
@@ -1142,6 +1153,10 @@ export default function PortfolioPage() {
           </div>
 
           <TransactionHistory transactions={transactions} onChanged={reloadLedger} />
+
+          {/* Sits directly below the ledger: it is that ledger's tax reading,
+              and the realised-lots tab above is the working it is derived from. */}
+          <CapitalGainsStatement transactions={transactions} />
 
           {/* Disclaimer */}
           <p className="text-center text-[11px] text-muted/60">

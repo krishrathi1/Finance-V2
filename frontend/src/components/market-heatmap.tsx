@@ -289,15 +289,6 @@ export function MarketHeatmap() {
         </div>
       </div>
 
-      {updatedAt ? (
-        <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
-          <span>{selectedLabel}</span>
-          <span>Last update: {new Date(updatedAt).toLocaleTimeString()}</span>
-          {constituentCount ? <span>{constituentCount} constituents</span> : null}
-          {source ? <span>{formatSourceLabel(source)}</span> : null}
-          <span>Avg move: {formatSigned(groupedRows.averageChange)}%</span>
-        </div>
-      ) : null}
 
       {loading ? (
         <div className="grid [grid-template-columns:repeat(auto-fit,minmax(150px,1fr))] gap-2 sm:gap-3">

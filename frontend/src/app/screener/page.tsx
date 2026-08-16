@@ -346,7 +346,18 @@ export default function ScreenerPage() {
   ].filter(Boolean).length;
 
   return (
-    <div className="flex min-h-[calc(100dvh-7rem)] flex-col overflow-hidden">
+    // A definite height, not a minimum. The screener is an app shell: the
+    // filter rail and the results table each own their scrolling (see the
+    // `overflow-y-auto` aside and the `overflow-auto` results pane below), and
+    // both rely on this container being bounded by the viewport.
+    //
+    // `min-h` let it grow to fit its contents instead, which broke that in two
+    // visible ways: the aside's `overflow-y-auto` never engaged, so the filter
+    // rail scrolled away with the page rather than staying put; and expanding
+    // a filter section changed the page's total height, adding or removing the
+    // window scrollbar and shifting the whole layout sideways — the flicker on
+    // every filter click.
+    <div className="flex h-[calc(100dvh-7rem)] flex-col overflow-hidden">
       {/* ── Top Bar ── */}
       <div className="flex shrink-0 items-center justify-between border-b border-border/40 bg-panel/80 px-4 py-2.5 backdrop-blur-xl">
         <div className="flex items-center gap-3">

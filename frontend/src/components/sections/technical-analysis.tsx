@@ -163,9 +163,17 @@ export function TechnicalAnalysis({ history }: { history?: PricePoint[] }) {
                 hint={
                   macdReading.crossover === "bullish"
                     ? "MACD above its signal line"
-                    : "MACD below its signal line"
+                    : macdReading.crossover === "bearish"
+                    ? "MACD below its signal line"
+                    : "MACD sitting on its signal line"
                 }
-                tone={macdReading.crossover === "bullish" ? "good" : "bad"}
+                tone={
+                  macdReading.crossover === "bullish"
+                    ? "good"
+                    : macdReading.crossover === "bearish"
+                    ? "bad"
+                    : "neutral"
+                }
               />
             )}
           </div>

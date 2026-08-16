@@ -264,6 +264,11 @@ function rsi(values: number[], period: number): number {
     avgGain = (avgGain * (period - 1) + gains[i]) / period;
     avgLoss = (avgLoss * (period - 1) + losses[i]) / period;
   }
+  // A window with no losses *and* no gains is a scrip that did not trade (or
+  // sat at its circuit limit), not one that rallied. Reporting 100 there feeds
+  // "overbought" into the momentum leg of the Smart Score for a stock that has
+  // not moved; 50 is the neutral reading that state deserves.
+  if (avgGain === 0 && avgLoss === 0) return 50.0;
   if (avgLoss === 0) return 100.0;
   const rs = avgGain / avgLoss;
   return 100 - 100 / (1 + rs);
@@ -1189,13 +1194,58 @@ export function normalizeShareholding(sh: any): DashboardData["shareholding"] {
 export function backfillQuarterlyFinancials(financials: DashboardData["financials"]): void {
   if (!financials || typeof financials !== "object") return;
   const f = financials as any;
-  const periodTime = (period: string): number => {
-    const normalized = period.split(/\s+to\s+/i).at(-1) || period;
+  /**
+   * Sortable time for a quarter label, or null when it can't be read.
+   *
+   * `Date.parse` alone does not understand the Indian fiscal quarter labels
+   * providers actually emit ("Q1 FY25", "Q3FY24"), and returning 0 for them was
+   * quietly destructive: every row scored 0, the sort became a no-op, and
+   * `slice(-5)` took the *tail* of a newest-first array — keeping the five
+   * OLDEST quarters and discarding the two most recent. The dashboard then
+   * showed stale results, and scoring's year-over-year comparison (which reads
+   * quarterly[len-1] against quarterly[len-5]) ran on the wrong pair.
+   *
+   * FY25 runs Apr 2024 - Mar 2025, so Q1 FY25 ends June 2024 and Q4 FY25 ends
+   * March 2025 — the quarter number does not map to a calendar quarter.
+   */
+  const periodTime = (period: string): number | null => {
+    const raw = String(period || "").trim();
+    if (!raw) return null;
+
+    const fiscal = raw.match(/\bQ([1-4])\s*FY\s*(\d{2}|\d{4})\b/i);
+    if (fiscal) {
+      const quarter = Number(fiscal[1]);
+      const yearRaw = Number(fiscal[2]);
+      const fiscalEndYear = fiscal[2].length === 2 ? 2000 + yearRaw : yearRaw;
+      // Q1-Q3 end in the calendar year before the fiscal year ends; Q4 in it.
+      const endMonth = [6, 9, 12, 3][quarter - 1];
+      const endYear = quarter === 4 ? fiscalEndYear : fiscalEndYear - 1;
+      return Date.UTC(endYear, endMonth - 1, 1);
+    }
+
+    // "Apr 2024 to Jun 2024" — the quarter is identified by where it ends.
+    const normalized = raw.split(/\s+to\s+/i).at(-1) || raw;
     const parsed = Date.parse(normalized);
-    return Number.isNaN(parsed) ? 0 : parsed;
+    return Number.isNaN(parsed) ? null : parsed;
   };
-  const keepLatest = (rows: any[]): any[] =>
-    rows.sort((a, b) => periodTime(String(a.period)) - periodTime(String(b.period))).slice(-5);
+
+  const keepLatest = (rows: any[]): any[] => {
+    const times = rows.map((row) => periodTime(String(row.period)));
+    // With nothing parseable there is no chronology to sort by, so input order
+    // is all there is. Every provider that reaches this path lists newest
+    // first, which makes the head — not the tail — the recent end.
+    if (times.every((time) => time === null)) return rows.slice(0, 5);
+    return rows
+      .map((row, index) => ({ row, index, time: times[index] }))
+      .sort((a, b) => {
+        // Unreadable labels sort oldest, so a stray one is dropped ahead of a
+        // quarter that is genuinely dated.
+        const delta = (a.time ?? -Infinity) - (b.time ?? -Infinity);
+        return delta !== 0 && Number.isFinite(delta) ? delta : a.index - b.index;
+      })
+      .map((entry) => entry.row)
+      .slice(-5);
+  };
 
   // Keep 5 trailing quarters, not 4: scoring.ts's extractGrowthFeatures needs
   // quarterly[len-1] vs quarterly[len-5] (a trailing-4-quarter YoY comparison)
@@ -1251,12 +1301,45 @@ export function backfillQuarterlyFinancials(financials: DashboardData["financial
 // `_news_keywords`, `_score_company_news_relevance`, lines 866-1045)
 // ---------------------------------------------------------------------------
 
+/**
+ * Match a sentiment cue as a whole word, allowing ordinary inflections
+ * ("beat"/"beats"/"beating", "decline"/"declines"/"declined").
+ *
+ * Plain substring matching read these cues inside unrelated words and inverted
+ * the result: "profit" fires inside *un*profitable and *non*profit, "drop"
+ * inside backdrop, "risk" inside brisk, "strong" inside Armstrong. A headline
+ * reading "unprofitable quarter, record low margins" scored 0.66 — positive —
+ * because it contained "profit" and "record".
+ *
+ * The leading boundary is what does the real work here; the optional suffixes
+ * just avoid needing a separate entry per tense.
+ */
+/**
+ * Words that invert a cue when they follow it.
+ *
+ * "Record" is the one cue in these lists whose sign depends on what comes
+ * next: "record profit" is good news and "record low" is not, and both are
+ * standard Indian headline phrasing. This is the whole of the phrase handling
+ * here — a keyword scorer cannot read negation in general ("no growth" still
+ * scores positive), and pretending otherwise by bolting on more special cases
+ * would hide that limit rather than fix it.
+ */
+const CUE_INVERTERS: Record<string, string[]> = {
+  record: ["low", "lows", "loss", "losses", "decline", "declines", "fall", "falls", "drop", "drops"],
+};
+
+function mentionsCue(text: string, cue: string): boolean {
+  const inverters = CUE_INVERTERS[cue];
+  const suffix = inverters ? `(?!\\s+(?:${inverters.join("|")})\\b)` : "";
+  return new RegExp(`\\b${cue}(?:s|es|ed|ing)?\\b${suffix}`, "i").test(text);
+}
+
 export function simpleSentiment(text: string): number {
   const positive = ["beat", "upgrade", "growth", "bullish", "strong", "record", "profit"];
   const negative = ["downgrade", "fraud", "risk", "probe", "decline", "bearish", "drop"];
   const t = String(text || "").toLowerCase();
-  const pos = positive.reduce((acc, item) => acc + (t.includes(item) ? 1 : 0), 0);
-  const neg = negative.reduce((acc, item) => acc + (t.includes(item) ? 1 : 0), 0);
+  const pos = positive.reduce((acc, item) => acc + (mentionsCue(t, item) ? 1 : 0), 0);
+  const neg = negative.reduce((acc, item) => acc + (mentionsCue(t, item) ? 1 : 0), 0);
   const score = 0.5 + pos * 0.08 - neg * 0.1;
   return round(Math.max(0.0, Math.min(1.0, score)), 2);
 }

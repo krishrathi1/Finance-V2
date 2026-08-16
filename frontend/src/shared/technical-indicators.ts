@@ -140,9 +140,18 @@ export function rsi(history: PricePoint[] | null | undefined, period = 14): RsiR
     avgLoss = (avgLoss * (period - 1) + Math.max(-change, 0)) / period;
   }
 
-  // No down-moves at all: RSI is 100 by definition, and guarding here avoids
-  // a divide-by-zero producing NaN.
-  const value = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
+  // Order matters: a series with no down-moves *and* no up-moves hasn't rallied,
+  // it hasn't moved at all — a suspended, circuit-locked or thinly traded scrip,
+  // all of which occur on the NSE. Testing avgLoss === 0 first would call that
+  // "100, overbought" and paint a dead ticker as a momentum extreme. With no
+  // pressure in either direction the neutral midpoint is the honest reading.
+  // Only once there are genuine gains is a zero avgLoss the textbook RSI 100.
+  const value =
+    avgGain === 0 && avgLoss === 0
+      ? 50
+      : avgLoss === 0
+      ? 100
+      : 100 - 100 / (1 + avgGain / avgLoss);
   if (!Number.isFinite(value)) return null;
 
   return {
@@ -155,7 +164,13 @@ export type MacdReading = {
   macd: number;
   signal: number;
   histogram: number;
-  crossover: "bullish" | "bearish";
+  /**
+   * "neutral" is a real state, not a rounding artefact: when MACD sits exactly
+   * on its signal line there is no crossover to report. A two-state flag has to
+   * round that to one side, and `histogram >= 0` rounds it to "bullish" — which
+   * paints a flat, untraded series green.
+   */
+  crossover: "bullish" | "bearish" | "neutral";
 };
 
 /** MACD(12, 26, 9). */
@@ -183,7 +198,7 @@ export function macd(history: PricePoint[] | null | undefined): MacdReading | nu
     macd: macdValue,
     signal,
     histogram,
-    crossover: histogram >= 0 ? "bullish" : "bearish",
+    crossover: histogram > 0 ? "bullish" : histogram < 0 ? "bearish" : "neutral",
   };
 }
 

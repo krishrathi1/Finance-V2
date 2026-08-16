@@ -22,7 +22,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (newPassword.length < 8 || newPassword.length > 128) {
+    // `typeof` first, matching the register route. Without it a non-string
+    // body value reaches `.length`: a JSON number has none, so `undefined < 8`
+    // and `undefined > 128` are both false and the check passes. bcrypt then
+    // throws on the non-string and the user gets an opaque 500 instead of
+    // being told their password is the wrong length.
+    if (typeof newPassword !== 'string' || newPassword.length < 8 || newPassword.length > 128) {
       return NextResponse.json(
         { detail: 'Password must be between 8 and 128 characters' },
         { status: 400 }

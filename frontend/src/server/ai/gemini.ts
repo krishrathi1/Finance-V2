@@ -118,6 +118,58 @@ function stripJsonFences(text: string): string {
 }
 
 /**
+ * Pull the JSON value out of a model response.
+ *
+ * The prompt asks for JSON and nothing else, and the fence stripper handles the
+ * well-behaved answer. Models routinely disregard both — "Here is the
+ * analysis:" ahead of a fenced block, or "Hope this helps!" after it — and
+ * anchored fence-stripping leaves that prose in place, so `JSON.parse` throws
+ * and a perfectly good response is discarded. Every AI feature here has a
+ * rule-based fallback, so the visible symptom was not an error but the AI
+ * quietly not working.
+ *
+ * Slicing between the outermost braces is what survives that. Scanning for a
+ * balanced close (rather than the last brace in the string) means trailing
+ * prose containing a brace can't extend the slice past the value.
+ */
+export function extractJson(text: string): string | null {
+  const cleaned = stripJsonFences(text);
+  if (!cleaned) return null;
+
+  const start = cleaned.search(/[{[]/);
+  if (start === -1) return null;
+
+  const opener = cleaned[start];
+  const closer = opener === "{" ? "}" : "]";
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let index = start; index < cleaned.length; index += 1) {
+    const char = cleaned[index];
+
+    // Braces inside a string literal are data, not structure.
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (char === "\\") escaped = true;
+      else if (char === '"') inString = false;
+      continue;
+    }
+    if (char === '"') {
+      inString = true;
+      continue;
+    }
+    if (char === opener) depth += 1;
+    else if (char === closer) {
+      depth -= 1;
+      if (depth === 0) return cleaned.slice(start, index + 1);
+    }
+  }
+
+  return null;
+}
+
+/**
  * Generate JSON from a prompt. Appends a JSON-only instruction, strips markdown
  * code fences, and JSON.parses the result. Returns null on any failure. Never
  * throws.
@@ -129,9 +181,13 @@ export async function generateJson<T>(
   const jsonPrompt = `${prompt}\n\nReturn ONLY valid JSON. No markdown, no code fences, no commentary.`;
   const raw = await generateText(jsonPrompt, opts);
   if (!raw) return null;
+  const candidate = extractJson(raw);
+  if (!candidate) {
+    console.warn("[gemini] no JSON value found in response");
+    return null;
+  }
   try {
-    const cleaned = stripJsonFences(raw);
-    return JSON.parse(cleaned) as T;
+    return JSON.parse(candidate) as T;
   } catch (err) {
     console.warn(`[gemini] JSON parse failed: ${String(err)}`);
     return null;

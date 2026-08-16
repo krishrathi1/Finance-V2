@@ -62,18 +62,38 @@ const MONTHS: Record<string, number> = {
   jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11,
 };
 
+/**
+ * Sortable rank for a statement period, in months.
+ *
+ * Both branches must return the *same* unit. They previously did not: a named
+ * month ("Mar 2024") produced `year * 12 + month` (~24,290) while an ISO date
+ * ("2023-03-31") fell through to `Date.parse` (~1.68e12). Sorting a list
+ * containing both then ranked every ISO-dated row above every named-month row
+ * regardless of date — so a provider mixing the two formats (common when
+ * annual and quarterly rows come from different upstreams) had its *oldest*
+ * balance sheet selected as "latest", and the Altman Z-Score computed from it
+ * reported distress for a healthy company.
+ *
+ * Month precision is deliberate: statement rows are annual or quarterly, and
+ * it is the granularity the named-month branch can offer anyway. Ties keep
+ * their input order, since `Array.prototype.sort` is stable.
+ */
 function periodKey(p: unknown): number {
   if (p == null) return -Infinity;
   const s = String(p).trim().toLowerCase();
   const m = s.match(/([a-z]{3})[^0-9]*(\d{2,4})/);
-  if (m) {
-    const mon = MONTHS[m[1]] ?? 0;
+  // An unrecognised three-letter run isn't a month; fall through to Date.parse
+  // rather than defaulting it to January and inventing an ordering.
+  if (m && MONTHS[m[1]] !== undefined) {
+    const mon = MONTHS[m[1]];
     let yr = parseInt(m[2], 10);
     if (yr < 100) yr += 2000;
     return yr * 12 + mon;
   }
   const d = Date.parse(s);
-  return Number.isNaN(d) ? -Infinity : d;
+  if (Number.isNaN(d)) return -Infinity;
+  const parsed = new Date(d);
+  return parsed.getUTCFullYear() * 12 + parsed.getUTCMonth();
 }
 
 function num(x: unknown): number | null {

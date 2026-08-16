@@ -135,10 +135,17 @@ export function calendarYearReturns(history: PricePoint[] | null | undefined): C
 
     const firstMonth = new Date(bucket[0].time).getUTCMonth();
     const lastMonth = new Date(bucket[bucket.length - 1].time).getUTCMonth();
+    // With a previous year to open from, the figure is a December-to-December
+    // point-to-point return, so it covers the full year regardless of when this
+    // year's own rows begin — a data gap through January says nothing about
+    // whether the *return* spans the year. Only the first year in the window,
+    // which has to open from its own earliest row, depends on starting in
+    // January. Requiring firstMonth === 0 in both cases mislabelled a complete
+    // year as partial whenever the provider's coverage started late.
     out.push({
       year,
       percent,
-      complete: Boolean(previousYear) && firstMonth === 0 ? lastMonth === 11 : firstMonth === 0 && lastMonth === 11,
+      complete: previousYear ? lastMonth === 11 : firstMonth === 0 && lastMonth === 11,
     });
   }
 
@@ -183,11 +190,18 @@ export function downsideRisk(
 
   const sorted = [...returns].sort((a, b) => a - b);
   const cutoff = Math.max(0, Math.floor(sorted.length * 0.05) - 1);
-  const valueAtRisk95 = Math.abs(sorted[cutoff]) * 100;
+
+  // Both figures are reported as positive magnitudes of loss and rendered with
+  // a hardcoded minus sign. On a strong uptrend even the 5th-percentile day can
+  // be a gain, and Math.abs() would turn that gain into an identically-sized
+  // "loss" — the one input where the sign carries all the meaning. Clamping at
+  // zero instead says what is true: no loss at this confidence level.
+  const lossOf = (value: number) => Math.max(0, -value) * 100;
+
+  const valueAtRisk95 = lossOf(sorted[cutoff]);
 
   const tail = sorted.slice(0, cutoff + 1);
-  const expectedShortfall95 =
-    Math.abs(tail.reduce((sum, value) => sum + value, 0) / tail.length) * 100;
+  const expectedShortfall95 = lossOf(tail.reduce((sum, value) => sum + value, 0) / tail.length);
 
   const negatives = returns.filter((value) => value < 0);
   if (!negatives.length) return null;

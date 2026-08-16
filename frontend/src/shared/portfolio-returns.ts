@@ -245,7 +245,23 @@ const XIRR_MAX_ITERATIONS = 100;
 const XIRR_TOLERANCE = 1e-7;
 /** Rates at or below -100% are meaningless and make the discount term explode. */
 const XIRR_MIN_RATE = -0.9999;
-const XIRR_MAX_RATE = 1e6;
+/**
+ * Starting upper bracket. Deliberately modest, because it is *expanded* rather
+ * than trusted — see `bracketHigh`. A fixed ceiling here is a trap: annualising
+ * a large gain earned over a few weeks produces an astronomically large rate
+ * (doubling in a week annualises to ~10^15), so any constant cap silently
+ * fails to bracket the root for exactly the positions users are most pleased
+ * about.
+ */
+const XIRR_INITIAL_MAX_RATE = 1e6;
+/** Hard stop for the expansion, past which the answer is numerically junk. */
+const XIRR_ABSOLUTE_MAX_RATE = 1e18;
+/**
+ * Below this span, an annualised rate is arithmetic noise rather than
+ * information — a 3% gain over two days annualises to roughly 24,000%. XIRR is
+ * withheld until the history is long enough for the number to mean something.
+ */
+const XIRR_MIN_SPAN_DAYS = 30;
 
 function netPresentValue(flows: CashFlow[], rate: number, epoch: string): number {
   let total = 0;
@@ -265,9 +281,9 @@ function netPresentValue(flows: CashFlow[], rate: number, epoch: string): number
  * same percentage gain. XIRR does not.
  *
  * Returns null rather than a number when the answer would be meaningless —
- * fewer than two flows, or all flows the same sign (money only ever went one
- * way, so there is no return to solve for). Callers hide the metric in that
- * case instead of showing a confident 0%.
+ * fewer than two flows, all flows the same sign (money only ever went one way,
+ * so there is no return to solve for), or a history too short to annualise.
+ * Callers hide the metric in that case instead of showing a confident 0%.
  *
  * Solved by bisection. Newton-Raphson converges faster but diverges on the
  * irregular, sign-alternating flows a real trading history produces, and a
@@ -288,13 +304,30 @@ export function xirr(cashFlows: CashFlow[]): number | null {
     flows[0].date
   );
 
-  let low = XIRR_MIN_RATE;
-  let high = XIRR_MAX_RATE;
-  let npvLow = netPresentValue(flows, low, epoch);
-  let npvHigh = netPresentValue(flows, high, epoch);
+  const latest = flows.reduce(
+    (newest, flow) => (toUtcTime(flow.date) > toUtcTime(newest) ? flow.date : newest),
+    flows[0].date
+  );
+  if (daysBetween(epoch, latest) < XIRR_MIN_SPAN_DAYS) return null;
 
-  // No sign change across the bracket means no root inside it.
-  if (!Number.isFinite(npvLow) || !Number.isFinite(npvHigh)) return null;
+  let low = XIRR_MIN_RATE;
+  let npvLow = netPresentValue(flows, low, epoch);
+  if (!Number.isFinite(npvLow)) return null;
+
+  // Widen the upper bracket until it straddles the root instead of assuming a
+  // single ceiling covers every history. Without this, a position that gained
+  // sharply over a short window has its true rate sitting outside the bracket,
+  // no sign change is detected, and a perfectly well-defined XIRR is reported
+  // as "not computable" — the metric vanishing precisely when it is largest.
+  let high = XIRR_INITIAL_MAX_RATE;
+  let npvHigh = netPresentValue(flows, high, epoch);
+  while (Number.isFinite(npvHigh) && npvLow * npvHigh > 0 && high < XIRR_ABSOLUTE_MAX_RATE) {
+    high *= 1e3;
+    npvHigh = netPresentValue(flows, high, epoch);
+  }
+
+  // No sign change even across the widened bracket means no root to find.
+  if (!Number.isFinite(npvHigh)) return null;
   if (npvLow * npvHigh > 0) return null;
 
   for (let iteration = 0; iteration < XIRR_MAX_ITERATIONS; iteration += 1) {

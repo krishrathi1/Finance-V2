@@ -24,6 +24,11 @@ import { PriceRiskProfile } from "@/components/sections/price-risk-profile";
 import { PeerValuation } from "@/components/sections/peer-valuation";
 import { QualityScore } from "@/components/sections/quality-score";
 import { ReturnAnalysis } from "@/components/sections/return-analysis";
+import { RollingReturns } from "@/components/sections/rolling-returns";
+import { SipSimulator } from "@/components/sections/sip-simulator";
+import { UnderwaterHistory } from "@/components/sections/underwater-history";
+import { DividendTrackRecord } from "@/components/sections/dividend-track-record";
+import { ShareholdingTrend } from "@/components/sections/shareholding-trend";
 import { StatementQuality } from "@/components/sections/statement-quality";
 import { TechnicalAnalysis } from "@/components/sections/technical-analysis";
 import { SmartScore } from "@/components/sections/smart-score";
@@ -198,6 +203,29 @@ export function LiveStockDetails({ initialData, symbol, exchange }: { initialDat
         <div className="grid gap-4 xl:grid-cols-2">
           <ReturnAnalysis history={data.price?.history} />
           <TechnicalAnalysis history={data.price?.history} />
+        </div>
+
+        {/* Sits right after the single-observation trailing returns above: this
+            pair answers the same question across every start date, and for the
+            staggered entry most retail money actually uses. */}
+        <div className="grid gap-4 xl:grid-cols-2">
+          <RollingReturns history={data.price?.history} />
+          <SipSimulator history={data.price?.history} />
+        </div>
+
+        {/* The "how long" half of the drawdown question the Risk Profile card
+            above answers with "how bad". */}
+        <UnderwaterHistory history={data.price?.history} />
+
+        {/* Both read data the page already fetches but only ever listed:
+            the dividend table becomes a track record, and the shareholding
+            quarter-picker becomes a direction of travel. */}
+        <div className="grid gap-4 xl:grid-cols-2">
+          <DividendTrackRecord
+            dividends={data.corporateActions?.dividends}
+            currentPrice={data.price?.cmp}
+          />
+          <ShareholdingTrend history={data.shareholding?.history} />
         </div>
 
         <section id="swot">

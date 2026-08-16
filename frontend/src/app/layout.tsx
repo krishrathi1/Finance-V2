@@ -307,9 +307,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
                 <div className="mt-8 flex flex-col items-start justify-between gap-3 border-t border-border/30 pt-5 sm:flex-row sm:items-center">
                   <div className="flex flex-col gap-2">
-                    <p className="text-[11px] text-muted/60">
-                      Data sourced from NSE, BSE and public APIs. Not investment advice.
-                    </p>
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
                       {[
                         { href: "/disclaimer", label: "Disclaimer" },

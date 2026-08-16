@@ -299,17 +299,21 @@ export async function fetchReturnsProjection(symbol: string, amount: number, cag
   return res.json();
 }
 
+/**
+ * The ticker endpoint bounds each request to 50 symbols so one call can't fan
+ * out to hundreds of upstream quotes. That bound is deliberate and stays — but
+ * it is a *per-request* limit, not a limit on what a user may hold. Sending a
+ * longer list in one request had the server silently keep the first 50 and
+ * discard the rest, so a portfolio of 60 stocks priced 50 and left the other
+ * 10 blank while the total quietly understated itself. Callers pass whole
+ * portfolios (up to 500 holdings), watchlists and alert lists, so the split
+ * belongs here.
+ */
+export const TICKER_SYMBOLS_PER_REQUEST = 50;
+
 export async function fetchTickerTape(symbols: string[] = [], options: { force?: boolean } = {}) {
   type TickerTapeRow = { symbol: string; cmp: number; change: number; changePercent: number; exchange?: "NSE" | "BSE" };
   const force = Boolean(options.force);
-  const queryParts: string[] = [];
-  if (symbols.length) {
-    queryParts.push(`symbols=${encodeURIComponent(symbols.join(","))}`);
-  }
-  if (force) {
-    queryParts.push("refresh=true");
-  }
-  const query = queryParts.length ? `?${queryParts.join("&")}` : "";
   const key = `ticker:${symbols.join(",") || "default"}`;
   const fresh = force
     ? null
@@ -317,17 +321,50 @@ export async function fetchTickerTape(symbols: string[] = [], options: { force?:
   if (fresh) return fresh;
 
   const stale = getStaleCache<TickerTapeRow[]>(key);
+
+  const batches: string[][] = [];
+  for (let index = 0; index < symbols.length; index += TICKER_SYMBOLS_PER_REQUEST) {
+    batches.push(symbols.slice(index, index + TICKER_SYMBOLS_PER_REQUEST));
+  }
+  // No symbols means "the whole market snapshot", which is a single call with
+  // its own much longer budget — not a batch of zero.
+  if (batches.length === 0) batches.push([]);
+
+  const requestUrl = (batch: string[]) => {
+    const queryParts: string[] = [];
+    if (batch.length) queryParts.push(`symbols=${encodeURIComponent(batch.join(","))}`);
+    if (force) queryParts.push("refresh=true");
+    return getApiUrl(`/ticker${queryParts.length ? `?${queryParts.join("&")}` : ""}`);
+  };
+
   return dedupeInFlight(key, async () => {
     try {
       const timeoutMs = symbols.length ? (force ? 7000 : 4500) : (force ? 35_000 : 25_000);
-      const res = await fetchWithTimeout(getApiUrl(`/ticker${query}`), { cache: "no-store" }, timeoutMs);
-      if (!res.ok) {
-        throw new Error(`Ticker request failed: ${res.status}`);
+
+      const results = await Promise.allSettled(
+        batches.map(async (batch) => {
+          const res = await fetchWithTimeout(requestUrl(batch), { cache: "no-store" }, timeoutMs);
+          if (!res.ok) throw new Error(`Ticker request failed: ${res.status}`);
+          const payload = await res.json();
+          return (payload.data || []) as TickerTapeRow[];
+        })
+      );
+
+      // A batch that fails costs its own symbols their price, not everyone
+      // else's — partial pricing beats a blank portfolio. Only a total failure
+      // falls through to the stale copy.
+      const succeeded = results.filter(
+        (result): result is PromiseFulfilledResult<TickerTapeRow[]> => result.status === "fulfilled"
+      );
+      if (!succeeded.length) {
+        throw results[0]?.status === "rejected" ? results[0].reason : new Error("Ticker request failed");
       }
-      const payload = await res.json();
-      const rows = (payload.data || []) as TickerTapeRow[];
+
+      const rows = succeeded.flatMap((result) => result.value);
       if (!rows.length && stale?.length) return stale;
-      setCache(key, rows);
+      // Only cache a complete answer. Caching a partial one would pin the
+      // missing symbols blank for the whole TTL.
+      if (succeeded.length === batches.length) setCache(key, rows);
       return rows;
     } catch (err) {
       if (stale) return stale;

@@ -239,7 +239,29 @@ export function leverageTrend(statements: StatementInput): TrendSeries | null {
 }
 
 /**
+ * Pull a four-digit year out of a period label.
+ *
+ * Providers label periods every which way — "2023", "FY2023", "2023-03-31",
+ * "Mar 2023" — so the year is extracted rather than assumed. Bounded to a
+ * plausible range so an identifier that merely contains four digits can't be
+ * mistaken for a year.
+ */
+function periodYear(period: string): number | null {
+  const match = String(period).match(/(19|20)\d{2}/);
+  if (!match) return null;
+  const year = Number(match[0]);
+  return year >= 1900 && year <= 2200 ? year : null;
+}
+
+/**
  * Compound annual growth of a statement line across the reported periods.
+ *
+ * The exponent is the elapsed time between the first and last usable period,
+ * taken from the period labels — *not* the number of rows that survived
+ * filtering. Those differ whenever a provider omits a line in one year: a gap
+ * in the middle of 2019-2023 leaves four rows, and treating that as three
+ * elapsed years compounds a four-year gain over three, overstating the CAGR.
+ * The row count is only the fallback for labels with no parseable year.
  *
  * Returns null when the starting value is non-positive: a CAGR out of a loss
  * or a zero base is arithmetically undefined, and providers do report both.
@@ -258,8 +280,14 @@ export function statementCagr(
   const last = values[values.length - 1].value;
   if (first <= 0 || last <= 0) return null;
 
-  const years = values.length - 1;
-  const cagr = (Math.pow(last / first, 1 / years) - 1) * 100;
+  const firstYear = periodYear(values[0].period);
+  const lastYear = periodYear(values[values.length - 1].period);
+  const spanYears =
+    firstYear !== null && lastYear !== null && lastYear > firstYear
+      ? lastYear - firstYear
+      : values.length - 1;
+
+  const cagr = (Math.pow(last / first, 1 / spanYears) - 1) * 100;
   return Number.isFinite(cagr) ? cagr : null;
 }
 

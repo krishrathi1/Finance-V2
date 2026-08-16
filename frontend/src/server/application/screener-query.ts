@@ -54,19 +54,38 @@ function resolveField(raw: string): string | null {
 }
 
 /**
- * Parse a value, accepting the shorthand Indian users actually type:
- * `50000`, `1.5`, `2cr`, `500k`, `1.2l`. Crore/lakh suffixes are interpreted
- * against the field's own unit, so they are only applied where the field is
- * already denominated in crore (market cap) — elsewhere they would be
- * misleading, so a suffix there is treated as unparseable.
+ * Fields already denominated in crore. A crore/lakh suffix is only meaningful
+ * against these, because the conversion is to the field's own unit.
  */
-function parseValue(raw: string): number | null {
+const CRORE_DENOMINATED_FIELDS = new Set(["marketCap"]);
+
+/**
+ * Parse a value, accepting the shorthand Indian users actually type:
+ * `50000`, `1.5`, `2cr`, `500k`, `1.2l`.
+ *
+ * The field matters, which is why it is a parameter. `cr`/`lakh` translate
+ * into the field's own unit, so they only mean anything on a field already
+ * expressed in crore. Applying them blindly turned `price > 2l` into
+ * `price > 0.02` — a filter every stock passes, presented as if it had been
+ * understood. Such a suffix is now rejected, which routes the fragment into
+ * `unparsed` and lets the UI say the clause was ignored.
+ *
+ * `k` is exempt: it is a plain ×1000 that assumes nothing about the unit.
+ */
+function parseValue(raw: string, field: string): number | null {
   const text = raw.trim().toLowerCase().replace(/,/g, "");
   const match = text.match(/^(-?\d+(?:\.\d+)?)\s*(cr|crore|l|lakh|k)?$/);
   if (!match) return null;
   const magnitude = Number(match[1]);
   if (!Number.isFinite(magnitude)) return null;
-  switch (match[2]) {
+
+  const suffix = match[2];
+  if ((suffix === "cr" || suffix === "crore" || suffix === "l" || suffix === "lakh") &&
+      !CRORE_DENOMINATED_FIELDS.has(field)) {
+    return null;
+  }
+
+  switch (suffix) {
     case "k":
       return magnitude * 1_000;
     case "l":
@@ -102,7 +121,9 @@ export function parseScreenerQuery(input: string): ParsedQuery {
     }
     const index = fragment.indexOf(operator);
     const field = resolveField(fragment.slice(0, index));
-    const value = parseValue(fragment.slice(index + operator.length));
+    // Field first: a crore/lakh suffix can only be validated against the unit
+    // the field is denominated in.
+    const value = field === null ? null : parseValue(fragment.slice(index + operator.length), field);
     if (field === null || value === null) {
       unparsed.push(fragment);
       continue;

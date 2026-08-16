@@ -83,7 +83,13 @@ export function maxDrawdown(history: PricePoint[] | null | undefined): DrawdownS
       continue;
     }
     const decline = ((point.close - peak.close) / peak.close) * 100;
-    if (worst === null || decline < worst.percent) {
+    // `decline < 0` matters as much as the comparison against `worst`. A series
+    // that never falls below its running peak (flat, or monotonically rising)
+    // otherwise records a 0% "drawdown" complete with peak and trough dates,
+    // which the UI renders as a real statistic. Requiring an actual decline
+    // makes both no-decline shapes return null alike, rather than a flat series
+    // reporting a drawdown while a rising one reports none.
+    if (decline < 0 && (worst === null || decline < worst.percent)) {
       troughIndex = index;
       worst = {
         percent: decline,
