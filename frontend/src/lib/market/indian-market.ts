@@ -137,9 +137,21 @@ function normalizeKey(value: string) {
     .replace(/[^A-Z0-9&.-]+/g, " ");
 }
 
-function normalizeSymbol(value: string) {
-  return normalizeKey(value)
-    .replace(/^(NSE|BSE)[:.]/i, "")
+export function normalizeSymbol(value: string) {
+  // The exchange prefix is stripped from the RAW value, before normalizeKey
+  // runs. normalizeKey replaces ':' with a space (it is not in its allowed
+  // character class), so a regex hunting for "NSE:" afterwards could never
+  // match — "NSE:TCS" survived as "NSETCS" and resolved to no security at
+  // all, leaving the holding permanently unpriced. The "NSE.TCS" form only
+  // ever worked by accident, because '.' happens to be an allowed character.
+  //
+  // The separator is required rather than optional: NSEIT is a genuine NSE
+  // listing, and an optional separator would strip it down to "IT".
+  const withoutExchange = String(value || "")
+    .trim()
+    .replace(/^(NSE|BSE)\s*[:.]\s*/i, "");
+
+  return normalizeKey(withoutExchange)
     .replace(/\.(NS|BO)$/i, "")
     .replace(/\s+/g, "")
     .trim();
