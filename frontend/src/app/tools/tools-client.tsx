@@ -59,6 +59,7 @@ import { TAX_ESTIMATE_DISCLAIMER } from "@/shared/capital-gains";
 import { todayIstDateKey } from "@/shared/market-status";
 import { coastFire, timeToGoal } from "@/shared/goal-tools";
 import { fdVsEquity } from "@/shared/fd-vs-equity";
+import { npsProjection } from "@/shared/nps-tools";
 import {
   coveredCall,
   impliedLeverage,
@@ -2367,6 +2368,112 @@ function FdVsEquityCalculator() {
   );
 }
 
+// ─── NPS ─────────────────────────────────────────────────────────────────────
+
+function NpsCalculator() {
+  const [age, setAge] = useState("30");
+  const [monthly, setMonthly] = useState("10000");
+  const [rate, setRate] = useState("10");
+  const [annuityShare, setAnnuityShare] = useState("40");
+  const [annuityRate, setAnnuityRate] = useState("6");
+  const [slab, setSlab] = useState("30");
+
+  const result = useMemo(
+    () =>
+      npsProjection({
+        currentAge: parse(age),
+        monthlyContribution: parse(monthly),
+        expectedReturnPercent: parse(rate),
+        annuitySharePercent: parse(annuityShare),
+        annuityRatePercent: parse(annuityRate),
+        slabPercent: parse(slab),
+      }),
+    [age, monthly, rate, annuityShare, annuityRate, slab]
+  );
+
+  return (
+    <Card className="p-4">
+      <div className="flex items-center gap-2">
+        <ShieldCheck className="h-4 w-4 text-accent" />
+        <h2 className="text-base font-semibold">NPS Projection</h2>
+      </div>
+      <p className="mt-1 text-[11px] leading-4 text-muted">
+        Not a generic retirement pot: at least 40% of the corpus must buy an annuity and cannot be
+        withdrawn, and the pension it pays is taxable income.
+      </p>
+
+      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+        <Field label="Your age" value={age} onChange={setAge} />
+        <Field label="Monthly contribution" value={monthly} onChange={setMonthly} suffix="₹" />
+        <Field label="Expected return" value={rate} onChange={setRate} suffix="%/yr" />
+        <Field label="Annuity share" value={annuityShare} onChange={setAnnuityShare} suffix="%" />
+        <Field label="Annuity rate" value={annuityRate} onChange={setAnnuityRate} suffix="%/yr" />
+        <Field label="Your slab" value={slab} onChange={setSlab} suffix="%" />
+      </div>
+
+      {result ? (
+        <>
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <Stat
+              label="Corpus at 60"
+              value={rupees(result.corpusAtRetirement)}
+              tone="good"
+            />
+            <Stat label="You'd put in" value={rupees(result.totalContributed)} />
+            <Stat label="Growth does" value={rupees(result.wealthGained)} />
+          </div>
+
+          {/* The split is the whole point — a generic calculator shows only the
+              corpus and lets the reader assume all of it is theirs to spend. */}
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            <div className="rounded-lg border border-border/40 bg-bg/40 px-3 py-2.5">
+              <p className="text-[10px] text-muted">Lump sum, tax-free</p>
+              <p className="text-sm font-bold tabular-nums text-success">
+                {rupees(result.lumpSum)}
+              </p>
+              <p className="text-[10px] leading-3 text-muted/70">yours to withdraw</p>
+            </div>
+            <div className="rounded-lg border border-border/40 bg-bg/40 px-3 py-2.5">
+              <p className="text-[10px] text-muted">Locked into annuity</p>
+              <p className="text-sm font-bold tabular-nums text-amber-500">
+                {rupees(result.annuityCorpus)}
+              </p>
+              <p className="text-[10px] leading-3 text-muted/70">
+                {result.appliedAnnuitySharePercent}% — cannot be withdrawn
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            <Stat label="Pension / month" value={rupees(result.monthlyPensionGross)} />
+            <Stat
+              label="After your slab"
+              value={rupees(result.monthlyPensionPostTax)}
+              tone="bad"
+            />
+          </div>
+
+          {result.annuityShareRaised && (
+            <p className="mt-2 flex items-start gap-1.5 text-[10px] leading-4 text-amber-500">
+              <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+              Raised to the statutory 40% minimum — NPS does not permit annuitising less.
+            </p>
+          )}
+          <p className="mt-2 text-[10px] leading-4 text-muted/60">
+            Contributions run to 60, the scheme&apos;s vesting age. The pension depends on annuity
+            rates available then, not on the return that built the corpus — and unlike the lump
+            sum, it is taxed as income every year it arrives.
+          </p>
+        </>
+      ) : (
+        <p className="mt-3 rounded-lg border border-border/40 bg-bg/40 px-3 py-2 text-[11px] text-muted">
+          Enter an age under 60 — past vesting age there is no accumulation phase left to project.
+        </p>
+      )}
+    </Card>
+  );
+}
+
 /**
  * The registry every rendering path reads from.
  *
@@ -2570,6 +2677,13 @@ const CALCULATORS: CalculatorEntry[] = [
     group: "planning",
     keywords: "emi loan instalment interest home loan against securities tenure",
     Component: EmiCalculator,
+  },
+  {
+    key: "nps",
+    title: "NPS Projection",
+    group: "planning",
+    keywords: "nps national pension system annuity corpus tier 1 retirement government pension vesting",
+    Component: NpsCalculator,
   },
   {
     key: "retirement",
