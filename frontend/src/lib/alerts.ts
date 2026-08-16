@@ -243,8 +243,15 @@ export function checkAlerts(
   const alerts = read();
   const triggered: Array<PriceAlert & { currentPrice: number }> = [];
   for (const alert of alerts) {
-    const currentPrice = prices[alert.symbol.toUpperCase()];
-    if (currentPrice === undefined) continue;
+    const quoted = Number(prices[alert.symbol.toUpperCase()]);
+    // Only `undefined` used to be rejected, which let a zero through as a real
+    // quote — and zero satisfies every "below" target there is, so a suspended
+    // or badly-parsed scrip lit up every downside alert the user had on it.
+    // The server's own evaluation (server/domain/alerts.ts) already demanded a
+    // finite positive price; this fallback path did not, so the two disagreed
+    // about the same alert depending on whether the user was signed in.
+    if (!Number.isFinite(quoted) || quoted <= 0) continue;
+    const currentPrice = quoted;
     const hit =
       alert.condition === "above"
         ? currentPrice >= alert.targetPrice

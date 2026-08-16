@@ -43,7 +43,12 @@ export default function AlertsPage() {
     try {
       const tickers = await fetchTickerTape(symbols, { force });
       for (const t of tickers) {
-        priceMap[t.symbol.toUpperCase()] = t.cmp;
+        // Zero, negative and NaN quotes are dropped here rather than stored:
+        // a zero satisfies every "below" target, and NaN silently loses every
+        // comparison. Either one turns a data glitch into a wrong verdict.
+        const price = Number(t.cmp);
+        if (!Number.isFinite(price) || price <= 0) continue;
+        priceMap[t.symbol.toUpperCase()] = price;
       }
     } catch {
       // ignore fetch errors — prices stay null
@@ -56,7 +61,11 @@ export default function AlertsPage() {
       : new Set(checkAlerts(priceMap).map((t) => t.id));
     const enriched: AlertRow[] = alerts.map((a) => ({
       ...a,
-      currentPrice: priceMap[a.symbol] ?? null,
+      // Upper-cased to match how priceMap is keyed — and how checkAlerts
+      // already looks it up. Reading it raw here meant a lower-cased alert
+      // symbol showed no price on screen while still being evaluated against
+      // one, so the badge and the number disagreed.
+      currentPrice: priceMap[a.symbol.toUpperCase()] ?? null,
       triggered: triggeredIds.has(a.id),
     }));
     // Sort: triggered first

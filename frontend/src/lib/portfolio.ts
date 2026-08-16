@@ -255,14 +255,46 @@ export function hasHolding(symbol: string): boolean {
   return getHoldings().some((h) => h.symbol === symbol.toUpperCase());
 }
 
+/**
+ * A quote we are willing to value a position at, or null.
+ *
+ * Zero is the dangerous one and the reason this exists. `prices[symbol] ?? null`
+ * only rejects null and undefined, so a provider returning `cmp: 0` — a
+ * suspended scrip, a pre-open row, a bad parse — sailed through as a real
+ * price and valued the holding at nothing, reporting a clean −100% on a
+ * position whose shares still exist. NaN was worse: one poisoned holding
+ * turned every total on the page into NaN, because addition propagates it.
+ *
+ * Treating all of these as "no price yet" routes them into the path the UI
+ * already handles well — the row shows a dash and drops out of the totals,
+ * which is honest, rather than asserting a loss that did not happen.
+ */
+function usablePrice(value: unknown): number | null {
+  const price = Number(value);
+  return Number.isFinite(price) && price > 0 ? price : null;
+}
+
+/** Finite or zero — keeps one corrupt row from poisoning a whole total. */
+const finiteOrZero = (value: number): number => (Number.isFinite(value) ? value : 0);
+
 export function enrichHoldings(
   holdings: Holding[],
   prices: Record<string, number>
 ): HoldingWithValue[] {
+  // Indexed case-insensitively rather than read by exact key. Holdings are
+  // stored upper-cased, but a row that predates that rule (or one a user
+  // hand-edited in localStorage) would otherwise never match its own price
+  // and sit permanently unvalued while the quote was sitting right there.
+  const bySymbol = new Map<string, number>();
+  for (const [symbol, value] of Object.entries(prices ?? {})) {
+    const price = usablePrice(value);
+    if (price !== null) bySymbol.set(String(symbol).trim().toUpperCase(), price);
+  }
+
   return holdings.map((h) => {
-    const currentPrice = prices[h.symbol] ?? null;
-    const investedValue = h.quantity * h.buyPrice;
-    const currentValue = currentPrice !== null ? h.quantity * currentPrice : null;
+    const currentPrice = bySymbol.get(String(h.symbol).trim().toUpperCase()) ?? null;
+    const investedValue = finiteOrZero(h.quantity * h.buyPrice);
+    const currentValue = currentPrice !== null ? finiteOrZero(h.quantity * currentPrice) : null;
     const pnl = currentValue !== null ? currentValue - investedValue : null;
     const pnlPercent = pnl !== null && investedValue > 0 ? (pnl / investedValue) * 100 : null;
     return { ...h, currentPrice, currentValue, investedValue, pnl, pnlPercent };
@@ -270,10 +302,10 @@ export function enrichHoldings(
 }
 
 export function portfolioSummary(enriched: HoldingWithValue[]) {
-  const totalInvested = enriched.reduce((s, h) => s + h.investedValue, 0);
+  const totalInvested = enriched.reduce((s, h) => s + finiteOrZero(h.investedValue), 0);
   const knownValue = enriched.filter((h) => h.currentValue !== null);
-  const totalCurrentValue = knownValue.reduce((s, h) => s + (h.currentValue ?? 0), 0);
-  const partialInvested = knownValue.reduce((s, h) => s + h.investedValue, 0);
+  const totalCurrentValue = knownValue.reduce((s, h) => s + finiteOrZero(h.currentValue ?? 0), 0);
+  const partialInvested = knownValue.reduce((s, h) => s + finiteOrZero(h.investedValue), 0);
   const totalPnl = totalCurrentValue - partialInvested;
   const totalPnlPercent = partialInvested > 0 ? (totalPnl / partialInvested) * 100 : 0;
   return { totalInvested, totalCurrentValue, totalPnl, totalPnlPercent, knownCount: knownValue.length };
