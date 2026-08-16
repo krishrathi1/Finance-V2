@@ -18,6 +18,7 @@ services:
       retries: 12
 
   frontend:
+    image: ffa-frontend-prod:latest
     build:
       context: ./frontend
       args:

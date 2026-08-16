@@ -3,6 +3,14 @@ import { fileURLToPath } from "node:url";
 const stripSourcemapLoader = fileURLToPath(new URL("./loaders/strip-sourcemap-url-loader.cjs", import.meta.url));
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Emit a self-contained server bundle at .next/standalone, with only the
+  // node_modules actually reached by the traced imports. The Docker image
+  // copies that instead of the full dependency tree, which is the difference
+  // between shipping a ~1.5 GB image and a ~350 MB one — and a smaller image
+  // is the whole point when it has to be handed to someone else.
+  //
+  // This is additive: `next start` and `next dev` are unaffected.
+  output: "standalone",
   experimental: {
     typedRoutes: false
   },

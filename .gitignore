@@ -47,3 +47,9 @@ scratch/
 project/
 frontend/scratch/
 Untitled.md
+
+# Exported Docker image tarballs — 56 MB binaries, rebuilt on demand.
+share/
+
+# Saved Docker images — large binaries, rebuilt with `docker save`.
+*.tar
