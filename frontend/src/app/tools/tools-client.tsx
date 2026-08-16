@@ -40,6 +40,7 @@ import {
   Hourglass,
   Sailboat,
   Search,
+  Vault,
 } from "lucide-react";
 
 import { Card } from "@/components/ui/card";
@@ -57,6 +58,7 @@ import { estimateTradeTax } from "@/shared/single-trade-tax";
 import { TAX_ESTIMATE_DISCLAIMER } from "@/shared/capital-gains";
 import { todayIstDateKey } from "@/shared/market-status";
 import { coastFire, timeToGoal } from "@/shared/goal-tools";
+import { fdVsEquity } from "@/shared/fd-vs-equity";
 import {
   coveredCall,
   impliedLeverage,
@@ -2236,6 +2238,135 @@ const GROUPS = [
 
 type GroupKey = (typeof GROUPS)[number]["key"];
 
+// ─── FD vs Equity ────────────────────────────────────────────────────────────
+
+const SLABS = [0, 5, 20, 30];
+
+function FdVsEquityCalculator() {
+  const [amount, setAmount] = useState("1000000");
+  const [years, setYears] = useState("5");
+  const [fdRate, setFdRate] = useState("7");
+  const [equityRate, setEquityRate] = useState("12");
+  const [slab, setSlab] = useState("30");
+
+  const result = useMemo(
+    () =>
+      fdVsEquity({
+        amount: parse(amount),
+        years: parse(years),
+        fdRatePercent: parse(fdRate),
+        equityReturnPercent: parse(equityRate),
+        slabPercent: parse(slab),
+      }),
+    [amount, years, fdRate, equityRate, slab]
+  );
+
+  return (
+    <Card className="p-4">
+      <div className="flex items-center gap-2">
+        <Vault className="h-4 w-4 text-accent" />
+        <h2 className="text-base font-semibold">FD vs Equity (after tax)</h2>
+      </div>
+      <p className="mt-1 text-[11px] leading-4 text-muted">
+        The comparison is nearly always published before tax, which flatters the deposit. FD
+        interest is taxed every year at your slab; equity is taxed once on sale, at a lower rate,
+        after an annual exemption.
+      </p>
+
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <Field label="Amount" value={amount} onChange={setAmount} suffix="₹" />
+        <Field label="Years" value={years} onChange={setYears} />
+        <Field label="FD rate" value={fdRate} onChange={setFdRate} suffix="%/yr" />
+        <Field label="Equity return" value={equityRate} onChange={setEquityRate} suffix="%/yr" />
+      </div>
+
+      <div className="mt-2">
+        <p className="mb-1 text-[11px] font-medium text-muted">Your income-tax slab</p>
+        <div className="flex flex-wrap gap-1.5">
+          {SLABS.map((option) => (
+            <button
+              key={option}
+              type="button"
+              aria-pressed={parse(slab) === option}
+              onClick={() => setSlab(String(option))}
+              className={`rounded-lg border px-2.5 py-1 text-[11px] font-semibold transition ${
+                parse(slab) === option
+                  ? "border-accent/40 bg-accent/15 text-accent"
+                  : "border-border/50 bg-bg/40 text-muted hover:border-accent/30"
+              }`}
+            >
+              {option}%
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {result ? (
+        <>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <div className="rounded-lg border border-border/40 bg-bg/40 px-3 py-2.5">
+              <p className="text-[10px] text-muted">Fixed deposit</p>
+              <p
+                className={`text-sm font-bold tabular-nums ${
+                  result.equityWins ? "" : "text-success"
+                }`}
+              >
+                {rupees(result.fd.postTaxValue)}
+              </p>
+              <p className="text-[10px] leading-3 text-muted/70">
+                {result.fd.effectiveAnnualPercent.toFixed(2)}% after tax
+              </p>
+            </div>
+            <div className="rounded-lg border border-border/40 bg-bg/40 px-3 py-2.5">
+              <p className="text-[10px] text-muted">Equity</p>
+              <p
+                className={`text-sm font-bold tabular-nums ${
+                  result.equityWins ? "text-success" : ""
+                }`}
+              >
+                {rupees(result.equity.postTaxValue)}
+              </p>
+              <p className="text-[10px] leading-3 text-muted/70">
+                {result.equity.effectiveAnnualPercent.toFixed(2)}% after tax
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <Stat label="FD tax paid" value={rupees(result.fd.taxPaid)} tone="bad" />
+            <Stat label="Equity tax paid" value={rupees(result.equity.taxPaid)} tone="bad" />
+            <Stat
+              label={result.equityWins ? "Equity ahead by" : "FD ahead by"}
+              value={rupees(Math.abs(result.difference))}
+              tone={result.equityWins ? "good" : "bad"}
+            />
+          </div>
+
+          <p className="mt-2 text-[10px] leading-4 text-muted/60">
+            The FD compounds at {result.fd.effectiveAnnualPercent.toFixed(2)}%, not{" "}
+            {parse(fdRate)}% — interest is assessable in the year it accrues, so tax is taken
+            before it can compound. Equity taxed at {result.appliedEquityRatePercent}%
+            {result.appliedExemption > 0
+              ? ` after a ₹${result.appliedExemption.toLocaleString("en-IN")} exemption`
+              : " with no exemption"}
+            , plus cess.
+          </p>
+          {!result.longTerm && (
+            <p className="mt-1 flex items-start gap-1.5 text-[10px] leading-4 text-amber-500">
+              <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+              Under a year, so the short-term rate applies and the long-term exemption does not.
+            </p>
+          )}
+        </>
+      ) : (
+        <p className="mt-3 rounded-lg border border-border/40 bg-bg/40 px-3 py-2 text-[11px] text-muted">
+          Enter an amount and a horizon of up to 100 years.
+        </p>
+      )}
+    </Card>
+  );
+}
+
 /**
  * The registry every rendering path reads from.
  *
@@ -2411,6 +2542,13 @@ const CALCULATORS: CalculatorEntry[] = [
     group: "planning",
     keywords: "cagr compound annual growth rate annualised return absolute",
     Component: CagrCalculator,
+  },
+  {
+    key: "fd-vs-equity",
+    title: "FD vs Equity (after tax)",
+    group: "planning",
+    keywords: "fd fixed deposit vs equity after tax post tax slab safe versus risky bank interest comparison",
+    Component: FdVsEquityCalculator,
   },
   {
     key: "rule-of-72",
