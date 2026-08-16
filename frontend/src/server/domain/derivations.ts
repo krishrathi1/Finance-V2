@@ -1326,22 +1326,115 @@ export function backfillQuarterlyFinancials(financials: DashboardData["financial
  */
 const CUE_INVERTERS: Record<string, string[]> = {
   record: ["low", "lows", "loss", "losses", "decline", "declines", "fall", "falls", "drop", "drops"],
+  high: ["cost", "costs", "debt", "risk", "attrition", "inflation"],
 };
 
 function mentionsCue(text: string, cue: string): boolean {
   const inverters = CUE_INVERTERS[cue];
   const suffix = inverters ? `(?!\\s+(?:${inverters.join("|")})\\b)` : "";
-  return new RegExp(`\\b${cue}(?:s|es|ed|ing)?\\b${suffix}`, "i").test(text);
+  // Multi-word cues ("net loss", "order win") are matched as phrases.
+  const body = cue.split(/\s+/).map((word) => `${word}(?:s|es|ed|ing)?`).join("\\s+");
+  return new RegExp(`\\b${body}\\b${suffix}`, "i").test(text);
 }
 
+/**
+ * Weighted sentiment cues.
+ *
+ * The original list held seven words per side, which sounds workable and is
+ * not: Indian market headlines are about order wins, buybacks, SEBI penalties,
+ * auditor resignations and NCLT filings, and almost none of them contain
+ * "bullish" or "bearish". Measured against live APOLLOHOSP headlines, every
+ * single one scored exactly 0.5 — including "wins Rs 5,000 crore order" and
+ * "Q2 net loss widens" — so the badge was decoration rather than information.
+ *
+ * Weights matter as much as coverage. An auditor resigning and a stock being
+ * "under pressure" are not the same news, and a flat +/-1 per hit let a
+ * headline stacking three mild words outrank one naming a fraud.
+ */
+const SENTIMENT_CUES: Array<{ cue: string; weight: number }> = [
+  { cue: "record profit", weight: 3 }, { cue: "order win", weight: 3 },
+  { cue: "buyback", weight: 3 }, { cue: "bonus issue", weight: 3 },
+  { cue: "upgrade", weight: 3 }, { cue: "beat", weight: 3 },
+  { cue: "win", weight: 3 }, { cue: "bag", weight: 3 },
+  { cue: "surge", weight: 3 }, { cue: "rally", weight: 3 },
+  { cue: "jump", weight: 3 }, { cue: "soar", weight: 3 },
+  { cue: "multibagger", weight: 3 }, { cue: "all-time high", weight: 3 },
+
+  { cue: "profit", weight: 2 }, { cue: "growth", weight: 2 },
+  { cue: "dividend", weight: 2 }, { cue: "expansion", weight: 2 },
+  { cue: "acquisition", weight: 2 }, { cue: "approval", weight: 2 },
+  { cue: "contract", weight: 2 }, { cue: "outperform", weight: 2 },
+  { cue: "bullish", weight: 2 }, { cue: "gain", weight: 2 },
+  { cue: "rise", weight: 2 }, { cue: "strong", weight: 2 },
+  { cue: "robust", weight: 2 }, { cue: "record", weight: 2 },
+  { cue: "expand", weight: 2 }, { cue: "launch", weight: 2 },
+  { cue: "partnership", weight: 2 },
+
+  { cue: "improve", weight: 1 }, { cue: "recover", weight: 1 },
+  { cue: "positive", weight: 1 }, { cue: "optimistic", weight: 1 },
+  { cue: "healthy", weight: 1 },
+
+  { cue: "fraud", weight: -4 }, { cue: "scam", weight: -4 },
+  { cue: "insolvency", weight: -4 }, { cue: "nclt", weight: -4 },
+  { cue: "default", weight: -4 }, { cue: "bankruptcy", weight: -4 },
+  { cue: "resign", weight: -4 }, { cue: "resignation", weight: -4 },
+  { cue: "raid", weight: -4 }, { cue: "arrest", weight: -4 },
+  { cue: "delisting", weight: -4 }, { cue: "crash", weight: -4 },
+
+  { cue: "penalty", weight: -3 }, { cue: "fine", weight: -3 },
+  { cue: "probe", weight: -3 }, { cue: "investigation", weight: -3 },
+  { cue: "downgrade", weight: -3 }, { cue: "net loss", weight: -3 },
+  { cue: "loss", weight: -3 }, { cue: "slump", weight: -3 },
+  { cue: "plunge", weight: -3 }, { cue: "tumble", weight: -3 },
+  { cue: "layoff", weight: -3 }, { cue: "recall", weight: -3 },
+  { cue: "lawsuit", weight: -3 }, { cue: "sebi", weight: -3 },
+  { cue: "pledge", weight: -3 },
+
+  { cue: "decline", weight: -2 }, { cue: "fall", weight: -2 },
+  { cue: "drop", weight: -2 }, { cue: "weak", weight: -2 },
+  { cue: "bearish", weight: -2 }, { cue: "cut", weight: -2 },
+  { cue: "concern", weight: -2 }, { cue: "pressure", weight: -2 },
+  { cue: "underperform", weight: -2 }, { cue: "delay", weight: -2 },
+  { cue: "miss", weight: -2 }, { cue: "risk", weight: -1 },
+  { cue: "caution", weight: -1 },
+];
+
+/** Words that flip the cue that follows them. */
+const NEGATORS = ["no", "not", "never", "without", "denies", "denied"];
+
+/**
+ * Headline sentiment, 0 (negative) to 1 (positive), 0.5 neutral.
+ *
+ * A weighted lexicon, not a model: it reads the vocabulary Indian market
+ * headlines actually use, weights a fraud above a wobble, and flips a cue a
+ * negator precedes ("no fraud found"). It cannot read sarcasm, context, or
+ * whether a fall was already priced in — the score is a coarse tint on a
+ * headline, which is all the badge claims to be.
+ */
 export function simpleSentiment(text: string): number {
-  const positive = ["beat", "upgrade", "growth", "bullish", "strong", "record", "profit"];
-  const negative = ["downgrade", "fraud", "risk", "probe", "decline", "bearish", "drop"];
   const t = String(text || "").toLowerCase();
-  const pos = positive.reduce((acc, item) => acc + (mentionsCue(t, item) ? 1 : 0), 0);
-  const neg = negative.reduce((acc, item) => acc + (mentionsCue(t, item) ? 1 : 0), 0);
-  const score = 0.5 + pos * 0.08 - neg * 0.1;
-  return round(Math.max(0.0, Math.min(1.0, score)), 2);
+  if (!t.trim()) return 0.5;
+
+  let total = 0;
+  let hits = 0;
+
+  for (const { cue, weight } of SENTIMENT_CUES) {
+    if (!mentionsCue(t, cue)) continue;
+    const head = cue.split(/\s+/)[0];
+    const negated = new RegExp(
+      `\\b(?:${NEGATORS.join("|")})\\s+(?:\\w+\\s+){0,2}${head}`,
+      "i"
+    ).test(t);
+    total += negated ? -weight : weight;
+    hits += 1;
+  }
+
+  if (!hits) return 0.5;
+
+  // Dampen by hit count so a headline stuffed with mild words cannot outweigh
+  // one naming something serious, then clamp into the reported range.
+  const magnitude = total / Math.max(3, hits * 2 + 1);
+  return round(Math.max(0.0, Math.min(1.0, 0.5 + magnitude * 0.5)), 2);
 }
 
 const NEWS_STOP_WORDS = new Set([

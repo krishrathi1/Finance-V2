@@ -124,7 +124,9 @@ describe("news sentiment cue matching", () => {
 
   it("does not treat 'record low' as the good kind of record", () => {
     expect(simpleSentiment("Margins hit a record low")).toBe(0.5);
-    expect(simpleSentiment("Firm posts a record loss")).toBe(0.5);
+    // "Record" is suppressed by the following "loss", and "loss" is itself a
+    // negative cue — so this lands negative rather than merely neutral.
+    expect(simpleSentiment("Firm posts a record loss")).toBeLessThan(0.5);
     // "Record" on its own is still the good kind.
     expect(simpleSentiment("Firm posts a record profit")).toBeGreaterThan(0.5);
   });
@@ -184,5 +186,47 @@ describe("extracting JSON from a model response", () => {
     expect(extractJson("")).toBeNull();
     // Unbalanced — a truncated response is not worth guessing at.
     expect(extractJson('{"a":1')).toBeNull();
+  });
+});
+
+describe("sentiment on headlines the market actually produces", () => {
+  // Measured against live APOLLOHOSP headlines, the previous seven-word-per-
+  // side lexicon returned exactly 0.5 for every one — including an order win
+  // and a widening net loss. The badge was decoration, not information.
+  it("reads unambiguous good news as positive", () => {
+    expect(simpleSentiment("Company wins Rs 5,000 crore order from Indian Railways")).toBeGreaterThan(0.7);
+    expect(simpleSentiment("Board approves share buyback at 20% premium")).toBeGreaterThan(0.7);
+    expect(simpleSentiment("Brokerage upgrades stock to Buy on strong Q3 profit growth")).toBeGreaterThan(0.7);
+    expect(simpleSentiment("There's A Lot To Like About The Upcoming Rs 10.00 Dividend")).toBeGreaterThan(0.5);
+  });
+
+  it("reads unambiguous bad news as negative", () => {
+    expect(simpleSentiment("SEBI slaps penalty on promoter for disclosure lapses")).toBeLessThan(0.3);
+    expect(simpleSentiment("Q2 net loss widens; margins slump on weak demand")).toBeLessThan(0.3);
+    expect(simpleSentiment("Auditor resigns citing lack of information")).toBeLessThan(0.3);
+    expect(simpleSentiment("Stocks fall as panel recommends a cap on room rent")).toBeLessThan(0.5);
+  });
+
+  it("weights a serious event above a stack of mild ones", () => {
+    const fraud = simpleSentiment("Regulator alleges fraud at the company");
+    const mild = simpleSentiment("Stock under pressure as demand stays weak and margins decline");
+    expect(fraud).toBeLessThan(mild);
+  });
+
+  it("flips a cue that a negator precedes", () => {
+    expect(simpleSentiment("Court finds no fraud in company accounts")).toBeGreaterThan(0.5);
+    expect(simpleSentiment("Company denies any default on repayments")).toBeGreaterThan(0.5);
+  });
+
+  it("stays neutral on genuinely neutral headlines", () => {
+    expect(simpleSentiment("APOLLOHOSP Outlook for the Week (August 17, 2026)")).toBe(0.5);
+    expect(simpleSentiment("Board meeting scheduled for Tuesday")).toBe(0.5);
+    expect(simpleSentiment("")).toBe(0.5);
+  });
+
+  it("keeps the score inside its reported range", () => {
+    const extreme = simpleSentiment("Fraud, scam, insolvency, NCLT, default, bankruptcy and arrest");
+    expect(extreme).toBeGreaterThanOrEqual(0);
+    expect(extreme).toBeLessThanOrEqual(1);
   });
 });

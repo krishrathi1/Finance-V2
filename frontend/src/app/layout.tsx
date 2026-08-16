@@ -5,6 +5,7 @@ import { Suspense } from "react";
 import { AccountSync } from "@/components/account-sync";
 import { AuthProvider } from "@/hooks/useAuth";
 import { FloatingAuth } from "@/components/floating-auth";
+import { StaggerSettle } from "@/components/stagger-settle";
 import { MarketStatusBadge } from "@/components/market-status-badge";
 import { MarketTicker } from "@/components/market-ticker";
 import { ModeToggle } from "@/components/mode-toggle";
@@ -229,6 +230,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               </div>
             </header>
 
+            <StaggerSettle />
             <main className="page-enter mx-auto max-w-[1640px] px-3 py-4 sm:px-5 sm:py-5 md:px-7 md:py-7">
               {children}
             </main>
