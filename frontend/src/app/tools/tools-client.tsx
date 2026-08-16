@@ -1,11 +1,37 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Calculator, Crosshair, PiggyBank, Receipt, TrendingUp } from "lucide-react";
+import {
+  Calculator,
+  Coins,
+  Crosshair,
+  Flame,
+  Landmark,
+  Layers,
+  PiggyBank,
+  Receipt,
+  Target,
+  TrendingUp,
+  Umbrella,
+  Undo2,
+} from "lucide-react";
 
 import { Card } from "@/components/ui/card";
 import { roundTrip, type TradeSegment } from "@/shared/trade-charges";
 import { cagr, positionSize, sipForGoal, sipFutureValue } from "@/shared/planning-tools";
+import {
+  averageDown,
+  breakEvenAfterLoss,
+  dividendIncomePlanner,
+  requiredReturn,
+} from "@/shared/equity-tools";
+import {
+  emiCalculator,
+  inflationAdjustedValue,
+  realReturn,
+  retirementCorpus,
+  stepUpSip,
+} from "@/shared/wealth-tools";
 
 /**
  * The trading toolkit: the four calculations Indian retail investors reach for
@@ -431,7 +457,536 @@ function CagrCalculator() {
   );
 }
 
+// ─── Stock average ───────────────────────────────────────────────────────────
+
+function StockAverageCalculator() {
+  const [heldQty, setHeldQty] = useState("100");
+  const [heldPrice, setHeldPrice] = useState("500");
+  const [addQty, setAddQty] = useState("50");
+  const [addPrice, setAddPrice] = useState("420");
+
+  const result = useMemo(
+    () =>
+      averageDown({
+        existingQuantity: parse(heldQty),
+        existingAvgPrice: parse(heldPrice),
+        newQuantity: parse(addQty),
+        newPrice: parse(addPrice),
+      }),
+    [heldQty, heldPrice, addQty, addPrice]
+  );
+
+  return (
+    <Card className="p-4">
+      <div className="flex items-center gap-2">
+        <Layers className="h-4 w-4 text-accent" />
+        <h2 className="text-base font-semibold">Stock Average</h2>
+      </div>
+      <p className="mt-1 text-[11px] leading-4 text-muted">
+        Your new average after buying more. Works for averaging up as well as down — the sign of
+        the change tells you which happened.
+      </p>
+
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <Field label="Shares held" value={heldQty} onChange={setHeldQty} />
+        <Field label="Your average" value={heldPrice} onChange={setHeldPrice} suffix="₹" />
+        <Field label="Buying more" value={addQty} onChange={setAddQty} />
+        <Field label="At price" value={addPrice} onChange={setAddPrice} suffix="₹" />
+      </div>
+
+      {result ? (
+        <>
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <Stat
+              label="New average"
+              value={rupees(result.newAveragePrice)}
+              tone={result.avgPriceChange <= 0 ? "good" : "bad"}
+            />
+            <Stat label="Total shares" value={result.totalQuantity.toLocaleString("en-IN")} />
+            <Stat label="Total invested" value={rupees(result.totalInvested)} />
+          </div>
+          <p className="mt-2 text-[10px] leading-4 text-muted/60">
+            Average {result.avgPriceChange <= 0 ? "falls" : "rises"} by{" "}
+            {rupees(Math.abs(result.avgPriceChange))} (
+            {Math.abs(result.avgPriceChangePercent).toFixed(2)}%). Averaging down lowers your
+            breakeven; it does not make a falling business a good one.
+          </p>
+        </>
+      ) : (
+        <p className="mt-3 rounded-lg border border-border/40 bg-bg/40 px-3 py-2 text-[11px] text-muted">
+          All four fields must be positive.
+        </p>
+      )}
+    </Card>
+  );
+}
+
+// ─── Target price ────────────────────────────────────────────────────────────
+
+function TargetPriceCalculator() {
+  const [current, setCurrent] = useState("500");
+  const [target, setTarget] = useState("1000");
+  const [years, setYears] = useState("3");
+
+  const result = useMemo(
+    () =>
+      requiredReturn({
+        currentPrice: parse(current),
+        targetPrice: parse(target),
+        years: years.trim() === "" ? null : parse(years),
+      }),
+    [current, target, years]
+  );
+
+  return (
+    <Card className="p-4">
+      <div className="flex items-center gap-2">
+        <Target className="h-4 w-4 text-accent" />
+        <h2 className="text-base font-semibold">Target Price</h2>
+      </div>
+      <p className="mt-1 text-[11px] leading-4 text-muted">
+        What a price target actually demands. &ldquo;It will double&rdquo; is a 26%-a-year promise
+        over three years — worth saying out loud before believing it.
+      </p>
+
+      <div className="mt-3 grid grid-cols-3 gap-2">
+        <Field label="Current price" value={current} onChange={setCurrent} suffix="₹" />
+        <Field label="Target price" value={target} onChange={setTarget} suffix="₹" />
+        <Field label="Years (optional)" value={years} onChange={setYears} />
+      </div>
+
+      {result ? (
+        <div className="mt-3 grid grid-cols-3 gap-2">
+          <Stat
+            label="Total return"
+            value={`${result.totalReturnPercent >= 0 ? "+" : ""}${result.totalReturnPercent.toFixed(2)}%`}
+            tone={result.totalReturnPercent >= 0 ? "good" : "bad"}
+          />
+          <Stat label="Multiple" value={`${result.multiple.toFixed(2)}x`} />
+          <Stat
+            label="Needed per year"
+            value={
+              result.annualisedPercent === null
+                ? "—"
+                : `${result.annualisedPercent >= 0 ? "+" : ""}${result.annualisedPercent.toFixed(2)}%`
+            }
+          />
+        </div>
+      ) : (
+        <p className="mt-3 rounded-lg border border-border/40 bg-bg/40 px-3 py-2 text-[11px] text-muted">
+          Both prices must be positive.
+        </p>
+      )}
+    </Card>
+  );
+}
+
+// ─── Loss recovery ───────────────────────────────────────────────────────────
+
+const LOSS_LADDER = [10, 20, 30, 50, 70, 90];
+
+function LossRecoveryCalculator() {
+  const [loss, setLoss] = useState("30");
+  const result = useMemo(() => breakEvenAfterLoss({ lossPercent: parse(loss) }), [loss]);
+
+  return (
+    <Card className="p-4">
+      <div className="flex items-center gap-2">
+        <Undo2 className="h-4 w-4 text-accent" />
+        <h2 className="text-base font-semibold">Loss Recovery</h2>
+      </div>
+      <p className="mt-1 text-[11px] leading-4 text-muted">
+        The gain needed to get back to even. Losses and recoveries are not symmetric, and the gap
+        widens fast — which is the whole argument for a stop-loss.
+      </p>
+
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <Field label="Loss so far" value={loss} onChange={setLoss} suffix="%" />
+        <div className="flex items-end">
+          {result !== null ? (
+            <Stat label="Gain needed to break even" value={`+${result.toFixed(2)}%`} tone="bad" />
+          ) : null}
+        </div>
+      </div>
+
+      <div className="mt-3 grid grid-cols-3 gap-1.5 sm:grid-cols-6">
+        {LOSS_LADDER.map((step) => {
+          const need = breakEvenAfterLoss({ lossPercent: step });
+          return (
+            <button
+              key={step}
+              type="button"
+              onClick={() => setLoss(String(step))}
+              className="rounded-lg border border-border/40 bg-bg/40 px-1.5 py-1.5 text-center transition hover:border-accent/40"
+            >
+              <span className="block text-[10px] text-muted">−{step}%</span>
+              <span className="block text-[11px] font-bold tabular-nums text-danger">
+                +{need === null ? "—" : need.toFixed(0)}%
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      <p className="mt-2 text-[10px] leading-4 text-muted/60">
+        A 100% loss is unrecoverable at any gain — zero capital cannot be multiplied back.
+      </p>
+    </Card>
+  );
+}
+
+// ─── Dividend income ─────────────────────────────────────────────────────────
+
+function DividendIncomeCalculator() {
+  const [income, setIncome] = useState("50000");
+  const [yieldPercent, setYieldPercent] = useState("3");
+
+  const result = useMemo(
+    () =>
+      dividendIncomePlanner({
+        targetMonthlyIncome: parse(income),
+        dividendYieldPercent: parse(yieldPercent),
+      }),
+    [income, yieldPercent]
+  );
+
+  return (
+    <Card className="p-4">
+      <div className="flex items-center gap-2">
+        <Coins className="h-4 w-4 text-accent" />
+        <h2 className="text-base font-semibold">Dividend Income</h2>
+      </div>
+      <p className="mt-1 text-[11px] leading-4 text-muted">
+        The capital a target monthly dividend income needs, at a given yield.
+      </p>
+
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <Field label="Monthly income wanted" value={income} onChange={setIncome} suffix="₹" />
+        <Field label="Portfolio yield" value={yieldPercent} onChange={setYieldPercent} suffix="%" />
+      </div>
+
+      {result ? (
+        <>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <Stat label="Capital required" value={rupees(result.capitalRequired)} tone="good" />
+            <Stat label="Annual dividend" value={rupees(result.annualIncome)} />
+          </div>
+          <p className="mt-2 text-[10px] leading-4 text-muted/60">
+            Gross of tax — dividends are taxed at your slab rate in India since FY21. Most Indian
+            companies pay once or twice a year, so the income arrives in lumps, not monthly.
+          </p>
+        </>
+      ) : (
+        <p className="mt-3 rounded-lg border border-border/40 bg-bg/40 px-3 py-2 text-[11px] text-muted">
+          Income and yield must both be positive.
+        </p>
+      )}
+    </Card>
+  );
+}
+
+// ─── Step-up SIP ─────────────────────────────────────────────────────────────
+
+function StepUpSipCalculator() {
+  const [monthly, setMonthly] = useState("20000");
+  const [years, setYears] = useState("15");
+  const [annualReturn, setAnnualReturn] = useState("12");
+  const [stepUp, setStepUp] = useState("10");
+
+  const result = useMemo(
+    () =>
+      stepUpSip({
+        monthly: parse(monthly),
+        years: parse(years),
+        annualReturnPercent: parse(annualReturn),
+        annualStepUpPercent: parse(stepUp),
+      }),
+    [monthly, years, annualReturn, stepUp]
+  );
+  const flat = useMemo(
+    () =>
+      stepUpSip({
+        monthly: parse(monthly),
+        years: parse(years),
+        annualReturnPercent: parse(annualReturn),
+        annualStepUpPercent: 0,
+      }),
+    [monthly, years, annualReturn]
+  );
+
+  return (
+    <Card className="p-4">
+      <div className="flex items-center gap-2">
+        <TrendingUp className="h-4 w-4 text-accent" />
+        <h2 className="text-base font-semibold">Step-Up SIP</h2>
+      </div>
+      <p className="mt-1 text-[11px] leading-4 text-muted">
+        A SIP that rises with your salary each year. Raising the instalment around 10% annually is
+        the single cheapest change most plans can make.
+      </p>
+
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <Field label="Starting monthly" value={monthly} onChange={setMonthly} suffix="₹" />
+        <Field label="Annual step-up" value={stepUp} onChange={setStepUp} suffix="%" />
+        <Field label="Years" value={years} onChange={setYears} />
+        <Field
+          label="Expected return"
+          value={annualReturn}
+          onChange={setAnnualReturn}
+          suffix="%/yr"
+        />
+      </div>
+
+      {result ? (
+        <>
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <Stat label="Future value" value={rupees(result.futureValue)} tone="good" />
+            <Stat label="You would put in" value={rupees(result.totalInvested)} />
+            <Stat label="Growth does" value={rupees(result.wealthGained)} />
+          </div>
+          <p className="mt-2 text-[10px] leading-4 text-muted/60">
+            Final instalment {rupees(result.finalMonthlyAmount)}/month.
+            {flat && result.futureValue > flat.futureValue
+              ? ` Stepping up adds ${rupees(result.futureValue - flat.futureValue)} against a flat SIP of the same starting amount.`
+              : ""}
+          </p>
+        </>
+      ) : (
+        <p className="mt-3 rounded-lg border border-border/40 bg-bg/40 px-3 py-2 text-[11px] text-muted">
+          Enter a monthly amount and a horizon of up to 100 years.
+        </p>
+      )}
+    </Card>
+  );
+}
+
+// ─── Real return ─────────────────────────────────────────────────────────────
+
+function RealReturnCalculator() {
+  const [nominal, setNominal] = useState("12");
+  const [inflation, setInflation] = useState("6");
+  const [amount, setAmount] = useState("1000000");
+  const [years, setYears] = useState("10");
+
+  const real = useMemo(
+    () => realReturn({ nominalReturnPercent: parse(nominal), inflationPercent: parse(inflation) }),
+    [nominal, inflation]
+  );
+  const erosion = useMemo(
+    () =>
+      inflationAdjustedValue({
+        amount: parse(amount),
+        years: parse(years),
+        inflationPercent: parse(inflation),
+      }),
+    [amount, years, inflation]
+  );
+
+  return (
+    <Card className="p-4">
+      <div className="flex items-center gap-2">
+        <Flame className="h-4 w-4 text-accent" />
+        <h2 className="text-base font-semibold">Real Return &amp; Inflation</h2>
+      </div>
+      <p className="mt-1 text-[11px] leading-4 text-muted">
+        What your return is worth after inflation, and what today&apos;s money is worth later.
+      </p>
+
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <Field label="Nominal return" value={nominal} onChange={setNominal} suffix="%/yr" />
+        <Field label="Inflation" value={inflation} onChange={setInflation} suffix="%/yr" />
+        <Field label="Amount today" value={amount} onChange={setAmount} suffix="₹" />
+        <Field label="Years" value={years} onChange={setYears} />
+      </div>
+
+      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+        <Stat
+          label="Real return"
+          value={real === null ? "—" : `${real >= 0 ? "+" : ""}${real.toFixed(2)}%`}
+          tone={real === null ? undefined : real >= 0 ? "good" : "bad"}
+        />
+        <Stat
+          label="Buys this much later"
+          value={erosion ? rupees(erosion.todaysPurchasingPower) : "—"}
+          tone="bad"
+        />
+        <Stat
+          label="Needs to be, to match"
+          value={erosion ? rupees(erosion.futureNominalValue) : "—"}
+        />
+      </div>
+      <p className="mt-2 text-[10px] leading-4 text-muted/60">
+        Real return uses the Fisher relation, not nominal minus inflation — the naive subtraction
+        flatters the result, and by more the higher the rates are.
+      </p>
+    </Card>
+  );
+}
+
+// ─── EMI ─────────────────────────────────────────────────────────────────────
+
+function EmiCalculator() {
+  const [principal, setPrincipal] = useState("2500000");
+  const [rate, setRate] = useState("9");
+  const [years, setYears] = useState("20");
+
+  const result = useMemo(
+    () =>
+      emiCalculator({
+        principal: parse(principal),
+        annualRatePercent: parse(rate),
+        years: parse(years),
+      }),
+    [principal, rate, years]
+  );
+
+  const interestShare =
+    result && parse(principal) > 0 ? (result.totalInterest / parse(principal)) * 100 : null;
+
+  return (
+    <Card className="p-4">
+      <div className="flex items-center gap-2">
+        <Landmark className="h-4 w-4 text-accent" />
+        <h2 className="text-base font-semibold">EMI</h2>
+      </div>
+      <p className="mt-1 text-[11px] leading-4 text-muted">
+        Monthly instalment, and what the loan costs in total — useful for a loan against securities
+        as much as a home loan.
+      </p>
+
+      <div className="mt-3 grid grid-cols-3 gap-2">
+        <Field label="Loan amount" value={principal} onChange={setPrincipal} suffix="₹" />
+        <Field label="Interest rate" value={rate} onChange={setRate} suffix="%/yr" />
+        <Field label="Tenure" value={years} onChange={setYears} suffix="yr" />
+      </div>
+
+      {result ? (
+        <>
+          <div className="mt-3 grid grid-cols-3 gap-2">
+            <Stat label="Monthly EMI" value={rupees(result.emi)} />
+            <Stat label="Total interest" value={rupees(result.totalInterest)} tone="bad" />
+            <Stat label="Total repaid" value={rupees(result.totalPayment)} />
+          </div>
+          <p className="mt-2 text-[10px] leading-4 text-muted/60">
+            Interest is {interestShare === null ? "—" : `${interestShare.toFixed(0)}%`} of what you
+            borrowed, over the full tenure.
+          </p>
+        </>
+      ) : (
+        <p className="mt-3 rounded-lg border border-border/40 bg-bg/40 px-3 py-2 text-[11px] text-muted">
+          Enter a loan amount and a tenure of up to 100 years.
+        </p>
+      )}
+    </Card>
+  );
+}
+
+// ─── Retirement ──────────────────────────────────────────────────────────────
+
+function RetirementCalculator() {
+  const [expense, setExpense] = useState("60000");
+  const [yearsToRetire, setYearsToRetire] = useState("25");
+  const [inflation, setInflation] = useState("6");
+  const [retiredYears, setRetiredYears] = useState("25");
+  const [postReturn, setPostReturn] = useState("8");
+
+  const realPost = useMemo(
+    () =>
+      realReturn({ nominalReturnPercent: parse(postReturn), inflationPercent: parse(inflation) }),
+    [postReturn, inflation]
+  );
+
+  const result = useMemo(
+    () =>
+      retirementCorpus({
+        monthlyExpenseToday: parse(expense),
+        yearsToRetirement: parse(yearsToRetire),
+        inflationPercent: parse(inflation),
+        postRetirementYears: parse(retiredYears),
+        // The real (post-inflation) rate, so spending keeps pace with prices
+        // through retirement rather than shrinking every year.
+        postRetirementReturnPercent: realPost ?? 0,
+      }),
+    [expense, yearsToRetire, inflation, retiredYears, realPost]
+  );
+
+  const monthlySip = useMemo(
+    () =>
+      result
+        ? sipForGoal({
+            targetAmount: result.corpusRequired,
+            years: parse(yearsToRetire),
+            annualReturnPercent: 12,
+          })
+        : null,
+    [result, yearsToRetire]
+  );
+
+  return (
+    <Card className="p-4">
+      <div className="flex items-center gap-2">
+        <Umbrella className="h-4 w-4 text-accent" />
+        <h2 className="text-base font-semibold">Retirement Corpus</h2>
+      </div>
+      <p className="mt-1 text-[11px] leading-4 text-muted">
+        The corpus that funds your current lifestyle through retirement, after inflation has had its
+        way with it.
+      </p>
+
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <Field label="Monthly expense today" value={expense} onChange={setExpense} suffix="₹" />
+        <Field label="Years to retirement" value={yearsToRetire} onChange={setYearsToRetire} />
+        <Field label="Inflation" value={inflation} onChange={setInflation} suffix="%/yr" />
+        <Field label="Years retired" value={retiredYears} onChange={setRetiredYears} />
+        <Field
+          label="Return in retirement"
+          value={postReturn}
+          onChange={setPostReturn}
+          suffix="%/yr"
+        />
+      </div>
+
+      {result ? (
+        <>
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <Stat label="Corpus needed" value={rupees(result.corpusRequired)} tone="good" />
+            <Stat
+              label="Expense then"
+              value={rupees(result.monthlyExpenseAtRetirement)}
+              tone="bad"
+            />
+            <Stat
+              label="SIP to get there"
+              value={monthlySip === null ? "—" : `${rupees(monthlySip)}/mo`}
+            />
+          </div>
+          <p className="mt-2 text-[10px] leading-4 text-muted/60">
+            Withdrawals priced at month start, and the retirement return is converted to a real
+            rate so spending keeps pace with prices. Your {rupees(parse(expense))} lifestyle costs{" "}
+            {rupees(result.monthlyExpenseAtRetirement)} a month by then — that gap is the entire
+            reason for the corpus. The SIP figure assumes 12% a year until retirement.
+          </p>
+        </>
+      ) : (
+        <p className="mt-3 rounded-lg border border-border/40 bg-bg/40 px-3 py-2 text-[11px] text-muted">
+          Fill every field; horizons cap at 100 years.
+        </p>
+      )}
+    </Card>
+  );
+}
+
+const GROUPS = [
+  { key: "trading", label: "Trading", blurb: "Costs and sizing for a trade you are about to place." },
+  { key: "equity", label: "Equity", blurb: "Questions about a position you hold or are building." },
+  { key: "planning", label: "Planning", blurb: "Long-horizon compounding, inflation and goals." },
+] as const;
+
+type GroupKey = (typeof GROUPS)[number]["key"];
+
 export function ToolsClient() {
+  const [group, setGroup] = useState<GroupKey>("trading");
+  const active = GROUPS.find((entry) => entry.key === group)!;
+
   return (
     <div className="stagger-fade space-y-6 py-4 sm:py-8">
       <div>
@@ -441,17 +996,59 @@ export function ToolsClient() {
           Trading Tools
         </h1>
         <p className="mt-2 max-w-2xl text-sm text-muted">
-          The four calculations that usually mean opening a spreadsheet: what a trade really costs,
-          how many shares a stop-loss allows, what a SIP needs to be, and what a return actually
-          compounded at. Everything runs locally as you type.
+          The calculations that usually mean opening a spreadsheet — or somebody else&apos;s
+          ad-covered site. Everything runs locally in your browser as you type; nothing is sent
+          anywhere.
         </p>
       </div>
 
+      {/* Grouped rather than one long grid: a dozen calculators in a flat wall
+          makes the reader scan instead of choose. */}
+      <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Tool category">
+        {GROUPS.map((entry) => (
+          <button
+            key={entry.key}
+            type="button"
+            role="tab"
+            aria-selected={group === entry.key}
+            onClick={() => setGroup(entry.key)}
+            className={`rounded-xl border px-3.5 py-1.5 text-xs font-semibold transition ${
+              group === entry.key
+                ? "border-accent/40 bg-accent/15 text-accent"
+                : "border-border/50 bg-bg/40 text-muted hover:border-accent/30 hover:text-fg"
+            }`}
+          >
+            {entry.label}
+          </button>
+        ))}
+      </div>
+      <p className="-mt-3 text-[11px] text-muted">{active.blurb}</p>
+
       <div className="grid gap-4 xl:grid-cols-2">
-        <ChargesCalculator />
-        <PositionSizeCalculator />
-        <SipPlanner />
-        <CagrCalculator />
+        {group === "trading" && (
+          <>
+            <ChargesCalculator />
+            <PositionSizeCalculator />
+          </>
+        )}
+        {group === "equity" && (
+          <>
+            <StockAverageCalculator />
+            <TargetPriceCalculator />
+            <LossRecoveryCalculator />
+            <DividendIncomeCalculator />
+          </>
+        )}
+        {group === "planning" && (
+          <>
+            <SipPlanner />
+            <StepUpSipCalculator />
+            <CagrCalculator />
+            <RealReturnCalculator />
+            <EmiCalculator />
+            <RetirementCalculator />
+          </>
+        )}
       </div>
 
       <p className="text-center text-[11px] text-muted/60">
