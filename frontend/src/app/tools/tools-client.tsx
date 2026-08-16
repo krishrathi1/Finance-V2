@@ -14,6 +14,8 @@ import {
   TrendingUp,
   Umbrella,
   Undo2,
+  Repeat2,
+  Scale,
 } from "lucide-react";
 
 import { Card } from "@/components/ui/card";
@@ -24,12 +26,15 @@ import {
   breakEvenAfterLoss,
   dividendIncomePlanner,
   requiredReturn,
+  stopLossTargets,
 } from "@/shared/equity-tools";
 import {
   emiCalculator,
   inflationAdjustedValue,
   realReturn,
   retirementCorpus,
+  ruleOf72,
+  sipVsLumpsum,
   stepUpSip,
 } from "@/shared/wealth-tools";
 
@@ -975,6 +980,191 @@ function RetirementCalculator() {
   );
 }
 
+// ─── Rule of 72 ──────────────────────────────────────────────────────────────
+
+function RuleOf72Calculator() {
+  const [rate, setRate] = useState("12");
+  const years = useMemo(() => ruleOf72({ annualReturnPercent: parse(rate) }), [rate]);
+  const exact = useMemo(() => {
+    const r = parse(rate) / 100;
+    return Number.isFinite(r) && r > 0 ? Math.log(2) / Math.log(1 + r) : null;
+  }, [rate]);
+
+  return (
+    <Card className="p-4">
+      <div className="flex items-center gap-2">
+        <Repeat2 className="h-4 w-4 text-accent" />
+        <h2 className="text-base font-semibold">Rule of 72</h2>
+      </div>
+      <p className="mt-1 text-[11px] leading-4 text-muted">
+        The mental shortcut for how long money takes to double at a given rate.
+      </p>
+
+      <div className="mt-3">
+        <Field label="Annual return" value={rate} onChange={setRate} suffix="%/yr" />
+      </div>
+
+      {years !== null ? (
+        <>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <Stat label="Doubles in (rule of 72)" value={`${years.toFixed(1)} yrs`} tone="good" />
+            <Stat label="Exact answer" value={exact !== null ? `${exact.toFixed(2)} yrs` : "—"} />
+          </div>
+          <p className="mt-2 text-[10px] leading-4 text-muted/60">
+            72 is chosen because it divides cleanly by 2, 3, 4, 6, 8, 9 and 12, and is most
+            accurate around the 8% band where most long-run equity conversations happen — not
+            because it is exact.
+          </p>
+        </>
+      ) : (
+        <p className="mt-3 rounded-lg border border-border/40 bg-bg/40 px-3 py-2 text-[11px] text-muted">
+          Enter a positive annual return.
+        </p>
+      )}
+    </Card>
+  );
+}
+
+// ─── SIP vs Lumpsum ──────────────────────────────────────────────────────────
+
+function SipVsLumpsumCalculator() {
+  const [amount, setAmount] = useState("1200000");
+  const [years, setYears] = useState("10");
+  const [rate, setRate] = useState("12");
+
+  const result = useMemo(
+    () =>
+      sipVsLumpsum({
+        totalAmount: parse(amount),
+        years: parse(years),
+        annualReturnPercent: parse(rate),
+      }),
+    [amount, years, rate]
+  );
+
+  return (
+    <Card className="p-4">
+      <div className="flex items-center gap-2">
+        <Scale className="h-4 w-4 text-accent" />
+        <h2 className="text-base font-semibold">SIP vs Lumpsum</h2>
+      </div>
+      <p className="mt-1 text-[11px] leading-4 text-muted">
+        The same money, all at once versus spread evenly. The lumpsum always wins on a single
+        fixed rate — this shows exactly by how much, so &ldquo;SIP beats lumpsum&rdquo; is
+        answered honestly rather than assumed.
+      </p>
+
+      <div className="mt-3 grid grid-cols-3 gap-2">
+        <Field label="Total to invest" value={amount} onChange={setAmount} suffix="₹" />
+        <Field label="Years" value={years} onChange={setYears} />
+        <Field label="Expected return" value={rate} onChange={setRate} suffix="%/yr" />
+      </div>
+
+      {result ? (
+        <>
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <Stat
+              label="Lumpsum, all at once"
+              value={rupees(result.lumpsumValue)}
+              tone={result.lumpsumWins ? "good" : undefined}
+            />
+            <Stat
+              label="SIP, spread evenly"
+              value={rupees(result.sipValue)}
+              tone={!result.lumpsumWins ? "good" : undefined}
+            />
+            <Stat label="Gap" value={rupees(Math.abs(result.difference))} />
+          </div>
+          <p className="mt-2 text-[10px] leading-4 text-muted/60">
+            {result.lumpsumWins
+              ? "The lumpsum wins because every rupee of it is invested for the full horizon, while the average SIP rupee is invested for roughly half of it — timing, not a market view."
+              : "At this rate the two land together or the SIP edges ahead. SIP's real advantage is behavioural — it removes the timing decision and buys more units when prices fall — neither of which this constant-rate model can show."}
+          </p>
+        </>
+      ) : (
+        <p className="mt-3 rounded-lg border border-border/40 bg-bg/40 px-3 py-2 text-[11px] text-muted">
+          Enter an amount and a horizon of up to 100 years.
+        </p>
+      )}
+    </Card>
+  );
+}
+
+// ─── Stop-loss & target from percent ─────────────────────────────────────────
+
+function StopLossTargetCalculator() {
+  const [direction, setDirection] = useState<"long" | "short">("long");
+  const [entry, setEntry] = useState("500");
+  const [stopPercent, setStopPercent] = useState("4");
+  const [targetPercent, setTargetPercent] = useState("12");
+
+  const result = useMemo(
+    () =>
+      stopLossTargets({
+        entryPrice: parse(entry),
+        stopLossPercent: parse(stopPercent),
+        targetPercent: targetPercent.trim() === "" ? null : parse(targetPercent),
+        direction,
+      }),
+    [entry, stopPercent, targetPercent, direction]
+  );
+
+  return (
+    <Card className="p-4">
+      <div className="flex items-center gap-2">
+        <Crosshair className="h-4 w-4 text-accent" />
+        <h2 className="text-base font-semibold">Stop-Loss &amp; Target Price</h2>
+      </div>
+      <p className="mt-1 text-[11px] leading-4 text-muted">
+        Percentages are how risk is decided; prices are what the order window accepts. Converting
+        that in your head at the moment of placing a trade is where fat-finger mistakes happen.
+      </p>
+
+      <div className="mt-3 flex rounded-xl border border-border/50 bg-bg/40 p-0.5" role="tablist">
+        {(["long", "short"] as const).map((option) => (
+          <button
+            key={option}
+            type="button"
+            role="tab"
+            aria-selected={direction === option}
+            onClick={() => setDirection(option)}
+            className={`flex-1 rounded-[10px] px-3 py-1.5 text-xs font-semibold capitalize transition ${
+              direction === option ? "bg-accent/15 text-accent" : "text-muted hover:text-fg"
+            }`}
+          >
+            {option}
+          </button>
+        ))}
+      </div>
+
+      <div className="mt-3 grid grid-cols-3 gap-2">
+        <Field label="Entry price" value={entry} onChange={setEntry} suffix="₹" />
+        <Field label="Stop-loss" value={stopPercent} onChange={setStopPercent} suffix="%" />
+        <Field label="Target (optional)" value={targetPercent} onChange={setTargetPercent} suffix="%" />
+      </div>
+
+      {result ? (
+        <div className="mt-3 grid grid-cols-3 gap-2">
+          <Stat label="Stop-loss price" value={rupees(result.stopLossPrice)} tone="bad" />
+          <Stat
+            label="Target price"
+            value={result.targetPrice === null ? "—" : rupees(result.targetPrice)}
+            tone={result.targetPrice === null ? undefined : "good"}
+          />
+          <Stat
+            label="Reward : risk"
+            value={result.riskRewardRatio === null ? "—" : `${result.riskRewardRatio.toFixed(2)} : 1`}
+          />
+        </div>
+      ) : (
+        <p className="mt-3 rounded-lg border border-border/40 bg-bg/40 px-3 py-2 text-[11px] text-muted">
+          A long stop cannot reach 100% — that is the price at zero. Try a smaller stop.
+        </p>
+      )}
+    </Card>
+  );
+}
+
 const GROUPS = [
   { key: "trading", label: "Trading", blurb: "Costs and sizing for a trade you are about to place." },
   { key: "equity", label: "Equity", blurb: "Questions about a position you hold or are building." },
@@ -1024,31 +1214,36 @@ export function ToolsClient() {
       </div>
       <p className="-mt-3 text-[11px] text-muted">{active.blurb}</p>
 
-      <div className="grid gap-4 xl:grid-cols-2">
-        {group === "trading" && (
-          <>
-            <ChargesCalculator />
-            <PositionSizeCalculator />
-          </>
-        )}
-        {group === "equity" && (
-          <>
-            <StockAverageCalculator />
-            <TargetPriceCalculator />
-            <LossRecoveryCalculator />
-            <DividendIncomeCalculator />
-          </>
-        )}
-        {group === "planning" && (
-          <>
-            <SipPlanner />
-            <StepUpSipCalculator />
-            <CagrCalculator />
-            <RealReturnCalculator />
-            <EmiCalculator />
-            <RetirementCalculator />
-          </>
-        )}
+      {/* Every group renders always; only its visibility toggles. This page's
+          whole selling point is search traffic for things like "stock
+          average calculator" — with `"use client"`, only whatever the initial
+          state renders reaches the server-rendered HTML, so conditionally
+          mounting groups on click meant ten of the twelve calculators simply
+          did not exist as far as a crawler that does not run JavaScript (or
+          runs it with a budget) was concerned. `hidden` is a real DOM/CSS
+          property, not a React convenience — screen readers and search
+          engines both honour it correctly, unlike `display: none` sprinkled
+          on ad hoc. */}
+      <div className="grid gap-4 xl:grid-cols-2" hidden={group !== "trading"}>
+        <ChargesCalculator />
+        <PositionSizeCalculator />
+        <StopLossTargetCalculator />
+      </div>
+      <div className="grid gap-4 xl:grid-cols-2" hidden={group !== "equity"}>
+        <StockAverageCalculator />
+        <TargetPriceCalculator />
+        <LossRecoveryCalculator />
+        <DividendIncomeCalculator />
+      </div>
+      <div className="grid gap-4 xl:grid-cols-2" hidden={group !== "planning"}>
+        <SipPlanner />
+        <StepUpSipCalculator />
+        <SipVsLumpsumCalculator />
+        <CagrCalculator />
+        <RuleOf72Calculator />
+        <RealReturnCalculator />
+        <EmiCalculator />
+        <RetirementCalculator />
       </div>
 
       <p className="text-center text-[11px] text-muted/60">
