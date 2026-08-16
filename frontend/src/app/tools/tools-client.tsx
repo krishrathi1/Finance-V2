@@ -37,6 +37,8 @@ import {
   ListPlus,
   X,
   Plus,
+  Hourglass,
+  Sailboat,
 } from "lucide-react";
 
 import { Card } from "@/components/ui/card";
@@ -53,6 +55,7 @@ import {
 import { estimateTradeTax } from "@/shared/single-trade-tax";
 import { TAX_ESTIMATE_DISCLAIMER } from "@/shared/capital-gains";
 import { todayIstDateKey } from "@/shared/market-status";
+import { coastFire, timeToGoal } from "@/shared/goal-tools";
 import {
   coveredCall,
   impliedLeverage,
@@ -2067,6 +2070,162 @@ function WeightedAverageCalculator() {
   );
 }
 
+// ─── Time to goal ────────────────────────────────────────────────────────────
+
+function TimeToGoalCalculator() {
+  const [current, setCurrent] = useState("500000");
+  const [monthly, setMonthly] = useState("25000");
+  const [target, setTarget] = useState("10000000");
+  const [rate, setRate] = useState("12");
+
+  const result = useMemo(
+    () =>
+      timeToGoal({
+        currentAmount: parse(current),
+        monthlyInvestment: parse(monthly),
+        targetAmount: parse(target),
+        annualReturnPercent: parse(rate),
+      }),
+    [current, monthly, target, rate]
+  );
+
+  return (
+    <Card className="p-4">
+      <div className="flex items-center gap-2">
+        <Hourglass className="h-4 w-4 text-accent" />
+        <h2 className="text-base font-semibold">Time to Goal</h2>
+      </div>
+      <p className="mt-1 text-[11px] leading-4 text-muted">
+        Not &ldquo;how much will I have&rdquo; but &ldquo;how long until I get there&rdquo; — the
+        question you actually have when the number is already fixed in your head.
+      </p>
+
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <Field label="Already invested" value={current} onChange={setCurrent} suffix="₹" />
+        <Field label="Adding monthly" value={monthly} onChange={setMonthly} suffix="₹" />
+        <Field label="Goal" value={target} onChange={setTarget} suffix="₹" />
+        <Field label="Expected return" value={rate} onChange={setRate} suffix="%/yr" />
+      </div>
+
+      {result ? (
+        result.alreadyThere ? (
+          <p className="mt-3 rounded-lg border border-success/30 bg-success/5 px-3 py-2.5 text-[11px] text-success">
+            Already there — what you hold today clears the goal.
+          </p>
+        ) : (
+          <>
+            <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+              <Stat
+                label="Time needed"
+                value={
+                  result.years >= 1
+                    ? `${result.years.toFixed(1)} yrs`
+                    : `${result.months} months`
+                }
+                tone="good"
+              />
+              <Stat label="You'd put in" value={rupees(result.totalInvested)} />
+              <Stat label="Growth does" value={rupees(result.growth)} />
+            </div>
+            <p className="mt-2 text-[10px] leading-4 text-muted/60">
+              {result.months} monthly instalments. Of the {rupees(parse(target))} goal,{" "}
+              {rupees(result.growth)} comes from compounding rather than from your pocket.
+            </p>
+          </>
+        )
+      ) : (
+        <p className="mt-3 rounded-lg border border-border/40 bg-bg/40 px-3 py-2 text-[11px] text-muted">
+          This plan does not reach the goal within 100 years — raise the monthly amount or the
+          expected return.
+        </p>
+      )}
+    </Card>
+  );
+}
+
+// ─── Coast FIRE ──────────────────────────────────────────────────────────────
+
+function CoastFireCalculator() {
+  const [current, setCurrent] = useState("2000000");
+  const [target, setTarget] = useState("50000000");
+  const [years, setYears] = useState("25");
+  const [rate, setRate] = useState("12");
+
+  const result = useMemo(
+    () =>
+      coastFire({
+        currentAmount: parse(current),
+        targetAmount: parse(target),
+        years: parse(years),
+        annualReturnPercent: parse(rate),
+      }),
+    [current, target, years, rate]
+  );
+
+  return (
+    <Card className="p-4">
+      <div className="flex items-center gap-2">
+        <Sailboat className="h-4 w-4 text-accent" />
+        <h2 className="text-base font-semibold">Coast Point</h2>
+      </div>
+      <p className="mt-1 text-[11px] leading-4 text-muted">
+        Whether what you already hold reaches the goal on its own, with nothing further added.
+        Past that point, compounding finishes the job.
+      </p>
+
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <Field label="Already invested" value={current} onChange={setCurrent} suffix="₹" />
+        <Field label="Goal" value={target} onChange={setTarget} suffix="₹" />
+        <Field label="Years to goal" value={years} onChange={setYears} />
+        <Field label="Expected return" value={rate} onChange={setRate} suffix="%/yr" />
+      </div>
+
+      {result ? (
+        <>
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <Stat
+              label="Grows to"
+              value={rupees(result.projectedAmount)}
+              tone={result.onTrack ? "good" : undefined}
+            />
+            <Stat
+              label="Covers"
+              value={`${result.coveragePercent.toFixed(0)}%`}
+              tone={result.onTrack ? "good" : "bad"}
+            />
+            <Stat
+              label="Still short"
+              value={result.shortfall === 0 ? "—" : rupees(result.shortfall)}
+              tone={result.shortfall === 0 ? "good" : "bad"}
+            />
+          </div>
+
+          <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-border/40">
+            <div
+              className={`h-full rounded-full ${
+                result.onTrack
+                  ? "bg-gradient-to-r from-emerald-400 to-teal-500"
+                  : "bg-gradient-to-r from-amber-400 to-orange-500"
+              }`}
+              style={{ width: `${Math.min(100, Math.max(1, result.coveragePercent))}%` }}
+            />
+          </div>
+
+          <p className="mt-2 text-[10px] leading-4 text-muted/60">
+            {result.onTrack
+              ? "You could stop contributing today and still reach the goal on this return assumption. Continuing to invest simply gets you there sooner, or further."
+              : "Contributions are still doing the work here — this is what the existing balance alone would manage."}
+          </p>
+        </>
+      ) : (
+        <p className="mt-3 rounded-lg border border-border/40 bg-bg/40 px-3 py-2 text-[11px] text-muted">
+          Enter a goal and a horizon of up to 100 years.
+        </p>
+      )}
+    </Card>
+  );
+}
+
 const GROUPS = [
   { key: "trading", label: "Trading", blurb: "Costs and sizing for a trade you are about to place." },
   { key: "equity", label: "Equity", blurb: "Questions about a position you hold or are building." },
@@ -2149,6 +2308,8 @@ export function ToolsClient() {
         <RiskOfRuinCalculator />
       </div>
       <div className="grid gap-4 xl:grid-cols-2" hidden={group !== "planning"}>
+        <TimeToGoalCalculator />
+        <CoastFireCalculator />
         <SipPlanner />
         <StepUpSipCalculator />
         <SipVsLumpsumCalculator />
