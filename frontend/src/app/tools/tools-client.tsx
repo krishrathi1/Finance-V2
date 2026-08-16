@@ -16,6 +16,13 @@ import {
   Undo2,
   Repeat2,
   Scale,
+  Zap,
+  AlertTriangle,
+  ShieldCheck,
+  LifeBuoy,
+  Gauge,
+  AlertOctagon,
+  Skull,
 } from "lucide-react";
 
 import { Card } from "@/components/ui/card";
@@ -28,6 +35,20 @@ import {
   requiredReturn,
   stopLossTargets,
 } from "@/shared/equity-tools";
+import {
+  coveredCall,
+  impliedLeverage,
+  optionBreakeven,
+  optionPayoff,
+  protectivePut,
+} from "@/shared/options-tools";
+import {
+  intradayMargin,
+  leverageRiskOfRuin,
+  liquidationPrice,
+  marginCallAmount,
+  maxQuantityForMargin,
+} from "@/shared/margin-tools";
 import {
   emiCalculator,
   inflationAdjustedValue,
@@ -1165,9 +1186,560 @@ function StopLossTargetCalculator() {
   );
 }
 
+// ─── Option payoff ───────────────────────────────────────────────────────────
+
+function OptionPayoffCalculator() {
+  const [optionType, setOptionType] = useState<"call" | "put">("call");
+  const [position, setPosition] = useState<"long" | "short">("long");
+  const [strike, setStrike] = useState("500");
+  const [premium, setPremium] = useState("15");
+  const [spot, setSpot] = useState("530");
+  const [lotSize, setLotSize] = useState("");
+
+  const result = useMemo(
+    () =>
+      optionPayoff({
+        optionType,
+        position,
+        strikePrice: parse(strike),
+        premium: parse(premium),
+        spotAtExpiry: parse(spot),
+        ...(lotSize.trim() !== "" ? { lotSize: parse(lotSize) } : {}),
+      }),
+    [optionType, position, strike, premium, spot, lotSize]
+  );
+  const breakeven = useMemo(
+    () => optionBreakeven({ optionType, strikePrice: parse(strike), premium: parse(premium) }),
+    [optionType, strike, premium]
+  );
+  const leverage = useMemo(
+    () =>
+      impliedLeverage({
+        premium: parse(premium),
+        strikePrice: parse(strike),
+        spotPrice: parse(spot),
+      }),
+    [premium, strike, spot]
+  );
+
+  return (
+    <Card className="p-4">
+      <div className="flex items-center gap-2">
+        <Zap className="h-4 w-4 text-accent" />
+        <h2 className="text-base font-semibold">Option Payoff</h2>
+      </div>
+      <p className="mt-1 text-[11px] leading-4 text-muted">
+        Settlement P&amp;L at expiry — the arithmetic the exchange pays by, not a fair-value
+        estimate. No Greeks, no time value: this is what the position is worth on expiry day.
+      </p>
+
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <div className="flex rounded-xl border border-border/50 bg-bg/40 p-0.5" role="tablist">
+          {(["call", "put"] as const).map((option) => (
+            <button
+              key={option}
+              type="button"
+              role="tab"
+              aria-selected={optionType === option}
+              onClick={() => setOptionType(option)}
+              className={`flex-1 rounded-[10px] px-3 py-1.5 text-xs font-semibold capitalize transition ${
+                optionType === option ? "bg-accent/15 text-accent" : "text-muted hover:text-fg"
+              }`}
+            >
+              {option}
+            </button>
+          ))}
+        </div>
+        <div className="flex rounded-xl border border-border/50 bg-bg/40 p-0.5" role="tablist">
+          {(["long", "short"] as const).map((option) => (
+            <button
+              key={option}
+              type="button"
+              role="tab"
+              aria-selected={position === option}
+              onClick={() => setPosition(option)}
+              className={`flex-1 rounded-[10px] px-3 py-1.5 text-xs font-semibold capitalize transition ${
+                position === option ? "bg-accent/15 text-accent" : "text-muted hover:text-fg"
+              }`}
+            >
+              {option === "long" ? "Buy" : "Sell"}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <Field label="Strike price" value={strike} onChange={setStrike} suffix="₹" />
+        <Field label="Premium" value={premium} onChange={setPremium} suffix="₹" />
+        <Field label="Spot at expiry" value={spot} onChange={setSpot} suffix="₹" />
+        <Field label="Lot size (optional)" value={lotSize} onChange={setLotSize} />
+      </div>
+
+      {result ? (
+        <>
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <Stat
+              label="P&L per lot"
+              value={rupees(result.payoffPerLot)}
+              tone={result.profitable ? "good" : "bad"}
+            />
+            <Stat label="Breakeven spot" value={breakeven === null ? "—" : rupees(breakeven)} />
+            <Stat label="Rough leverage" value={leverage === null ? "—" : `${leverage.toFixed(1)}x`} />
+          </div>
+          {position === "short" && (
+            <p className="mt-2 flex items-start gap-1.5 text-[10px] leading-4 text-danger">
+              <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+              Selling {optionType === "call" ? "a call" : "a put"} naked has no floor on the loss —
+              it is not capped at the premium the way buying one is.
+            </p>
+          )}
+          <p className="mt-1 text-[10px] leading-4 text-muted/60">
+            &ldquo;Rough leverage&rdquo; is spot ÷ premium — the retail rule of thumb, not a real
+            delta. An option&apos;s true sensitivity moves continuously with moneyness, time and
+            volatility.
+          </p>
+        </>
+      ) : (
+        <p className="mt-3 rounded-lg border border-border/40 bg-bg/40 px-3 py-2 text-[11px] text-muted">
+          Strike and premium must be positive; spot at expiry cannot be negative.
+        </p>
+      )}
+    </Card>
+  );
+}
+
+// ─── Covered call ────────────────────────────────────────────────────────────
+
+function CoveredCallCalculator() {
+  const [shares, setShares] = useState("100");
+  const [buyPrice, setBuyPrice] = useState("480");
+  const [strike, setStrike] = useState("500");
+  const [premium, setPremium] = useState("12");
+  const [spot, setSpot] = useState("530");
+
+  const result = useMemo(
+    () =>
+      coveredCall({
+        sharesHeld: parse(shares),
+        buyPrice: parse(buyPrice),
+        strikePrice: parse(strike),
+        premium: parse(premium),
+        spotAtExpiry: parse(spot),
+      }),
+    [shares, buyPrice, strike, premium, spot]
+  );
+
+  return (
+    <Card className="p-4">
+      <div className="flex items-center gap-2">
+        <ShieldCheck className="h-4 w-4 text-accent" />
+        <h2 className="text-base font-semibold">Covered Call</h2>
+      </div>
+      <p className="mt-1 text-[11px] leading-4 text-muted">
+        Selling a call against shares you already hold — income now, upside traded away above the
+        strike.
+      </p>
+
+      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+        <Field label="Shares held" value={shares} onChange={setShares} />
+        <Field label="Your buy price" value={buyPrice} onChange={setBuyPrice} suffix="₹" />
+        <Field label="Call strike sold" value={strike} onChange={setStrike} suffix="₹" />
+        <Field label="Premium received" value={premium} onChange={setPremium} suffix="₹" />
+        <Field label="Spot at expiry" value={spot} onChange={setSpot} suffix="₹" />
+      </div>
+
+      {result ? (
+        <>
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <Stat
+              label="Total P&L"
+              value={rupees(result.totalPnl)}
+              tone={result.totalPnl >= 0 ? "good" : "bad"}
+            />
+            <Stat label="Max profit" value={rupees(result.maxProfit)} tone="good" />
+            <Stat label="Breakeven" value={rupees(result.breakeven)} />
+          </div>
+          {result.capped && (
+            <p className="mt-2 text-[10px] leading-4 text-amber-500">
+              Spot is at or above the strike — profit is capped here regardless of how much
+              further it runs; the shares are called away at {rupees(parse(strike))}.
+            </p>
+          )}
+          <p className="mt-1 text-[10px] leading-4 text-muted/60">
+            Breakeven is your buy price minus the premium — different from a naked call&apos;s
+            breakeven (strike + premium), because the premium here cushions the stock&apos;s own
+            cost basis, not the option&apos;s strike.
+          </p>
+        </>
+      ) : (
+        <p className="mt-3 rounded-lg border border-border/40 bg-bg/40 px-3 py-2 text-[11px] text-muted">
+          Shares, buy price and strike must all be positive.
+        </p>
+      )}
+    </Card>
+  );
+}
+
+// ─── Protective put ──────────────────────────────────────────────────────────
+
+function ProtectivePutCalculator() {
+  const [shares, setShares] = useState("100");
+  const [buyPrice, setBuyPrice] = useState("480");
+  const [strike, setStrike] = useState("450");
+  const [premium, setPremium] = useState("8");
+  const [spot, setSpot] = useState("380");
+
+  const result = useMemo(
+    () =>
+      protectivePut({
+        sharesHeld: parse(shares),
+        buyPrice: parse(buyPrice),
+        strikePrice: parse(strike),
+        premium: parse(premium),
+        spotAtExpiry: parse(spot),
+      }),
+    [shares, buyPrice, strike, premium, spot]
+  );
+
+  return (
+    <Card className="p-4">
+      <div className="flex items-center gap-2">
+        <LifeBuoy className="h-4 w-4 text-accent" />
+        <h2 className="text-base font-semibold">Protective Put</h2>
+      </div>
+      <p className="mt-1 text-[11px] leading-4 text-muted">
+        Buying insurance on shares you hold. Costs the premium; puts a floor under how much a
+        crash can take.
+      </p>
+
+      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+        <Field label="Shares held" value={shares} onChange={setShares} />
+        <Field label="Your buy price" value={buyPrice} onChange={setBuyPrice} suffix="₹" />
+        <Field label="Put strike bought" value={strike} onChange={setStrike} suffix="₹" />
+        <Field label="Premium paid" value={premium} onChange={setPremium} suffix="₹" />
+        <Field label="Spot at expiry" value={spot} onChange={setSpot} suffix="₹" />
+      </div>
+
+      {result ? (
+        <>
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <Stat
+              label="Total P&L"
+              value={rupees(result.totalPnl)}
+              tone={result.totalPnl >= 0 ? "good" : "bad"}
+            />
+            <Stat label="Max loss, floored" value={rupees(result.maxLoss)} tone="bad" />
+            <Stat label="Breakeven" value={rupees(result.breakeven)} />
+          </div>
+          <p className="mt-2 text-[10px] leading-4 text-muted/60">
+            Max loss is fixed at or below the strike, however far the stock falls beyond it — the
+            put&apos;s intrinsic value rises rupee-for-rupee with the stock&apos;s fall below that
+            point, cancelling it out. Breakeven is your buy price plus the premium: the stock must
+            recover both before the position is whole.
+          </p>
+        </>
+      ) : (
+        <p className="mt-3 rounded-lg border border-border/40 bg-bg/40 px-3 py-2 text-[11px] text-muted">
+          Shares, buy price and strike must all be positive.
+        </p>
+      )}
+    </Card>
+  );
+}
+
+// ─── Intraday margin ─────────────────────────────────────────────────────────
+
+function IntradayMarginCalculator() {
+  const [mode, setMode] = useState<"margin" | "quantity">("margin");
+  const [quantity, setQuantity] = useState("500");
+  const [price, setPrice] = useState("500");
+  const [marginPercent, setMarginPercent] = useState("20");
+  const [availableMargin, setAvailableMargin] = useState("100000");
+
+  const marginResult = useMemo(
+    () =>
+      intradayMargin({
+        quantity: parse(quantity),
+        price: parse(price),
+        marginPercent: parse(marginPercent),
+      }),
+    [quantity, price, marginPercent]
+  );
+  const quantityResult = useMemo(
+    () =>
+      maxQuantityForMargin({
+        availableMargin: parse(availableMargin),
+        price: parse(price),
+        marginPercent: parse(marginPercent),
+      }),
+    [availableMargin, price, marginPercent]
+  );
+
+  return (
+    <Card className="p-4">
+      <div className="flex items-center gap-2">
+        <Gauge className="h-4 w-4 text-accent" />
+        <h2 className="text-base font-semibold">Intraday Margin</h2>
+      </div>
+      <p className="mt-1 text-[11px] leading-4 text-muted">
+        How much margin a position demands, or how many shares a margin budget buys — the two
+        sides of the same question.
+      </p>
+
+      <div className="mt-3 flex rounded-xl border border-border/50 bg-bg/40 p-0.5" role="tablist">
+        {(
+          [
+            { key: "margin", label: "I have a quantity" },
+            { key: "quantity", label: "I have a budget" },
+          ] as const
+        ).map((option) => (
+          <button
+            key={option.key}
+            type="button"
+            role="tab"
+            aria-selected={mode === option.key}
+            onClick={() => setMode(option.key)}
+            className={`flex-1 rounded-[10px] px-3 py-1.5 text-xs font-semibold transition ${
+              mode === option.key ? "bg-accent/15 text-accent" : "text-muted hover:text-fg"
+            }`}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+        {mode === "margin" ? (
+          <Field label="Quantity" value={quantity} onChange={setQuantity} />
+        ) : (
+          <Field label="Available margin" value={availableMargin} onChange={setAvailableMargin} suffix="₹" />
+        )}
+        <Field label="Price" value={price} onChange={setPrice} suffix="₹" />
+        <Field label="Broker margin" value={marginPercent} onChange={setMarginPercent} suffix="%" />
+      </div>
+
+      {mode === "margin" ? (
+        marginResult ? (
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <Stat label="Position value" value={rupees(marginResult.positionValue)} />
+            <Stat label="Margin required" value={rupees(marginResult.marginRequired)} tone="good" />
+            <Stat label="Leverage" value={`${marginResult.leverage.toFixed(1)}x`} />
+            <Stat label="Borrowed" value={rupees(marginResult.borrowedAmount)} />
+          </div>
+        ) : (
+          <p className="mt-3 rounded-lg border border-border/40 bg-bg/40 px-3 py-2 text-[11px] text-muted">
+            Quantity and price must be positive; margin must be between 0 and 100%.
+          </p>
+        )
+      ) : quantityResult ? (
+        <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <Stat
+            label="Max shares"
+            value={quantityResult.maxQuantity.toLocaleString("en-IN")}
+            tone="good"
+          />
+          <Stat label="Position value" value={rupees(quantityResult.positionValue)} />
+          <Stat label="Margin used" value={rupees(quantityResult.marginUsed)} />
+          <Stat label="Margin left over" value={rupees(quantityResult.marginRemaining)} />
+        </div>
+      ) : (
+        <p className="mt-3 rounded-lg border border-border/40 bg-bg/40 px-3 py-2 text-[11px] text-muted">
+          Available margin and price must be positive; margin must be between 0 and 100%.
+        </p>
+      )}
+      <p className="mt-2 text-[10px] leading-4 text-muted/60">
+        &ldquo;Broker margin&rdquo; is the percent of position value demanded up front — brokers
+        quote it this way (&ldquo;20% margin&rdquo;), not as a multiple.
+      </p>
+    </Card>
+  );
+}
+
+// ─── Liquidation & margin call ───────────────────────────────────────────────
+
+function LiquidationCalculator() {
+  const [direction, setDirection] = useState<"long" | "short">("long");
+  const [quantity, setQuantity] = useState("500");
+  const [entryPrice, setEntryPrice] = useState("500");
+  const [currentPrice, setCurrentPrice] = useState("470");
+  const [marginPercent, setMarginPercent] = useState("20");
+  const [maintenancePercent, setMaintenancePercent] = useState("10");
+
+  const liqPrice = useMemo(
+    () =>
+      liquidationPrice({
+        entryPrice: parse(entryPrice),
+        marginPercent: parse(marginPercent),
+        maintenanceMarginPercent: parse(maintenancePercent),
+        direction,
+      }),
+    [entryPrice, marginPercent, maintenancePercent, direction]
+  );
+  const call = useMemo(
+    () =>
+      marginCallAmount({
+        quantity: parse(quantity),
+        entryPrice: parse(entryPrice),
+        currentPrice: parse(currentPrice),
+        marginPercent: parse(marginPercent),
+        maintenanceMarginPercent: parse(maintenancePercent),
+        direction,
+      }),
+    [quantity, entryPrice, currentPrice, marginPercent, maintenancePercent, direction]
+  );
+
+  return (
+    <Card className="p-4">
+      <div className="flex items-center gap-2">
+        <AlertOctagon className="h-4 w-4 text-accent" />
+        <h2 className="text-base font-semibold">Liquidation &amp; Margin Call</h2>
+      </div>
+      <p className="mt-1 text-[11px] leading-4 text-muted">
+        The price a leveraged position gets force-closed at, and whether it is already below the
+        maintenance line today.
+      </p>
+
+      <div className="mt-3 flex rounded-xl border border-border/50 bg-bg/40 p-0.5" role="tablist">
+        {(["long", "short"] as const).map((option) => (
+          <button
+            key={option}
+            type="button"
+            role="tab"
+            aria-selected={direction === option}
+            onClick={() => setDirection(option)}
+            className={`flex-1 rounded-[10px] px-3 py-1.5 text-xs font-semibold capitalize transition ${
+              direction === option ? "bg-accent/15 text-accent" : "text-muted hover:text-fg"
+            }`}
+          >
+            {option}
+          </button>
+        ))}
+      </div>
+
+      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+        <Field label="Quantity" value={quantity} onChange={setQuantity} />
+        <Field label="Entry price" value={entryPrice} onChange={setEntryPrice} suffix="₹" />
+        <Field label="Current price" value={currentPrice} onChange={setCurrentPrice} suffix="₹" />
+        <Field label="Initial margin" value={marginPercent} onChange={setMarginPercent} suffix="%" />
+        <Field label="Maintenance margin" value={maintenancePercent} onChange={setMaintenancePercent} suffix="%" />
+      </div>
+
+      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <Stat
+          label="Liquidation price"
+          value={liqPrice === null ? "—" : rupees(liqPrice)}
+          tone="bad"
+        />
+        <Stat
+          label="Current equity"
+          value={call ? rupees(call.currentEquity) : "—"}
+          tone={call && call.inMarginCall ? "bad" : undefined}
+        />
+        <Stat label="Required equity" value={call ? rupees(call.requiredEquity) : "—"} />
+        <Stat
+          label={call?.inMarginCall ? "Top-up needed" : "Margin call?"}
+          value={call ? (call.inMarginCall ? rupees(call.marginCallAmount) : "No") : "—"}
+          tone={call?.inMarginCall ? "bad" : "good"}
+        />
+      </div>
+      <p className="mt-2 text-[10px] leading-4 text-muted/60">
+        {direction === "short"
+          ? "A short's liquidation price sits ABOVE entry — a short is squeezed out by the price rising, the mirror of a long."
+          : "A long's liquidation price sits below entry."}{" "}
+        The top-up figure restores the ORIGINAL margin level, not just the bare maintenance floor —
+        real broker margin-call notices ask for enough to rebuild the buffer, not just clear the
+        breach.
+      </p>
+    </Card>
+  );
+}
+
+// ─── Risk of ruin ────────────────────────────────────────────────────────────
+
+const LEVERAGE_STEPS = [2, 3, 5, 10, 20];
+
+function RiskOfRuinCalculator() {
+  const [leverage, setLeverage] = useState("5");
+  const [move, setMove] = useState("15");
+
+  const result = useMemo(
+    () => leverageRiskOfRuin({ leverage: parse(leverage), adverseMovePercent: parse(move) }),
+    [leverage, move]
+  );
+
+  return (
+    <Card className="p-4">
+      <div className="flex items-center gap-2">
+        <Skull className="h-4 w-4 text-accent" />
+        <h2 className="text-base font-semibold">Leverage Risk of Ruin</h2>
+      </div>
+      <p className="mt-1 text-[11px] leading-4 text-muted">
+        &ldquo;5x leverage&rdquo; sounds like a modest multiplier. This is what it actually does to
+        an ordinary adverse move.
+      </p>
+
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <Field label="Leverage" value={leverage} onChange={setLeverage} suffix="x" />
+        <Field label="Adverse move" value={move} onChange={setMove} suffix="%" />
+      </div>
+
+      <div className="mt-3 grid grid-cols-1 gap-1.5 sm:grid-cols-5">
+        {LEVERAGE_STEPS.map((step) => {
+          const shock = leverageRiskOfRuin({ leverage: step, adverseMovePercent: parse(move) });
+          return (
+            <button
+              key={step}
+              type="button"
+              onClick={() => setLeverage(String(step))}
+              className="rounded-lg border border-border/40 bg-bg/40 px-1.5 py-1.5 text-center transition hover:border-accent/40"
+            >
+              <span className="block text-[10px] text-muted">{step}x</span>
+              <span
+                className={`block text-[11px] font-bold tabular-nums ${
+                  shock?.wipedOut ? "text-danger" : "text-fg"
+                }`}
+              >
+                {shock ? `${shock.equityLossPercent.toFixed(0)}%` : "—"}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {result ? (
+        <>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <Stat
+              label="Equity lost"
+              value={`${result.equityLossPercent.toFixed(1)}%`}
+              tone={result.wipedOut ? "bad" : undefined}
+            />
+            <Stat
+              label="Outcome"
+              value={result.wipedOut ? "Wiped out" : "Survives"}
+              tone={result.wipedOut ? "bad" : "good"}
+            />
+          </div>
+          {result.wipedOut && result.equityLossPercent > 100 && (
+            <p className="mt-2 flex items-start gap-1.5 text-[10px] leading-4 text-danger">
+              <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+              This is not just a total loss — the shortfall past 100% is owed back to the broker.
+            </p>
+          )}
+        </>
+      ) : (
+        <p className="mt-3 rounded-lg border border-border/40 bg-bg/40 px-3 py-2 text-[11px] text-muted">
+          Leverage must be positive; the adverse move cannot be negative.
+        </p>
+      )}
+    </Card>
+  );
+}
+
 const GROUPS = [
   { key: "trading", label: "Trading", blurb: "Costs and sizing for a trade you are about to place." },
   { key: "equity", label: "Equity", blurb: "Questions about a position you hold or are building." },
+  { key: "fno", label: "F&O", blurb: "Options payoff and leveraged-position arithmetic." },
   { key: "planning", label: "Planning", blurb: "Long-horizon compounding, inflation and goals." },
 ] as const;
 
@@ -1234,6 +1806,14 @@ export function ToolsClient() {
         <TargetPriceCalculator />
         <LossRecoveryCalculator />
         <DividendIncomeCalculator />
+      </div>
+      <div className="grid gap-4 xl:grid-cols-2" hidden={group !== "fno"}>
+        <OptionPayoffCalculator />
+        <CoveredCallCalculator />
+        <ProtectivePutCalculator />
+        <IntradayMarginCalculator />
+        <LiquidationCalculator />
+        <RiskOfRuinCalculator />
       </div>
       <div className="grid gap-4 xl:grid-cols-2" hidden={group !== "planning"}>
         <SipPlanner />
