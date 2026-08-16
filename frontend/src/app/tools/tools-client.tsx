@@ -23,6 +23,11 @@ import {
   Gauge,
   AlertOctagon,
   Skull,
+  ReceiptText,
+  CalendarClock,
+  ListPlus,
+  X,
+  Plus,
 } from "lucide-react";
 
 import { Card } from "@/components/ui/card";
@@ -34,7 +39,11 @@ import {
   dividendIncomePlanner,
   requiredReturn,
   stopLossTargets,
+  weightedAverageBuy,
 } from "@/shared/equity-tools";
+import { estimateTradeTax } from "@/shared/single-trade-tax";
+import { TAX_ESTIMATE_DISCLAIMER } from "@/shared/capital-gains";
+import { todayIstDateKey } from "@/shared/market-status";
 import {
   coveredCall,
   impliedLeverage,
@@ -1736,6 +1745,211 @@ function RiskOfRuinCalculator() {
   );
 }
 
+// ─── Trade tax estimator ─────────────────────────────────────────────────────
+
+function TradeTaxCalculator() {
+  const today = todayIstDateKey();
+  const [quantity, setQuantity] = useState("100");
+  const [buyPrice, setBuyPrice] = useState("500");
+  const [sellPrice, setSellPrice] = useState("650");
+  const [buyDate, setBuyDate] = useState(() => {
+    const d = new Date();
+    d.setMonth(d.getMonth() - 4);
+    return d.toISOString().slice(0, 10);
+  });
+  const [sellDate, setSellDate] = useState(today);
+
+  const result = useMemo(
+    () =>
+      estimateTradeTax({
+        quantity: parse(quantity),
+        buyPrice: parse(buyPrice),
+        sellPrice: parse(sellPrice),
+        buyDate,
+        sellDate,
+      }),
+    [quantity, buyPrice, sellPrice, buyDate, sellDate]
+  );
+
+  return (
+    <Card className="p-4">
+      <div className="flex items-center gap-2">
+        <ReceiptText className="h-4 w-4 text-accent" />
+        <h2 className="text-base font-semibold">Capital Gains Tax</h2>
+      </div>
+      <p className="mt-1 text-[11px] leading-4 text-muted">
+        What one hypothetical trade would owe, before it exists in your portfolio — the same
+        FY-aware rules (STCG/LTCG rate, ₹1.25L exemption, cess) as your portfolio&apos;s tax
+        statement, applied to a single what-if.
+      </p>
+
+      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+        <Field label="Quantity" value={quantity} onChange={setQuantity} />
+        <Field label="Buy price" value={buyPrice} onChange={setBuyPrice} suffix="₹" />
+        <Field label="Sell price" value={sellPrice} onChange={setSellPrice} suffix="₹" />
+        <label className="block">
+          <span className="mb-1 block text-[11px] font-medium text-muted">Buy date</span>
+          <input
+            type="date"
+            value={buyDate}
+            onChange={(event) => setBuyDate(event.target.value)}
+            className="h-10 w-full rounded-xl border border-border/60 bg-bg/60 px-3 text-sm outline-none transition focus:border-accent/60 focus:ring-2 focus:ring-accent/20"
+          />
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-[11px] font-medium text-muted">Sell date</span>
+          <input
+            type="date"
+            value={sellDate}
+            onChange={(event) => setSellDate(event.target.value)}
+            className="h-10 w-full rounded-xl border border-border/60 bg-bg/60 px-3 text-sm outline-none transition focus:border-accent/60 focus:ring-2 focus:ring-accent/20"
+          />
+        </label>
+      </div>
+
+      {result ? (
+        <>
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <Stat
+              label="Gain / loss"
+              value={rupees(result.realisedPnl)}
+              tone={result.realisedPnl >= 0 ? "good" : "bad"}
+            />
+            <Stat
+              label="Held"
+              value={`${result.holdingDays}d`}
+              tone={result.term === "long" ? "good" : undefined}
+            />
+            <Stat label="Term" value={result.term === "long" ? "Long-term" : "Short-term"} />
+            <Stat label="Estimated tax" value={rupees(result.totalTax)} tone="bad" />
+          </div>
+          {result.term === "short" && result.daysToLongTerm > 0 && (
+            <p className="mt-2 flex items-start gap-1.5 text-[10px] leading-4 text-amber-500">
+              <CalendarClock className="mt-0.5 h-3 w-3 shrink-0" />
+              {result.daysToLongTerm} more days turns this long-term — a lower rate and the ₹1.25L
+              exemption, instead of the flat short-term rate.
+            </p>
+          )}
+          {result.exemptionUsed > 0 && (
+            <p className="mt-1 text-[10px] leading-4 text-muted/60">
+              {rupees(result.exemptionUsed)} of this year&apos;s ₹{result.exemptionLimit.toLocaleString("en-IN")} long-term
+              exemption used, {rupees(result.exemptionRemaining)} left for other trades this FY.
+            </p>
+          )}
+        </>
+      ) : (
+        <p className="mt-3 rounded-lg border border-border/40 bg-bg/40 px-3 py-2 text-[11px] text-muted">
+          Sell date must be on or after the buy date; quantity and prices must be positive.
+        </p>
+      )}
+
+      <p className="mt-2 text-[10px] leading-4 text-muted/60">{TAX_ESTIMATE_DISCLAIMER}</p>
+    </Card>
+  );
+}
+
+// ─── Weighted average (multi-lot) ────────────────────────────────────────────
+
+type LotRow = { id: number; quantity: string; price: string };
+let lotRowId = 0;
+const newLotRow = (): LotRow => ({ id: lotRowId++, quantity: "", price: "" });
+
+function WeightedAverageCalculator() {
+  const [rows, setRows] = useState<LotRow[]>(() => [newLotRow(), newLotRow(), newLotRow()]);
+
+  const result = useMemo(
+    () =>
+      weightedAverageBuy({
+        lots: rows.map((row) => ({ quantity: parse(row.quantity), price: parse(row.price) })),
+      }),
+    [rows]
+  );
+  const usableCount = useMemo(
+    () => rows.filter((row) => parse(row.quantity) > 0 && parse(row.price) > 0).length,
+    [rows]
+  );
+
+  const updateRow = (id: number, field: "quantity" | "price", value: string) => {
+    setRows((previous) => previous.map((row) => (row.id === id ? { ...row, [field]: value } : row)));
+  };
+  const removeRow = (id: number) => {
+    setRows((previous) => (previous.length > 1 ? previous.filter((row) => row.id !== id) : previous));
+  };
+
+  return (
+    <Card className="p-4">
+      <div className="flex items-center gap-2">
+        <ListPlus className="h-4 w-4 text-accent" />
+        <h2 className="text-base font-semibold">Weighted Average (Multi-Lot)</h2>
+      </div>
+      <p className="mt-1 text-[11px] leading-4 text-muted">
+        Bought across several tranches? Your true average blends all of them, not just the last
+        top-up. Blank rows are ignored, not errors.
+      </p>
+
+      <div className="mt-3 space-y-1.5">
+        {rows.map((row, index) => (
+          <div key={row.id} className="flex items-center gap-1.5">
+            <span className="w-5 shrink-0 text-[10px] text-muted">{index + 1}</span>
+            <input
+              type="number"
+              inputMode="decimal"
+              min="0"
+              value={row.quantity}
+              onChange={(event) => updateRow(row.id, "quantity", event.target.value)}
+              placeholder="Qty"
+              className="h-9 min-w-0 flex-1 rounded-lg border border-border/60 bg-bg/60 px-2.5 text-sm outline-none transition focus:border-accent/60 focus:ring-2 focus:ring-accent/20"
+            />
+            <input
+              type="number"
+              inputMode="decimal"
+              min="0"
+              value={row.price}
+              onChange={(event) => updateRow(row.id, "price", event.target.value)}
+              placeholder="Price ₹"
+              className="h-9 min-w-0 flex-1 rounded-lg border border-border/60 bg-bg/60 px-2.5 text-sm outline-none transition focus:border-accent/60 focus:ring-2 focus:ring-accent/20"
+            />
+            <button
+              type="button"
+              onClick={() => removeRow(row.id)}
+              disabled={rows.length <= 1}
+              aria-label={`Remove lot ${index + 1}`}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border/50 text-muted transition hover:border-danger/40 hover:text-danger disabled:cursor-not-allowed disabled:opacity-30"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        ))}
+      </div>
+
+      <button
+        type="button"
+        onClick={() => setRows((previous) => [...previous, newLotRow()])}
+        className="mt-2 flex items-center gap-1.5 rounded-lg border border-dashed border-border/60 px-3 py-1.5 text-[11px] font-semibold text-muted transition hover:border-accent/40 hover:text-accent"
+      >
+        <Plus className="h-3.5 w-3.5" /> Add lot
+      </button>
+
+      {result ? (
+        <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+          <Stat label="Total shares" value={result.totalQuantity.toLocaleString("en-IN")} />
+          <Stat label="Weighted average" value={rupees(result.averagePrice)} tone="good" />
+          <Stat label="Total invested" value={rupees(result.totalInvested)} />
+        </div>
+      ) : (
+        <p className="mt-3 rounded-lg border border-border/40 bg-bg/40 px-3 py-2 text-[11px] text-muted">
+          Fill in at least one row with a quantity and a price.
+        </p>
+      )}
+      {usableCount > 0 && usableCount < rows.length && (
+        <p className="mt-2 text-[10px] leading-4 text-muted/60">
+          Using {usableCount} of {rows.length} rows — the rest are blank or incomplete.
+        </p>
+      )}
+    </Card>
+  );
+}
+
 const GROUPS = [
   { key: "trading", label: "Trading", blurb: "Costs and sizing for a trade you are about to place." },
   { key: "equity", label: "Equity", blurb: "Questions about a position you hold or are building." },
@@ -1803,9 +2017,11 @@ export function ToolsClient() {
       </div>
       <div className="grid gap-4 xl:grid-cols-2" hidden={group !== "equity"}>
         <StockAverageCalculator />
+        <WeightedAverageCalculator />
         <TargetPriceCalculator />
         <LossRecoveryCalculator />
         <DividendIncomeCalculator />
+        <TradeTaxCalculator />
       </div>
       <div className="grid gap-4 xl:grid-cols-2" hidden={group !== "fno"}>
         <OptionPayoffCalculator />
