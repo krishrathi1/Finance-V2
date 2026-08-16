@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import {
   Area,
   AreaChart,
@@ -39,6 +39,7 @@ import {
   Plus,
   Hourglass,
   Sailboat,
+  Search,
 } from "lucide-react";
 
 import { Card } from "@/components/ui/card";
@@ -2235,9 +2236,266 @@ const GROUPS = [
 
 type GroupKey = (typeof GROUPS)[number]["key"];
 
+/**
+ * The registry every rendering path reads from.
+ *
+ * Twenty-five calculators had reached the point where the render block was a
+ * hand-maintained wall of JSX, and search was impossible without duplicating
+ * the list. Describing them as data instead means the tab filter, the search
+ * filter, the count and the deep link are all derived from one place and
+ * cannot drift out of step with each other.
+ *
+ * `keywords` carries the words someone would actually type — including the
+ * ones the visible title deliberately avoids. Nobody searches "Loss Recovery";
+ * they search "breakeven" or "recover my loss".
+ */
+type CalculatorEntry = {
+  key: string;
+  title: string;
+  group: GroupKey;
+  keywords: string;
+  Component: () => JSX.Element;
+};
+
+const CALCULATORS: CalculatorEntry[] = [
+  // Trading
+  {
+    key: "charges",
+    title: "Brokerage & Charges",
+    group: "trading",
+    keywords: "brokerage stt tax charges cost stamp duty gst sebi turnover breakeven intraday delivery contract note",
+    Component: ChargesCalculator,
+  },
+  {
+    key: "position-size",
+    title: "Position Size",
+    group: "trading",
+    keywords: "position sizing risk per trade quantity shares stop loss capital allocation money management",
+    Component: PositionSizeCalculator,
+  },
+  {
+    key: "stop-loss",
+    title: "Stop-Loss & Target Price",
+    group: "trading",
+    keywords: "stop loss target price risk reward ratio long short entry exit levels",
+    Component: StopLossTargetCalculator,
+  },
+
+  // Equity
+  {
+    key: "stock-average",
+    title: "Stock Average",
+    group: "equity",
+    keywords: "average down averaging up cost basis buy more add position tranche",
+    Component: StockAverageCalculator,
+  },
+  {
+    key: "weighted-average",
+    title: "Weighted Average (Multi-Lot)",
+    group: "equity",
+    keywords: "weighted average multiple lots tranches accumulation cost basis several buys",
+    Component: WeightedAverageCalculator,
+  },
+  {
+    key: "target-price",
+    title: "Target Price",
+    group: "equity",
+    keywords: "target price required return double 2x multibagger annualised how much needed",
+    Component: TargetPriceCalculator,
+  },
+  {
+    key: "loss-recovery",
+    title: "Loss Recovery",
+    group: "equity",
+    keywords: "loss recovery breakeven gain needed recover drawdown down 50 percent",
+    Component: LossRecoveryCalculator,
+  },
+  {
+    key: "dividend-income",
+    title: "Dividend Income",
+    group: "equity",
+    keywords: "dividend income yield passive monthly capital required payout",
+    Component: DividendIncomeCalculator,
+  },
+  {
+    key: "trade-tax",
+    title: "Capital Gains Tax",
+    group: "equity",
+    keywords: "capital gains tax stcg ltcg short term long term exemption cess holding period",
+    Component: TradeTaxCalculator,
+  },
+
+  // F&O
+  {
+    key: "option-payoff",
+    title: "Option Payoff",
+    group: "fno",
+    keywords: "option payoff call put strike premium expiry breakeven intrinsic value diagram fno derivatives",
+    Component: OptionPayoffCalculator,
+  },
+  {
+    key: "covered-call",
+    title: "Covered Call",
+    group: "fno",
+    keywords: "covered call income strategy sell call against shares capped upside",
+    Component: CoveredCallCalculator,
+  },
+  {
+    key: "protective-put",
+    title: "Protective Put",
+    group: "fno",
+    keywords: "protective put hedge insurance downside protection floor crash",
+    Component: ProtectivePutCalculator,
+  },
+  {
+    key: "intraday-margin",
+    title: "Intraday Margin",
+    group: "fno",
+    keywords: "margin intraday mtf leverage borrowed how many shares budget exposure",
+    Component: IntradayMarginCalculator,
+  },
+  {
+    key: "liquidation",
+    title: "Liquidation & Margin Call",
+    group: "fno",
+    keywords: "liquidation price margin call force close maintenance margin square off shortfall",
+    Component: LiquidationCalculator,
+  },
+  {
+    key: "risk-of-ruin",
+    title: "Leverage Risk of Ruin",
+    group: "fno",
+    keywords: "leverage risk of ruin wiped out blown account equity loss adverse move",
+    Component: RiskOfRuinCalculator,
+  },
+
+  // Planning
+  {
+    key: "time-to-goal",
+    title: "Time to Goal",
+    group: "planning",
+    keywords: "time to goal how long until target crore years months reach",
+    Component: TimeToGoalCalculator,
+  },
+  {
+    key: "coast-point",
+    title: "Coast Point",
+    group: "planning",
+    keywords: "coast fire financial independence stop investing compounding alone on track",
+    Component: CoastFireCalculator,
+  },
+  {
+    key: "sip",
+    title: "SIP Planner",
+    group: "planning",
+    keywords: "sip systematic investment plan monthly goal future value mutual fund",
+    Component: SipPlanner,
+  },
+  {
+    key: "step-up-sip",
+    title: "Step-Up SIP",
+    group: "planning",
+    keywords: "step up sip top up annual increase salary hike increasing monthly",
+    Component: StepUpSipCalculator,
+  },
+  {
+    key: "sip-vs-lumpsum",
+    title: "SIP vs Lumpsum",
+    group: "planning",
+    keywords: "sip vs lumpsum one time versus monthly which is better timing",
+    Component: SipVsLumpsumCalculator,
+  },
+  {
+    key: "cagr",
+    title: "CAGR",
+    group: "planning",
+    keywords: "cagr compound annual growth rate annualised return absolute",
+    Component: CagrCalculator,
+  },
+  {
+    key: "rule-of-72",
+    title: "Rule of 72",
+    group: "planning",
+    keywords: "rule of 72 doubling time double money how many years",
+    Component: RuleOf72Calculator,
+  },
+  {
+    key: "real-return",
+    title: "Real Return & Inflation",
+    group: "planning",
+    keywords: "real return inflation adjusted purchasing power fisher erosion value of money",
+    Component: RealReturnCalculator,
+  },
+  {
+    key: "emi",
+    title: "EMI",
+    group: "planning",
+    keywords: "emi loan instalment interest home loan against securities tenure",
+    Component: EmiCalculator,
+  },
+  {
+    key: "retirement",
+    title: "Retirement Corpus",
+    group: "planning",
+    keywords: "retirement corpus fire pension monthly expense post retirement nest egg",
+    Component: RetirementCalculator,
+  },
+];
+
+/** Matches a calculator against a free-text query. */
+function matchesQuery(entry: CalculatorEntry, query: string): boolean {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return true;
+  const haystack = `${entry.title} ${entry.keywords}`.toLowerCase();
+  // Every whitespace-separated term must appear somewhere. AND rather than OR
+  // so "sip tax" narrows instead of returning half the page.
+  return needle.split(/\s+/).every((term) => haystack.includes(term));
+}
+
+/**
+ * The tab whose name is in the URL hash, if it names a real one.
+ *
+ * Read from the hash rather than a query param on purpose: `useSearchParams`
+ * would opt this page out of static prerendering (or demand a Suspense
+ * boundary around it), and the whole SEO argument for rendering every
+ * calculator server-side depends on the page staying static.
+ */
+function groupFromHash(): GroupKey | null {
+  if (typeof window === "undefined") return null;
+  const raw = window.location.hash.replace(/^#/, "").trim().toLowerCase();
+  const match = GROUPS.find((entry) => entry.key === raw);
+  return match ? match.key : null;
+}
+
 export function ToolsClient() {
   const [group, setGroup] = useState<GroupKey>("trading");
+  const [query, setQuery] = useState("");
   const active = GROUPS.find((entry) => entry.key === group)!;
+  const searching = query.trim().length > 0;
+
+  // Applied after mount rather than as the initial state: the server has no
+  // hash to read, so seeding state from it directly would make the first
+  // client render disagree with the server's HTML and trip a hydration
+  // mismatch on every deep link.
+  useEffect(() => {
+    const fromHash = groupFromHash();
+    if (fromHash) setGroup(fromHash);
+  }, []);
+
+  const selectGroup = useCallback((next: GroupKey) => {
+    setGroup(next);
+    if (typeof window !== "undefined") {
+      // replaceState, not a hash assignment: setting location.hash scrolls the
+      // page to the matching element and stacks a history entry, so Back would
+      // walk through tab changes instead of leaving the page.
+      window.history.replaceState(null, "", `#${next}`);
+    }
+  }, []);
+
+  const matches = useMemo(
+    () => CALCULATORS.filter((entry) => matchesQuery(entry, query)),
+    [query]
+  );
 
   return (
     <div className="stagger-fade space-y-6 py-4 sm:py-8">
@@ -2248,77 +2506,103 @@ export function ToolsClient() {
           Trading Tools
         </h1>
         <p className="mt-2 max-w-2xl text-sm text-muted">
-          The calculations that usually mean opening a spreadsheet — or somebody else&apos;s
-          ad-covered site. Everything runs locally in your browser as you type; nothing is sent
-          anywhere.
+          {CALCULATORS.length} calculations that usually mean opening a spreadsheet — or somebody
+          else&apos;s ad-covered site. Everything runs locally in your browser as you type; nothing
+          is sent anywhere.
         </p>
       </div>
 
-      {/* Grouped rather than one long grid: a dozen calculators in a flat wall
-          makes the reader scan instead of choose. */}
-      <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Tool category">
-        {GROUPS.map((entry) => (
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+        <input
+          type="search"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder={`Search ${CALCULATORS.length} calculators — "breakeven", "sip", "margin"…`}
+          aria-label="Search calculators"
+          className="h-11 w-full rounded-xl border border-border/60 bg-bg/60 pl-10 pr-10 text-sm outline-none transition focus:border-accent/60 focus:ring-2 focus:ring-accent/20"
+        />
+        {searching ? (
           <button
-            key={entry.key}
             type="button"
-            role="tab"
-            aria-selected={group === entry.key}
-            onClick={() => setGroup(entry.key)}
-            className={`rounded-xl border px-3.5 py-1.5 text-xs font-semibold transition ${
-              group === entry.key
-                ? "border-accent/40 bg-accent/15 text-accent"
-                : "border-border/50 bg-bg/40 text-muted hover:border-accent/30 hover:text-fg"
-            }`}
+            onClick={() => setQuery("")}
+            aria-label="Clear search"
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted transition hover:text-fg"
           >
-            {entry.label}
+            <X className="h-4 w-4" />
           </button>
-        ))}
+        ) : null}
       </div>
-      <p className="-mt-3 text-[11px] text-muted">{active.blurb}</p>
 
-      {/* Every group renders always; only its visibility toggles. This page's
-          whole selling point is search traffic for things like "stock
-          average calculator" — with `"use client"`, only whatever the initial
-          state renders reaches the server-rendered HTML, so conditionally
-          mounting groups on click meant ten of the twelve calculators simply
-          did not exist as far as a crawler that does not run JavaScript (or
-          runs it with a budget) was concerned. `hidden` is a real DOM/CSS
-          property, not a React convenience — screen readers and search
-          engines both honour it correctly, unlike `display: none` sprinkled
-          on ad hoc. */}
-      <div className="grid gap-4 xl:grid-cols-2" hidden={group !== "trading"}>
-        <ChargesCalculator />
-        <PositionSizeCalculator />
-        <StopLossTargetCalculator />
-      </div>
-      <div className="grid gap-4 xl:grid-cols-2" hidden={group !== "equity"}>
-        <StockAverageCalculator />
-        <WeightedAverageCalculator />
-        <TargetPriceCalculator />
-        <LossRecoveryCalculator />
-        <DividendIncomeCalculator />
-        <TradeTaxCalculator />
-      </div>
-      <div className="grid gap-4 xl:grid-cols-2" hidden={group !== "fno"}>
-        <OptionPayoffCalculator />
-        <CoveredCallCalculator />
-        <ProtectivePutCalculator />
-        <IntradayMarginCalculator />
-        <LiquidationCalculator />
-        <RiskOfRuinCalculator />
-      </div>
-      <div className="grid gap-4 xl:grid-cols-2" hidden={group !== "planning"}>
-        <TimeToGoalCalculator />
-        <CoastFireCalculator />
-        <SipPlanner />
-        <StepUpSipCalculator />
-        <SipVsLumpsumCalculator />
-        <CagrCalculator />
-        <RuleOf72Calculator />
-        <RealReturnCalculator />
-        <EmiCalculator />
-        <RetirementCalculator />
-      </div>
+      {/* Grouped rather than one long grid: twenty-five calculators in a flat
+          wall makes the reader scan instead of choose. Hidden while searching,
+          because results deliberately cross every group. */}
+      {!searching && (
+        <>
+          <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Tool category">
+            {GROUPS.map((entry) => (
+              <button
+                key={entry.key}
+                type="button"
+                role="tab"
+                aria-selected={group === entry.key}
+                onClick={() => selectGroup(entry.key)}
+                className={`rounded-xl border px-3.5 py-1.5 text-xs font-semibold transition ${
+                  group === entry.key
+                    ? "border-accent/40 bg-accent/15 text-accent"
+                    : "border-border/50 bg-bg/40 text-muted hover:border-accent/30 hover:text-fg"
+                }`}
+              >
+                {entry.label}
+              </button>
+            ))}
+          </div>
+          <p className="-mt-3 text-[11px] text-muted">{active.blurb}</p>
+        </>
+      )}
+
+      {searching ? (
+        matches.length > 0 ? (
+          <>
+            <p className="-mt-3 text-[11px] text-muted">
+              {matches.length} of {CALCULATORS.length} calculators match &ldquo;{query.trim()}
+              &rdquo;
+            </p>
+            <div className="grid gap-4 xl:grid-cols-2">
+              {matches.map(({ key, Component }) => (
+                <Component key={key} />
+              ))}
+            </div>
+          </>
+        ) : (
+          <p className="rounded-xl border border-border/40 bg-bg/40 px-4 py-8 text-center text-sm text-muted">
+            Nothing matches &ldquo;{query.trim()}&rdquo;. Try a broader word — &ldquo;tax&rdquo;,
+            &ldquo;sip&rdquo;, &ldquo;option&rdquo;, &ldquo;margin&rdquo;.
+          </p>
+        )
+      ) : (
+        // Every group stays mounted and only its visibility toggles. This
+        // page's whole selling point is search traffic for things like "stock
+        // average calculator", and with `"use client"` only whatever the
+        // initial state renders reaches the server-rendered HTML — so
+        // conditionally mounting groups on click would hide most of the
+        // calculators from a crawler that never runs JavaScript. `hidden` is a
+        // real DOM/CSS property that screen readers and search engines both
+        // honour correctly.
+        GROUPS.map((entry) => (
+          <div
+            key={entry.key}
+            className="grid gap-4 xl:grid-cols-2"
+            hidden={group !== entry.key}
+          >
+            {CALCULATORS.filter((calculator) => calculator.group === entry.key).map(
+              ({ key, Component }) => (
+                <Component key={key} />
+              )
+            )}
+          </div>
+        ))
+      )}
 
       <p className="text-center text-[11px] text-muted/60">
         Statutory rates as of FY 2025-26. Educational tools, not investment advice.
