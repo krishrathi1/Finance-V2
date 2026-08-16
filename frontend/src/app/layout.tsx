@@ -5,6 +5,7 @@ import { Suspense } from "react";
 import { AccountSync } from "@/components/account-sync";
 import { AuthProvider } from "@/hooks/useAuth";
 import { FloatingAuth } from "@/components/floating-auth";
+import { CommandPalette } from "@/components/command-palette";
 import { StaggerSettle } from "@/components/stagger-settle";
 import { MarketStatusBadge } from "@/components/market-status-badge";
 import { MarketTicker } from "@/components/market-ticker";
@@ -235,6 +236,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               {children}
             </main>
             <FloatingAuth />
+            <CommandPalette />
 
             <footer className="mt-12 border-t border-border/40 bg-panel/20 backdrop-blur-sm">
               <div className="h-px w-full bg-gradient-to-r from-transparent via-accent/35 to-transparent" />

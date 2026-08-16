@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import {
   BarChart2,
   Bell,
+  Calculator,
   CalendarRange,
   GitCompareArrows,
   Heart,
@@ -24,6 +25,7 @@ const LINKS = [
   { href: "/portfolio", label: "Portfolio", icon: Wallet },
   { href: "/compare", label: "Compare", icon: GitCompareArrows },
   { href: "/ipo", label: "IPO", icon: CalendarRange },
+  { href: "/tools", label: "Tools", icon: Calculator },
   { href: "/alerts", label: "Alerts", icon: Bell },
 ] as const;
 

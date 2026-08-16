@@ -50,6 +50,7 @@ import { TransactionHistory } from "@/components/sections/transaction-history";
 import { CapitalGainsStatement } from "@/components/sections/capital-gains-statement";
 import { ConcentrationRisk } from "@/components/sections/concentration-risk";
 import { RebalancePlan } from "@/components/sections/rebalance-plan";
+import { PortfolioExport } from "@/components/sections/portfolio-export";
 import { matchFifo, portfolioCashFlows, xirr } from "@/shared/portfolio-returns";
 import type { ScreenerResult } from "@/shared/types";
 import { todayIstDateKey as today } from "@/shared/market-status";
@@ -1151,6 +1152,10 @@ export default function PortfolioPage() {
               ))}
             </div>
           </div>
+
+          {/* Data portability: the tax statement a CA asks for, plus raw
+              holdings and ledger. Sits above the history it exports. */}
+          <PortfolioExport holdings={holdings} transactions={transactions} />
 
           <TransactionHistory transactions={transactions} onChanged={reloadLedger} />
 
