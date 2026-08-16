@@ -30,6 +30,7 @@ import { UnderwaterHistory } from "@/components/sections/underwater-history";
 import { DividendTrackRecord } from "@/components/sections/dividend-track-record";
 import { ShareholdingTrend } from "@/components/sections/shareholding-trend";
 import { InvestmentThesis } from "@/components/sections/investment-thesis";
+import { MetricsReference } from "@/components/sections/metrics-reference";
 import { StatementQuality } from "@/components/sections/statement-quality";
 import { TechnicalAnalysis } from "@/components/sections/technical-analysis";
 import { SmartScore } from "@/components/sections/smart-score";
@@ -222,6 +223,10 @@ export function LiveStockDetails({ initialData, symbol, exchange }: { initialDat
         {/* The "how long" half of the drawdown question the Risk Profile card
             above answers with "how bad". */}
         <UnderwaterHistory history={data.price?.history} />
+
+        {/* The exhaustive lookup, after the curated cards: search-first,
+            for the reader who arrived knowing which figure they want. */}
+        <MetricsReference data={data} />
 
         {/* Both read data the page already fetches but only ever listed:
             the dividend table becomes a track record, and the shareholding
