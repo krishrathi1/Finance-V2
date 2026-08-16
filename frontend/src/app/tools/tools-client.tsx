@@ -1,6 +1,15 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
+import {
+  Area,
+  AreaChart,
+  ReferenceLine,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import {
   Calculator,
   Coins,
@@ -49,6 +58,8 @@ import {
   impliedLeverage,
   optionBreakeven,
   optionPayoff,
+  optionPayoffCurve,
+  type OptionPayoffCurvePoint,
   protectivePut,
 } from "@/shared/options-tools";
 import {
@@ -134,6 +145,26 @@ const parse = (raw: string): number => {
   const value = Number(raw);
   return Number.isFinite(value) ? value : Number.NaN;
 };
+
+/**
+ * Where a payoff curve's fill should switch from profit-green to loss-red.
+ *
+ * recharts has no "colour by sign" primitive — a single Area only takes one
+ * fill, so the standard trick is a vertical gradient whose stop is placed
+ * exactly where the SERIES' OWN VALUES cross zero, not assumed at the
+ * midpoint. A payoff curve is rarely symmetric (a long option's downside is
+ * capped at the premium while the upside runs further), so computing the
+ * offset from this curve's actual min/max is what keeps the colour change
+ * landing on the true zero line rather than drifting off it.
+ */
+function payoffGradientOffset(points: OptionPayoffCurvePoint[]): number {
+  const values = points.map((point) => point.payoffPerLot);
+  const max = Math.max(...values);
+  const min = Math.min(...values);
+  if (max <= 0) return 0;
+  if (min >= 0) return 1;
+  return max / (max - min);
+}
 
 // ─── Brokerage & charges ─────────────────────────────────────────────────────
 
@@ -1230,6 +1261,22 @@ function OptionPayoffCalculator() {
       }),
     [premium, strike, spot]
   );
+  const curve = useMemo(
+    () =>
+      optionPayoffCurve({
+        optionType,
+        position,
+        strikePrice: parse(strike),
+        premium: parse(premium),
+        ...(lotSize.trim() !== "" ? { lotSize: parse(lotSize) } : {}),
+      }),
+    [optionType, position, strike, premium, lotSize]
+  );
+  // A unique gradient id per card instance — two Option Payoff cards on one
+  // page (there is only ever one today, but nothing stops that changing)
+  // must not fight over the same <linearGradient id="...">.
+  const gradientId = useId().replace(/[:]/g, "");
+  const strikeValue = parse(strike);
 
   return (
     <Card className="p-4">
@@ -1295,6 +1342,76 @@ function OptionPayoffCalculator() {
             <Stat label="Breakeven spot" value={breakeven === null ? "—" : rupees(breakeven)} />
             <Stat label="Rough leverage" value={leverage === null ? "—" : `${leverage.toFixed(1)}x`} />
           </div>
+
+          {curve && curve.length > 1 ? (
+            <div className="mt-3 h-44 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={curve} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+                  <defs>
+                    {/* Split the fill at y=0 so profit shades green and loss
+                        shades red on the SAME series — recharts has no
+                        built-in "colour by sign", so the gradient stop is
+                        computed from where zero actually falls in this
+                        curve's own min/max range rather than assumed at 50%. */}
+                    <linearGradient id={`payoff-${gradientId}`} x1="0" y1="0" x2="0" y2="1">
+                      <stop
+                        offset={payoffGradientOffset(curve)}
+                        stopColor="hsl(var(--success))"
+                        stopOpacity={0.55}
+                      />
+                      <stop
+                        offset={payoffGradientOffset(curve)}
+                        stopColor="hsl(var(--danger))"
+                        stopOpacity={0.55}
+                      />
+                    </linearGradient>
+                  </defs>
+                  <XAxis
+                    dataKey="spot"
+                    type="number"
+                    domain={["dataMin", "dataMax"]}
+                    tick={{ fontSize: 10, fill: "hsl(var(--muted))" }}
+                    tickFormatter={(value: number) => value.toFixed(0)}
+                    stroke="hsl(var(--border))"
+                  />
+                  <YAxis
+                    tick={{ fontSize: 10, fill: "hsl(var(--muted))" }}
+                    tickFormatter={(value: number) => value.toFixed(0)}
+                    width={44}
+                    stroke="hsl(var(--border))"
+                  />
+                  <Tooltip
+                    formatter={(value) => [rupees(Number(value ?? 0)), "P&L per lot"]}
+                    labelFormatter={(value) => `Spot ₹${Number(value ?? 0).toFixed(2)}`}
+                    contentStyle={{
+                      background: "hsl(var(--panel))",
+                      border: "1px solid hsl(var(--border))",
+                      borderRadius: 12,
+                      fontSize: 11,
+                    }}
+                  />
+                  <ReferenceLine y={0} stroke="hsl(var(--muted))" strokeDasharray="3 3" />
+                  {Number.isFinite(strikeValue) && strikeValue > 0 ? (
+                    <ReferenceLine
+                      x={strikeValue}
+                      stroke="hsl(var(--accent))"
+                      strokeDasharray="3 3"
+                      label={{ value: "Strike", fontSize: 9, fill: "hsl(var(--accent))", position: "insideTopRight" }}
+                    />
+                  ) : null}
+                  <Area
+                    type="linear"
+                    dataKey="payoffPerLot"
+                    stroke="hsl(var(--accent))"
+                    strokeWidth={1.5}
+                    fill={`url(#payoff-${gradientId})`}
+                    isAnimationActive={false}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          ) : null}
+
           {position === "short" && (
             <p className="mt-2 flex items-start gap-1.5 text-[10px] leading-4 text-danger">
               <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
