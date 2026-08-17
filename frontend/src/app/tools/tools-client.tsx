@@ -48,6 +48,8 @@ import {
   Ticket,
   Info,
   RefreshCcw,
+  Percent,
+  Wallet,
 } from "lucide-react";
 
 import { Card } from "@/components/ui/card";
@@ -75,6 +77,7 @@ import {
   rightsIssue,
   stockSplit,
 } from "@/shared/corporate-action-tools";
+import { expenseRatioDrag, swpPlan } from "@/shared/fund-tools";
 import {
   coveredCall,
   impliedLeverage,
@@ -2537,6 +2540,210 @@ function BuybackCalculator() {
   );
 }
 
+// ─── Expense ratio drag ──────────────────────────────────────────────────────
+
+function ExpenseRatioCalculator() {
+  const [amount, setAmount] = useState("1000000");
+  const [monthlySip, setMonthlySip] = useState("0");
+  const [years, setYears] = useState("20");
+  const [grossReturn, setGrossReturn] = useState("12");
+  const [regularFee, setRegularFee] = useState("1.5");
+  const [directFee, setDirectFee] = useState("0.5");
+
+  const result = useMemo(
+    () =>
+      expenseRatioDrag({
+        amount: parse(amount),
+        monthlySip: parse(monthlySip),
+        years: parse(years),
+        grossReturnPercent: parse(grossReturn),
+        expenseRatioPercent: parse(regularFee),
+        comparisonExpenseRatioPercent: parse(directFee),
+      }),
+    [amount, monthlySip, years, grossReturn, regularFee, directFee]
+  );
+
+  return (
+    <Card className="p-4">
+      <div className="flex items-center gap-2">
+        <Percent className="h-4 w-4 text-accent" />
+        <h2 className="text-base font-semibold">Expense Ratio Drag</h2>
+      </div>
+      <p className="mt-1 text-[11px] leading-4 text-muted">
+        The same fund, the same manager, the same portfolio — and about 1% a year between the
+        regular and direct plan. Stated as a percentage it sounds like rounding.
+      </p>
+
+      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+        <Field label="Lump sum" value={amount} onChange={setAmount} suffix="₹" />
+        <Field label="Monthly SIP" value={monthlySip} onChange={setMonthlySip} suffix="₹" />
+        <Field label="Years" value={years} onChange={setYears} />
+        <Field label="Gross return" value={grossReturn} onChange={setGrossReturn} suffix="%/yr" />
+        <Field label="Regular plan TER" value={regularFee} onChange={setRegularFee} suffix="%" />
+        <Field label="Direct plan TER" value={directFee} onChange={setDirectFee} suffix="%" />
+      </div>
+
+      {result ? (
+        <>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <div className="rounded-lg border border-border/40 bg-bg/40 px-3 py-2.5">
+              <p className="text-[10px] text-muted">
+                Regular · {result.plan.expenseRatioPercent}% TER
+              </p>
+              <p className="text-sm font-bold tabular-nums">{rupees(result.plan.finalValue)}</p>
+              <p className="text-[10px] leading-3 text-muted/70">
+                {result.plan.netAnnualPercent.toFixed(2)}% net
+              </p>
+            </div>
+            <div className="rounded-lg border border-border/40 bg-bg/40 px-3 py-2.5">
+              <p className="text-[10px] text-muted">
+                Direct · {result.comparison.expenseRatioPercent}% TER
+              </p>
+              <p className="text-sm font-bold tabular-nums text-success">
+                {rupees(result.comparison.finalValue)}
+              </p>
+              <p className="text-[10px] leading-3 text-muted/70">
+                {result.comparison.netAnnualPercent.toFixed(2)}% net
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <Stat label="Total invested" value={rupees(result.plan.totalInvested)} />
+            <Stat
+              label="Direct plan leaves you"
+              value={`+${rupees(result.difference)}`}
+              tone="good"
+            />
+            <Stat
+              label="That is"
+              value={`${result.differencePercent.toFixed(1)}% more`}
+              tone="good"
+            />
+          </div>
+
+          <p className="mt-2 text-[10px] leading-4 text-muted/60">
+            A TER is charged on your whole balance every year, including the returns the earlier
+            years&apos; fees would have earned — which is why the gap grows far faster than the
+            headline percentage suggests. Switching a fund from regular to direct is a redemption
+            and repurchase, so check exit load and capital gains before you do it.
+          </p>
+        </>
+      ) : (
+        <p className="mt-3 rounded-lg border border-border/40 bg-bg/40 px-3 py-2 text-[11px] text-muted">
+          Enter a lump sum or a monthly SIP, and a horizon of up to 100 years.
+        </p>
+      )}
+    </Card>
+  );
+}
+
+// ─── SWP ─────────────────────────────────────────────────────────────────────
+
+function SwpCalculator() {
+  const [corpus, setCorpus] = useState("10000000");
+  const [withdrawal, setWithdrawal] = useState("60000");
+  const [returnRate, setReturnRate] = useState("8");
+  const [inflation, setInflation] = useState("6");
+
+  const result = useMemo(
+    () =>
+      swpPlan({
+        corpus: parse(corpus),
+        monthlyWithdrawal: parse(withdrawal),
+        returnPercent: parse(returnRate),
+        inflationPercent: parse(inflation),
+      }),
+    [corpus, withdrawal, returnRate, inflation]
+  );
+
+  const overdrawn =
+    result !== null &&
+    !result.sustainable &&
+    result.sustainableMonthlyWithdrawal > 0 &&
+    parse(withdrawal) > result.sustainableMonthlyWithdrawal;
+
+  return (
+    <Card className="p-4">
+      <div className="flex items-center gap-2">
+        <Wallet className="h-4 w-4 text-accent" />
+        <h2 className="text-base font-semibold">SWP — How Long It Lasts</h2>
+      </div>
+      <p className="mt-1 text-[11px] leading-4 text-muted">
+        Drawing a monthly income from a corpus. The first year always looks affordable; what
+        decides the outcome is whether the return beats the rate your withdrawal has to rise at.
+      </p>
+
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <Field label="Corpus" value={corpus} onChange={setCorpus} suffix="₹" />
+        <Field label="Monthly withdrawal" value={withdrawal} onChange={setWithdrawal} suffix="₹" />
+        <Field label="Return" value={returnRate} onChange={setReturnRate} suffix="%/yr" />
+        <Field label="Inflation" value={inflation} onChange={setInflation} suffix="%/yr" />
+      </div>
+
+      {result ? (
+        <>
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <Stat
+              label="Lasts"
+              value={
+                result.sustainable
+                  ? "Indefinitely"
+                  : `${result.yearsLasted?.toFixed(1) ?? "—"} yrs`
+              }
+              tone={result.sustainable ? "good" : "bad"}
+            />
+            <Stat label="Total withdrawn" value={rupees(result.totalWithdrawn)} />
+            <Stat
+              label={result.sustainable ? "Corpus after 100 yrs" : "Left at the end"}
+              value={rupees(result.finalBalance)}
+              tone={result.sustainable ? "good" : "bad"}
+            />
+          </div>
+
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            <Stat
+              label="Safe monthly draw"
+              value={
+                result.sustainableMonthlyWithdrawal > 0
+                  ? rupees(result.sustainableMonthlyWithdrawal)
+                  : "None"
+              }
+              tone={result.sustainableMonthlyWithdrawal > 0 ? "good" : "bad"}
+            />
+            <Stat label="Final draw" value={rupees(result.finalMonthlyWithdrawal)} />
+          </div>
+
+          {overdrawn && (
+            <p className="mt-2 flex items-start gap-1.5 text-[10px] leading-4 text-amber-500">
+              <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+              You are drawing more than the corpus earns in real terms. Holding the withdrawal at{" "}
+              {rupees(result.sustainableMonthlyWithdrawal)} would make it last indefinitely.
+            </p>
+          )}
+          {result.sustainableMonthlyWithdrawal === 0 && (
+            <p className="mt-2 flex items-start gap-1.5 text-[10px] leading-4 text-amber-500">
+              <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+              The return does not beat inflation, so no withdrawal lasts forever — every rupee
+              drawn comes out of capital.
+            </p>
+          )}
+
+          <p className="mt-2 text-[10px] leading-4 text-muted/60">
+            The withdrawal is taken at the start of each month and indexed once a year, so its
+            buying power holds. Each redemption is a partial sale with its own capital gains —
+            long-term equity gains above ₹1.25 lakh a year are taxed at 12.5%.
+          </p>
+        </>
+      ) : (
+        <p className="mt-3 rounded-lg border border-border/40 bg-bg/40 px-3 py-2 text-[11px] text-muted">
+          Enter a corpus and a monthly withdrawal.
+        </p>
+      )}
+    </Card>
+  );
+}
+
 const GROUPS = [
   { key: "trading", label: "Trading", blurb: "Costs and sizing for a trade you are about to place." },
   { key: "equity", label: "Equity", blurb: "Questions about a position you hold or are building." },
@@ -3371,6 +3578,22 @@ const CALCULATORS: CalculatorEntry[] = [
     group: "planning",
     keywords: "nps national pension system annuity corpus tier 1 retirement government pension vesting",
     Component: NpsCalculator,
+  },
+  {
+    key: "expense-ratio",
+    title: "Expense Ratio Drag",
+    group: "planning",
+    keywords:
+      "expense ratio ter direct regular plan mutual fund commission distributor cost fee drag switch savings amc charges",
+    Component: ExpenseRatioCalculator,
+  },
+  {
+    key: "swp",
+    title: "SWP — How Long It Lasts",
+    group: "planning",
+    keywords:
+      "swp systematic withdrawal plan monthly income corpus retirement drawdown safe withdrawal rate depletion pension how long will my money last",
+    Component: SwpCalculator,
   },
   {
     key: "retirement",
