@@ -56,6 +56,7 @@ import {
   GitCompare,
   Telescope,
   HandCoins,
+  Waves,
 } from "lucide-react";
 
 import { Card } from "@/components/ui/card";
@@ -88,6 +89,7 @@ import { partialExit, trailingStop } from "@/shared/exit-tools";
 import { verticalSpread, type SpreadType } from "@/shared/spread-tools";
 import { earningsYieldGap, impliedGrowth } from "@/shared/valuation-tools";
 import { prepayVsInvest } from "@/shared/prepay-tools";
+import { volatilityStructure } from "@/shared/volatility-tools";
 import {
   coveredCall,
   impliedLeverage,
@@ -3393,6 +3395,153 @@ function PrepayVsInvestCalculator() {
   );
 }
 
+// ─── Straddle / strangle ─────────────────────────────────────────────────────
+
+function VolatilityStructureCalculator() {
+  const [direction, setDirection] = useState<"long" | "short">("long");
+  const [spot, setSpot] = useState("24000");
+  const [callStrike, setCallStrike] = useState("24000");
+  const [putStrike, setPutStrike] = useState("24000");
+  const [callPremium, setCallPremium] = useState("250");
+  const [putPremium, setPutPremium] = useState("230");
+  const [lotSize, setLotSize] = useState("50");
+  const [lots, setLots] = useState("1");
+
+  const result = useMemo(
+    () =>
+      volatilityStructure({
+        direction,
+        spot: parse(spot),
+        callStrike: parse(callStrike),
+        putStrike: parse(putStrike),
+        callPremium: parse(callPremium),
+        putPremium: parse(putPremium),
+        lotSize: parse(lotSize),
+        lots: parse(lots),
+      }),
+    [direction, spot, callStrike, putStrike, callPremium, putPremium, lotSize, lots]
+  );
+
+  const isLong = direction === "long";
+  const name = result === null ? "Structure" : result.isStraddle ? "Straddle" : "Strangle";
+
+  return (
+    <Card className="p-4">
+      <div className="flex items-center gap-2">
+        <Waves className="h-4 w-4 text-accent" />
+        <h2 className="text-base font-semibold">Straddle &amp; Strangle</h2>
+      </div>
+      <p className="mt-1 text-[11px] leading-4 text-muted">
+        Buying or selling a move rather than a direction. Same strike on both legs is a straddle;
+        different strikes make it a strangle.
+      </p>
+
+      <div className="mt-3 flex gap-1 rounded-lg border border-border/40 bg-bg/40 p-1">
+        {(["long", "short"] as const).map((option) => (
+          <button
+            key={option}
+            type="button"
+            onClick={() => setDirection(option)}
+            aria-pressed={direction === option}
+            className={`flex-1 rounded-md px-3 py-1.5 text-[11px] font-medium transition ${
+              direction === option ? "bg-accent text-bg" : "text-muted hover:text-fg"
+            }`}
+          >
+            {option === "long" ? "Buy (long)" : "Sell (short)"}
+          </button>
+        ))}
+      </div>
+
+      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <Field label="Spot" value={spot} onChange={setSpot} suffix="₹" />
+        <Field label="Lot size" value={lotSize} onChange={setLotSize} />
+        <Field label="Call strike" value={callStrike} onChange={setCallStrike} />
+        <Field label="Put strike" value={putStrike} onChange={setPutStrike} />
+        <Field label="Call premium" value={callPremium} onChange={setCallPremium} suffix="₹" />
+        <Field label="Put premium" value={putPremium} onChange={setPutPremium} suffix="₹" />
+        <Field label="Lots" value={lots} onChange={setLots} />
+      </div>
+
+      {result ? (
+        <>
+          <div className="mt-3 rounded-lg border border-border/40 bg-bg/40 px-3 py-2.5">
+            <p className="text-[10px] text-muted">
+              {isLong ? "Long" : "Short"} {name} · {isLong ? "needs a move of" : "safe within"}
+            </p>
+            <p className="text-lg font-bold tabular-nums">
+              ±{result.breakEvenMovePercent.toFixed(2)}%
+            </p>
+            <p className="mt-0.5 text-[10px] leading-4 text-muted/70">
+              Profitable {isLong ? "outside" : "between"} {rupees(result.lowerBreakEven)} and{" "}
+              {rupees(result.upperBreakEven)}.
+            </p>
+          </div>
+
+          <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <Stat
+              label={isLong ? "Premium paid" : "Premium received"}
+              value={rupees(result.totalPremium)}
+              tone={isLong ? "bad" : "good"}
+            />
+            <Stat
+              label="Max profit"
+              value={result.maxProfit === null ? "Unlimited" : rupees(result.maxProfit)}
+              tone="good"
+            />
+            <Stat
+              label="Max loss"
+              value={result.maxLoss === null ? "Unlimited" : rupees(result.maxLoss)}
+              tone="bad"
+            />
+            <Stat
+              label="Worst-case zone"
+              value={
+                result.maxLossZoneWidth === 0
+                  ? "A single point"
+                  : `${rupees(result.maxLossZoneWidth)} wide`
+              }
+            />
+          </div>
+
+          {!isLong && (
+            <p className="mt-2 flex items-start gap-1.5 text-[11px] leading-4 text-danger">
+              <AlertOctagon className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              The loss on this is genuinely unlimited, and no number is shown above because none
+              exists. The premium is collected up front and the exposure runs until you close it —
+              a gap through your strike does not wait for a stop-loss. The exchange will also block
+              far more margin than the {rupees(result.totalPremium)} received.
+            </p>
+          )}
+
+          {isLong && (
+            <p className="mt-2 text-[10px] leading-4 text-muted/60">
+              Paying {rupees(result.totalPremium)} is not {rupees(result.totalPremium)} of risk in
+              the usual sense — it is a requirement that the underlying travel{" "}
+              {result.breakEvenMovePercent.toFixed(2)}% before the position is worth anything.
+              Expiries often pass without that, which is how a trade with two ways to win still
+              loses most of the time.
+              {result.maxLossZoneWidth > 0 &&
+                " A strangle costs less than a straddle but is wrong across the whole gap between its strikes, not at a single point."}
+            </p>
+          )}
+
+          <p className="mt-2 text-[10px] leading-4 text-muted/60">
+            Figures are at expiry. If the underlying fell to zero this would{" "}
+            {result.profitIfUnderlyingHitsZero >= 0 ? "make " : "lose "}
+            {rupees(Math.abs(result.profitIfUnderlyingHitsZero))} — bounded even when the other
+            side is not, since a price cannot go below nothing.
+          </p>
+        </>
+      ) : (
+        <p className="mt-3 rounded-lg border border-border/40 bg-bg/40 px-3 py-2 text-[11px] text-muted">
+          Enter both premiums and a call strike at or above the put strike — a call struck below
+          the put is a guts, which this does not model.
+        </p>
+      )}
+    </Card>
+  );
+}
+
 const GROUPS = [
   { key: "trading", label: "Trading", blurb: "Costs and sizing for a trade you are about to place." },
   { key: "equity", label: "Equity", blurb: "Questions about a position you hold or are building." },
@@ -4131,6 +4280,14 @@ const CALCULATORS: CalculatorEntry[] = [
     group: "fno",
     keywords: "option payoff call put strike premium expiry breakeven intrinsic value diagram fno derivatives",
     Component: OptionPayoffCalculator,
+  },
+  {
+    key: "straddle-strangle",
+    title: "Straddle & Strangle",
+    group: "fno",
+    keywords:
+      "straddle strangle long short volatility neutral non directional expiry premium selling two breakevens move needed unlimited loss gamma theta",
+    Component: VolatilityStructureCalculator,
   },
   {
     key: "vertical-spread",
