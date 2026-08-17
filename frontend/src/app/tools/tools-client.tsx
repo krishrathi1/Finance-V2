@@ -52,6 +52,7 @@ import {
   Wallet,
   Scissors,
   ArrowDownWideNarrow,
+  ArrowUpDown,
 } from "lucide-react";
 
 import { Card } from "@/components/ui/card";
@@ -81,6 +82,7 @@ import {
 } from "@/shared/corporate-action-tools";
 import { expenseRatioDrag, swpPlan } from "@/shared/fund-tools";
 import { partialExit, trailingStop } from "@/shared/exit-tools";
+import { verticalSpread, type SpreadType } from "@/shared/spread-tools";
 import {
   coveredCall,
   impliedLeverage,
@@ -2933,6 +2935,165 @@ function TrailingStopCalculator() {
   );
 }
 
+// ─── Vertical spreads ────────────────────────────────────────────────────────
+
+const SPREAD_TYPES: ReadonlyArray<{
+  key: SpreadType;
+  label: string;
+  legs: string;
+  view: string;
+}> = [
+  {
+    key: "bull-call",
+    label: "Bull Call",
+    legs: "Buy the lower call, sell the higher",
+    view: "pays if the underlying rises",
+  },
+  {
+    key: "bear-call",
+    label: "Bear Call",
+    legs: "Sell the lower call, buy the higher",
+    view: "pays if it falls, stays flat, or rises only slightly",
+  },
+  {
+    key: "bear-put",
+    label: "Bear Put",
+    legs: "Buy the higher put, sell the lower",
+    view: "pays if the underlying falls",
+  },
+  {
+    key: "bull-put",
+    label: "Bull Put",
+    legs: "Sell the higher put, buy the lower",
+    view: "pays if it rises, stays flat, or falls only slightly",
+  },
+];
+
+function VerticalSpreadCalculator() {
+  const [type, setType] = useState<SpreadType>("bull-call");
+  const [lowerStrike, setLowerStrike] = useState("24000");
+  const [upperStrike, setUpperStrike] = useState("24200");
+  const [lowerPremium, setLowerPremium] = useState("150");
+  const [upperPremium, setUpperPremium] = useState("70");
+  const [lotSize, setLotSize] = useState("50");
+  const [lots, setLots] = useState("1");
+
+  const result = useMemo(
+    () =>
+      verticalSpread({
+        type,
+        lowerStrike: parse(lowerStrike),
+        upperStrike: parse(upperStrike),
+        lowerPremium: parse(lowerPremium),
+        upperPremium: parse(upperPremium),
+        lotSize: parse(lotSize),
+        lots: parse(lots),
+      }),
+    [type, lowerStrike, upperStrike, lowerPremium, upperPremium, lotSize, lots]
+  );
+
+  const active = SPREAD_TYPES.find((entry) => entry.key === type)!;
+  const isCall = type === "bull-call" || type === "bear-call";
+
+  return (
+    <Card className="p-4">
+      <div className="flex items-center gap-2">
+        <ArrowUpDown className="h-4 w-4 text-accent" />
+        <h2 className="text-base font-semibold">Vertical Spreads</h2>
+      </div>
+      <p className="mt-1 text-[11px] leading-4 text-muted">
+        Two options, same expiry, different strikes. Both the best case and the worst are fixed the
+        moment you open it — which is the whole point, and also the catch.
+      </p>
+
+      <div className="mt-3 grid grid-cols-2 gap-1 rounded-lg border border-border/40 bg-bg/40 p-1 sm:grid-cols-4">
+        {SPREAD_TYPES.map((entry) => (
+          <button
+            key={entry.key}
+            type="button"
+            onClick={() => setType(entry.key)}
+            aria-pressed={type === entry.key}
+            className={`rounded-md px-2 py-1.5 text-[11px] font-medium transition ${
+              type === entry.key ? "bg-accent text-bg" : "text-muted hover:text-fg"
+            }`}
+          >
+            {entry.label}
+          </button>
+        ))}
+      </div>
+      <p className="mt-1.5 text-[10px] leading-4 text-muted/70">
+        {active.legs} — {active.view}.
+      </p>
+
+      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+        <Field label="Lower strike" value={lowerStrike} onChange={setLowerStrike} />
+        <Field label="Upper strike" value={upperStrike} onChange={setUpperStrike} />
+        <Field label="Lot size" value={lotSize} onChange={setLotSize} />
+        <Field
+          label={`Lower ${isCall ? "CE" : "PE"} premium`}
+          value={lowerPremium}
+          onChange={setLowerPremium}
+          suffix="₹"
+        />
+        <Field
+          label={`Upper ${isCall ? "CE" : "PE"} premium`}
+          value={upperPremium}
+          onChange={setUpperPremium}
+          suffix="₹"
+        />
+        <Field label="Lots" value={lots} onChange={setLots} />
+      </div>
+
+      {result ? (
+        <>
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <Stat
+              label={result.isDebit ? "You pay" : "You receive"}
+              value={rupees(Math.abs(result.netPremium))}
+              tone={result.isDebit ? "bad" : "good"}
+            />
+            <Stat label="Max profit" value={rupees(result.maxProfit)} tone="good" />
+            <Stat label="Max loss" value={rupees(result.maxLoss)} tone="bad" />
+            <Stat
+              label="Risk / reward"
+              value={`${result.riskRewardRatio.toFixed(2)} : 1`}
+              tone={result.riskRewardRatio >= 1 ? "good" : "bad"}
+            />
+          </div>
+
+          <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <Stat label="Breakeven" value={rupees(result.breakEven)} />
+            <Stat label="Strike width" value={rupees(result.strikeWidth)} />
+            <Stat label="Capital at risk" value={rupees(result.capitalAtRisk)} tone="bad" />
+          </div>
+
+          {!result.isDebit && (
+            <p className="mt-2 flex items-start gap-1.5 text-[10px] leading-4 text-amber-500">
+              <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+              The {rupees(Math.abs(result.netPremium) * parse(lotSize) * parse(lots))} arrives up
+              front, but {rupees(result.maxLoss)} is at risk behind it. Credit spreads win often
+              and lose big — the frequency is not the edge.
+            </p>
+          )}
+
+          <p className="mt-2 text-[10px] leading-4 text-muted/60">
+            Max profit and max loss always add up to the strike width times the quantity — they are
+            two slices of one fixed amount, which is why a bigger credit always buys a smaller
+            cushion. Figures are at expiry and exclude brokerage, STT and the margin the exchange
+            actually blocks.
+          </p>
+        </>
+      ) : (
+        <p className="mt-3 rounded-lg border border-border/40 bg-bg/40 px-3 py-2 text-[11px] text-muted">
+          Enter an upper strike above the lower one, and premiums whose difference falls inside the
+          strike width — a net premium wider than the spread itself means the two prices belong to
+          different strikes.
+        </p>
+      )}
+    </Card>
+  );
+}
+
 const GROUPS = [
   { key: "trading", label: "Trading", blurb: "Costs and sizing for a trade you are about to place." },
   { key: "equity", label: "Equity", blurb: "Questions about a position you hold or are building." },
@@ -3655,6 +3816,14 @@ const CALCULATORS: CalculatorEntry[] = [
     group: "fno",
     keywords: "option payoff call put strike premium expiry breakeven intrinsic value diagram fno derivatives",
     Component: OptionPayoffCalculator,
+  },
+  {
+    key: "vertical-spread",
+    title: "Vertical Spreads",
+    group: "fno",
+    keywords:
+      "vertical spread bull call bear call bull put bear put debit credit spread max profit max loss breakeven risk reward strike width two leg strategy",
+    Component: VerticalSpreadCalculator,
   },
   {
     key: "covered-call",
