@@ -50,6 +50,8 @@ import {
   RefreshCcw,
   Percent,
   Wallet,
+  Scissors,
+  ArrowDownWideNarrow,
 } from "lucide-react";
 
 import { Card } from "@/components/ui/card";
@@ -78,6 +80,7 @@ import {
   stockSplit,
 } from "@/shared/corporate-action-tools";
 import { expenseRatioDrag, swpPlan } from "@/shared/fund-tools";
+import { partialExit, trailingStop } from "@/shared/exit-tools";
 import {
   coveredCall,
   impliedLeverage,
@@ -2744,6 +2747,192 @@ function SwpCalculator() {
   );
 }
 
+// ─── Partial exit ────────────────────────────────────────────────────────────
+
+function PartialExitCalculator() {
+  const [quantity, setQuantity] = useState("100");
+  const [buyPrice, setBuyPrice] = useState("1000");
+  const [sellQuantity, setSellQuantity] = useState("50");
+  const [sellPrice, setSellPrice] = useState("1500");
+
+  const result = useMemo(
+    () =>
+      partialExit({
+        quantity: parse(quantity),
+        buyPrice: parse(buyPrice),
+        sellQuantity: parse(sellQuantity),
+        sellPrice: parse(sellPrice),
+      }),
+    [quantity, buyPrice, sellQuantity, sellPrice]
+  );
+
+  return (
+    <Card className="p-4">
+      <div className="flex items-center gap-2">
+        <Scissors className="h-4 w-4 text-accent" />
+        <h2 className="text-base font-semibold">Partial Exit</h2>
+      </div>
+      <p className="mt-1 text-[11px] leading-4 text-muted">
+        Book part of a position and the cash comes back against the original outlay — so the shares
+        you still hold have cost you less than you paid for them.
+      </p>
+
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <Field label="Shares held" value={quantity} onChange={setQuantity} />
+        <Field label="Your avg price" value={buyPrice} onChange={setBuyPrice} suffix="₹" />
+        <Field label="Shares to sell" value={sellQuantity} onChange={setSellQuantity} />
+        <Field label="Sell price" value={sellPrice} onChange={setSellPrice} suffix="₹" />
+      </div>
+
+      {result ? (
+        <>
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <Stat label="Proceeds" value={rupees(result.proceeds)} />
+            <Stat
+              label="Realised gain"
+              value={rupees(result.realisedGain)}
+              tone={result.realisedGain >= 0 ? "good" : "bad"}
+            />
+            <Stat
+              label="Still holding"
+              value={`${result.remainingQuantity.toLocaleString("en-IN")} sh`}
+            />
+            <Stat
+              label="Now cost you"
+              value={rupees(result.effectiveCostPerShare)}
+              tone={result.isFreePosition ? "good" : undefined}
+            />
+          </div>
+
+          {result.isFreePosition ? (
+            <p className="mt-2 rounded-lg border border-success/30 bg-success/5 px-3 py-2 text-[11px] leading-4 text-success">
+              This sale returns your whole outlay. The remaining{" "}
+              {result.remainingQuantity.toLocaleString("en-IN")} shares carry no net cost, and{" "}
+              {rupees(Math.abs(result.netCostOfRemainder))} of profit is already banked on top.
+            </p>
+          ) : result.sharesToSellForFree !== null ? (
+            <p className="mt-2 rounded-lg border border-border/40 bg-bg/40 px-3 py-2 text-[11px] leading-4 text-muted">
+              Sell {result.sharesToSellForFree.toLocaleString("en-IN")} shares at{" "}
+              {rupees(parse(sellPrice))} and the remaining{" "}
+              {(parse(quantity) - result.sharesToSellForFree).toLocaleString("en-IN")} carry no net
+              cost. Still outstanding on the rest: {rupees(result.netCostOfRemainder)}.
+            </p>
+          ) : (
+            <p className="mt-2 flex items-start gap-1.5 text-[10px] leading-4 text-amber-500">
+              <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+              At this price no quantity you hold can return the original outlay — the position is
+              under water.
+            </p>
+          )}
+
+          <p className="mt-2 flex items-start gap-1.5 text-[10px] leading-4 text-muted/60">
+            <Info className="mt-0.5 h-3 w-3 shrink-0" />
+            &ldquo;Free&rdquo; describes the cost basis, not the risk. Those shares still carry
+            their full market value and it can still be lost — nothing is protected by having
+            already been paid for. Brokerage, STT and capital gains are not counted here.
+          </p>
+        </>
+      ) : (
+        <p className="mt-3 rounded-lg border border-border/40 bg-bg/40 px-3 py-2 text-[11px] text-muted">
+          Enter a holding and a sale smaller than it — selling everything is a full exit, which the
+          Capital Gains Tax card covers.
+        </p>
+      )}
+    </Card>
+  );
+}
+
+// ─── Trailing stop ───────────────────────────────────────────────────────────
+
+function TrailingStopCalculator() {
+  const [entryPrice, setEntryPrice] = useState("1000");
+  const [trailPercent, setTrailPercent] = useState("10");
+  const [highestPrice, setHighestPrice] = useState("1400");
+  const [currentPrice, setCurrentPrice] = useState("1300");
+
+  const result = useMemo(
+    () =>
+      trailingStop({
+        entryPrice: parse(entryPrice),
+        trailPercent: parse(trailPercent),
+        highestPrice: parse(highestPrice),
+        currentPrice: parse(currentPrice),
+      }),
+    [entryPrice, trailPercent, highestPrice, currentPrice]
+  );
+
+  return (
+    <Card className="p-4">
+      <div className="flex items-center gap-2">
+        <ArrowDownWideNarrow className="h-4 w-4 text-accent" />
+        <h2 className="text-base font-semibold">Trailing Stop-Loss</h2>
+      </div>
+      <p className="mt-1 text-[11px] leading-4 text-muted">
+        A stop that follows the peak up and never comes back down. It protects nothing until the
+        price has risen further than the trail is wide.
+      </p>
+
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <Field label="Entry price" value={entryPrice} onChange={setEntryPrice} suffix="₹" />
+        <Field label="Trail" value={trailPercent} onChange={setTrailPercent} suffix="%" />
+        <Field label="Highest since entry" value={highestPrice} onChange={setHighestPrice} suffix="₹" />
+        <Field label="Current price" value={currentPrice} onChange={setCurrentPrice} suffix="₹" />
+      </div>
+
+      {result ? (
+        <>
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <Stat
+              label="Stop sits at"
+              value={rupees(result.stopPrice)}
+              tone={result.isProfitLocked ? "good" : "bad"}
+            />
+            <Stat
+              label="Room to stop"
+              value={`${rupees(result.distanceToStop)} · ${result.distancePercent.toFixed(1)}%`}
+              tone={result.alreadyTriggered ? "bad" : undefined}
+            />
+            <Stat
+              label={result.isProfitLocked ? "Profit locked" : "Still at risk"}
+              value={rupees(result.lockedInGain)}
+              tone={result.isProfitLocked ? "good" : "bad"}
+            />
+            <Stat label="Given back from peak" value={rupees(result.giveBackFromPeak)} />
+          </div>
+
+          {result.alreadyTriggered && (
+            <p className="mt-2 flex items-start gap-1.5 text-[10px] leading-4 text-amber-500">
+              <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+              The current price is already at or below the stop — this trade would have exited at{" "}
+              {rupees(result.stopPrice)}.
+            </p>
+          )}
+
+          {!result.isProfitLocked && (
+            <p className="mt-2 rounded-lg border border-border/40 bg-bg/40 px-3 py-2 text-[11px] leading-4 text-muted">
+              Your stop only clears the entry price once the peak reaches{" "}
+              {rupees(result.breakEvenPeak)} — a{" "}
+              {((result.breakEvenPeak / parse(entryPrice) - 1) * 100).toFixed(1)}% rise, not{" "}
+              {parse(trailPercent)}%. Until then the trade can still finish at a loss.
+            </p>
+          )}
+
+          <p className="mt-2 text-[10px] leading-4 text-muted/60">
+            The trail is measured down from the peak, not up from your entry, which is why the rise
+            needed to reach breakeven is always wider than the trail itself. The peak is taken as
+            the higher of your entry and the high you enter, since the high since entry can never
+            be below entry.
+          </p>
+        </>
+      ) : (
+        <p className="mt-3 rounded-lg border border-border/40 bg-bg/40 px-3 py-2 text-[11px] text-muted">
+          Enter an entry price and a trail between 0 and 100%.
+        </p>
+      )}
+    </Card>
+  );
+}
+
 const GROUPS = [
   { key: "trading", label: "Trading", blurb: "Costs and sizing for a trade you are about to place." },
   { key: "equity", label: "Equity", blurb: "Questions about a position you hold or are building." },
@@ -3366,6 +3555,22 @@ const CALCULATORS: CalculatorEntry[] = [
     group: "trading",
     keywords: "expectancy edge win rate profit factor kelly criterion bet size system backtest r multiple breakeven win rate",
     Component: ExpectancyCalculator,
+  },
+  {
+    key: "partial-exit",
+    title: "Partial Exit",
+    group: "trading",
+    keywords:
+      "partial exit book profit sell half free position house money cost basis remainder scale out trim recover capital effective cost",
+    Component: PartialExitCalculator,
+  },
+  {
+    key: "trailing-stop",
+    title: "Trailing Stop-Loss",
+    group: "trading",
+    keywords:
+      "trailing stop loss trail percent peak high water mark lock profit breakeven give back exit ratchet sl",
+    Component: TrailingStopCalculator,
   },
   {
     key: "stop-loss",
