@@ -53,6 +53,8 @@ import {
   Scissors,
   ArrowDownWideNarrow,
   ArrowUpDown,
+  GitCompare,
+  Telescope,
 } from "lucide-react";
 
 import { Card } from "@/components/ui/card";
@@ -83,6 +85,7 @@ import {
 import { expenseRatioDrag, swpPlan } from "@/shared/fund-tools";
 import { partialExit, trailingStop } from "@/shared/exit-tools";
 import { verticalSpread, type SpreadType } from "@/shared/spread-tools";
+import { earningsYieldGap, impliedGrowth } from "@/shared/valuation-tools";
 import {
   coveredCall,
   impliedLeverage,
@@ -3094,6 +3097,174 @@ function VerticalSpreadCalculator() {
   );
 }
 
+// ─── Earnings yield vs bond ──────────────────────────────────────────────────
+
+function EarningsYieldCalculator() {
+  const [price, setPrice] = useState("1000");
+  const [eps, setEps] = useState("50");
+  const [bondYield, setBondYield] = useState("7");
+
+  const result = useMemo(
+    () =>
+      earningsYieldGap({
+        price: parse(price),
+        eps: parse(eps),
+        bondYieldPercent: parse(bondYield),
+      }),
+    [price, eps, bondYield]
+  );
+
+  return (
+    <Card className="p-4">
+      <div className="flex items-center gap-2">
+        <GitCompare className="h-4 w-4 text-accent" />
+        <h2 className="text-base font-semibold">Earnings Yield vs G-Sec</h2>
+      </div>
+      <p className="mt-1 text-[11px] leading-4 text-muted">
+        What a rupee of share price buys in earnings, against what the same rupee buys risk-free in
+        a government bond. India&apos;s 10-year has paid 6–7.5% for years, which is a high bar.
+      </p>
+
+      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+        <Field label="Share price" value={price} onChange={setPrice} suffix="₹" />
+        <Field label="EPS" value={eps} onChange={setEps} suffix="₹" />
+        <Field label="10Y G-Sec yield" value={bondYield} onChange={setBondYield} suffix="%" />
+      </div>
+
+      {result ? (
+        <>
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <Stat
+              label="Earnings yield"
+              value={`${result.earningsYieldPercent.toFixed(2)}%`}
+              tone={result.beatsBond ? "good" : "bad"}
+            />
+            <Stat label="P/E" value={result.peRatio.toFixed(2)} />
+            <Stat
+              label="Gap vs bond"
+              value={`${result.gapPercent > 0 ? "+" : ""}${result.gapPercent.toFixed(2)} pts`}
+              tone={result.beatsBond ? "good" : "bad"}
+            />
+            <Stat label="P/E at bond parity" value={result.peAtBondParity.toFixed(2)} />
+          </div>
+
+          {result.beatsBond ? (
+            <p className="mt-2 rounded-lg border border-success/30 bg-success/5 px-3 py-2 text-[11px] leading-4 text-success">
+              On today&apos;s earnings this yields more than the bond — before any growth at all.
+            </p>
+          ) : (
+            <p className="mt-2 rounded-lg border border-border/40 bg-bg/40 px-3 py-2 text-[11px] leading-4 text-muted">
+              The bond wins on today&apos;s earnings. This has to grow to justify itself: the
+              multiple would need to fall to {result.peAtBondParity.toFixed(1)} for the two to be
+              level as things stand.
+            </p>
+          )}
+
+          <p className="mt-2 flex items-start gap-1.5 text-[10px] leading-4 text-muted/60">
+            <Info className="mt-0.5 h-3 w-3 shrink-0" />
+            An earnings yield is not income. The bond pays its coupon contractually; these earnings
+            belong to the company, which may reinvest them, waste them, or never pay them out. The
+            comparison sets a hurdle, not a forecast.
+          </p>
+        </>
+      ) : (
+        <p className="mt-3 rounded-lg border border-border/40 bg-bg/40 px-3 py-2 text-[11px] text-muted">
+          Enter a price and a positive EPS — a loss-making company has no earnings yield to compare.
+        </p>
+      )}
+    </Card>
+  );
+}
+
+// ─── Reverse DCF ─────────────────────────────────────────────────────────────
+
+function ImpliedGrowthCalculator() {
+  const [price, setPrice] = useState("2853");
+  const [cashflow, setCashflow] = useState("100");
+  const [discount, setDiscount] = useState("12");
+  const [terminal, setTerminal] = useState("4");
+  const [years, setYears] = useState("10");
+
+  const result = useMemo(
+    () =>
+      impliedGrowth({
+        price: parse(price),
+        cashflow: parse(cashflow),
+        discountPercent: parse(discount),
+        terminalGrowthPercent: parse(terminal),
+        years: parse(years),
+      }),
+    [price, cashflow, discount, terminal, years]
+  );
+
+  return (
+    <Card className="p-4">
+      <div className="flex items-center gap-2">
+        <Telescope className="h-4 w-4 text-accent" />
+        <h2 className="text-base font-semibold">Reverse DCF — What&apos;s Priced In</h2>
+      </div>
+      <p className="mt-1 text-[11px] leading-4 text-muted">
+        Instead of guessing a growth rate and calling the output a fair value, this takes the price
+        the market is charging and solves for the growth it already assumes.
+      </p>
+
+      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+        <Field label="Share price" value={price} onChange={setPrice} suffix="₹" />
+        <Field label="Cashflow / EPS" value={cashflow} onChange={setCashflow} suffix="₹" />
+        <Field label="Forecast years" value={years} onChange={setYears} />
+        <Field label="Discount rate" value={discount} onChange={setDiscount} suffix="%" />
+        <Field label="Terminal growth" value={terminal} onChange={setTerminal} suffix="%" />
+      </div>
+
+      {result ? (
+        <>
+          <div className="mt-3 rounded-lg border border-accent/30 bg-accent/5 px-3 py-3">
+            <p className="text-[10px] text-muted">At this price you are paying for</p>
+            <p className="text-xl font-bold tabular-nums text-accent">
+              {result.impliedGrowthPercent.toFixed(2)}% a year
+            </p>
+            <p className="mt-0.5 text-[10px] leading-4 text-muted/70">
+              for {parse(years)} years, then {parse(terminal)}% forever. The question is whether
+              this company has ever done that.
+            </p>
+          </div>
+
+          <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <Stat label="From the forecast" value={rupees(result.explicitValue)} />
+            <Stat label="From the perpetuity" value={rupees(result.terminalValue)} />
+            <Stat
+              label="Terminal share"
+              value={`${result.terminalSharePercent.toFixed(1)}%`}
+              tone={result.terminalSharePercent > 70 ? "bad" : undefined}
+            />
+          </div>
+
+          {result.terminalSharePercent > 70 && (
+            <p className="mt-2 flex items-start gap-1.5 text-[10px] leading-4 text-amber-500">
+              <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+              {result.terminalSharePercent.toFixed(0)}% of this valuation rests on the perpetuity —
+              an assumption about the far future, not on anything in the forecast. Treat the
+              precision of the growth figure accordingly.
+            </p>
+          )}
+
+          <p className="mt-2 text-[10px] leading-4 text-muted/60">
+            Compare the implied rate against the company&apos;s actual revenue and profit growth
+            over the last five and ten years. If the market is pricing 20% and the business has
+            compounded at 11%, that gap is the thesis you are taking on — in one direction or the
+            other.
+          </p>
+        </>
+      ) : (
+        <p className="mt-3 rounded-lg border border-border/40 bg-bg/40 px-3 py-2 text-[11px] text-muted">
+          Enter a price this model can reach, a positive cashflow, and a terminal growth rate below
+          the discount rate — at or above it the perpetuity is worth infinity.
+        </p>
+      )}
+    </Card>
+  );
+}
+
 const GROUPS = [
   { key: "trading", label: "Trading", blurb: "Costs and sizing for a trade you are about to place." },
   { key: "equity", label: "Equity", blurb: "Questions about a position you hold or are building." },
@@ -3799,6 +3970,22 @@ const CALCULATORS: CalculatorEntry[] = [
     keywords:
       "rights issue entitlement subscribe renounce terp theoretical ex rights price dilution discount corporate action rights entitlement re",
     Component: RightsIssueCalculator,
+  },
+  {
+    key: "earnings-yield",
+    title: "Earnings Yield vs G-Sec",
+    group: "equity",
+    keywords:
+      "earnings yield bond gsec g-sec 10 year risk free fed model equity risk premium pe ratio expensive cheap valuation hurdle",
+    Component: EarningsYieldCalculator,
+  },
+  {
+    key: "reverse-dcf",
+    title: "Reverse DCF",
+    group: "equity",
+    keywords:
+      "reverse dcf implied growth priced in discounted cash flow intrinsic value terminal value perpetuity what the market expects valuation fair value",
+    Component: ImpliedGrowthCalculator,
   },
   {
     key: "buyback",
