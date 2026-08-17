@@ -42,6 +42,8 @@ import {
   Search,
   Vault,
   Dices,
+  Gem,
+  Home,
 } from "lucide-react";
 
 import { Card } from "@/components/ui/card";
@@ -62,6 +64,7 @@ import { coastFire, timeToGoal } from "@/shared/goal-tools";
 import { fdVsEquity } from "@/shared/fd-vs-equity";
 import { npsProjection } from "@/shared/nps-tools";
 import { kellyStake, tradingExpectancy } from "@/shared/expectancy-tools";
+import { goldVsEquity, propertyReturn } from "@/shared/asset-class-tools";
 import {
   coveredCall,
   impliedLeverage,
@@ -2608,6 +2611,209 @@ function ExpectancyCalculator() {
   );
 }
 
+// ─── Gold vs Equity ──────────────────────────────────────────────────────────
+
+function GoldVsEquityCalculator() {
+  const [amount, setAmount] = useState("1000000");
+  const [years, setYears] = useState("5");
+  const [goldRate, setGoldRate] = useState("10");
+  const [equityRate, setEquityRate] = useState("12");
+
+  const result = useMemo(
+    () =>
+      goldVsEquity({
+        amount: parse(amount),
+        years: parse(years),
+        goldReturnPercent: parse(goldRate),
+        equityReturnPercent: parse(equityRate),
+      }),
+    [amount, years, goldRate, equityRate]
+  );
+
+  return (
+    <Card className="p-4">
+      <div className="flex items-center gap-2">
+        <Gem className="h-4 w-4 text-accent" />
+        <h2 className="text-base font-semibold">Gold vs Equity (after tax)</h2>
+      </div>
+      <p className="mt-1 text-[11px] leading-4 text-muted">
+        Gold lost indexation in July 2024 and never had equity&apos;s ₹1.25L exemption — so at
+        equal returns, equity wins on tax alone.
+      </p>
+
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <Field label="Amount" value={amount} onChange={setAmount} suffix="₹" />
+        <Field label="Years" value={years} onChange={setYears} />
+        <Field label="Gold return" value={goldRate} onChange={setGoldRate} suffix="%/yr" />
+        <Field label="Equity return" value={equityRate} onChange={setEquityRate} suffix="%/yr" />
+      </div>
+
+      {result ? (
+        <>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <div className="rounded-lg border border-border/40 bg-bg/40 px-3 py-2.5">
+              <p className="text-[10px] text-muted">Gold</p>
+              <p
+                className={`text-sm font-bold tabular-nums ${
+                  result.equityWins ? "" : "text-success"
+                }`}
+              >
+                {rupees(result.gold.postTaxValue)}
+              </p>
+              <p className="text-[10px] leading-3 text-muted/70">
+                {result.gold.effectiveAnnualPercent.toFixed(2)}% after tax
+              </p>
+            </div>
+            <div className="rounded-lg border border-border/40 bg-bg/40 px-3 py-2.5">
+              <p className="text-[10px] text-muted">Equity</p>
+              <p
+                className={`text-sm font-bold tabular-nums ${
+                  result.equityWins ? "text-success" : ""
+                }`}
+              >
+                {rupees(result.equity.postTaxValue)}
+              </p>
+              <p className="text-[10px] leading-3 text-muted/70">
+                {result.equity.effectiveAnnualPercent.toFixed(2)}% after tax
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <Stat label="Gold tax" value={rupees(result.gold.taxPaid)} tone="bad" />
+            <Stat label="Equity tax" value={rupees(result.equity.taxPaid)} tone="bad" />
+            <Stat
+              label={result.equityWins ? "Equity ahead by" : "Gold ahead by"}
+              value={rupees(Math.abs(result.difference))}
+              tone={result.equityWins ? "good" : "bad"}
+            />
+          </div>
+
+          <p className="mt-2 text-[10px] leading-4 text-muted/60">
+            Gold is taxed from the first rupee of gain; equity shelters the first ₹1.25L each year.
+            Neither is indexed for inflation any more.
+          </p>
+          {(!result.goldLongTerm || !result.equityLongTerm) && (
+            <p className="mt-1 flex items-start gap-1.5 text-[10px] leading-4 text-amber-500">
+              <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+              Short holding period — the higher short-term rate applies
+              {!result.equityLongTerm ? " and equity's exemption does not" : ""}.
+            </p>
+          )}
+        </>
+      ) : (
+        <p className="mt-3 rounded-lg border border-border/40 bg-bg/40 px-3 py-2 text-[11px] text-muted">
+          Enter an amount and a horizon of up to 100 years.
+        </p>
+      )}
+    </Card>
+  );
+}
+
+// ─── Property return ─────────────────────────────────────────────────────────
+
+function PropertyReturnCalculator() {
+  const [price, setPrice] = useState("10000000");
+  const [years, setYears] = useState("10");
+  const [appreciation, setAppreciation] = useState("8");
+  const [rentalYield, setRentalYield] = useState("3");
+  const [stampDuty, setStampDuty] = useState("6");
+  const [maintenance, setMaintenance] = useState("0.5");
+  const [slab, setSlab] = useState("30");
+
+  const result = useMemo(
+    () =>
+      propertyReturn({
+        propertyPrice: parse(price),
+        years: parse(years),
+        appreciationPercent: parse(appreciation),
+        rentalYieldPercent: parse(rentalYield),
+        stampDutyPercent: parse(stampDuty),
+        maintenancePercent: parse(maintenance),
+        slabPercent: parse(slab),
+      }),
+    [price, years, appreciation, rentalYield, stampDuty, maintenance, slab]
+  );
+
+  const drag =
+    result === null ? null : result.headlineAnnualPercent - result.effectiveAnnualPercent;
+
+  return (
+    <Card className="p-4">
+      <div className="flex items-center gap-2">
+        <Home className="h-4 w-4 text-accent" />
+        <h2 className="text-base font-semibold">Property Return (real)</h2>
+      </div>
+      <p className="mt-1 text-[11px] leading-4 text-muted">
+        What a flat actually returns once stamp duty, maintenance and tax are counted — the costs
+        that never appear in &ldquo;property doubled in ten years&rdquo;.
+      </p>
+
+      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+        <Field label="Price" value={price} onChange={setPrice} suffix="₹" />
+        <Field label="Years" value={years} onChange={setYears} />
+        <Field label="Appreciation" value={appreciation} onChange={setAppreciation} suffix="%/yr" />
+        <Field label="Rental yield" value={rentalYield} onChange={setRentalYield} suffix="%/yr" />
+        <Field label="Stamp duty" value={stampDuty} onChange={setStampDuty} suffix="%" />
+        <Field label="Maintenance" value={maintenance} onChange={setMaintenance} suffix="%/yr" />
+      </div>
+      <div className="mt-2 grid grid-cols-2 gap-2">
+        <Field label="Your slab (on rent)" value={slab} onChange={setSlab} suffix="%" />
+      </div>
+
+      {result ? (
+        <>
+          {/* Headline against effective is the entire point of this card. */}
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <Stat
+              label="Headline appreciation"
+              value={`${result.headlineAnnualPercent.toFixed(2)}%`}
+            />
+            <Stat
+              label="Actually returned"
+              value={`${result.effectiveAnnualPercent.toFixed(2)}%`}
+              tone={result.effectiveAnnualPercent >= 0 ? "good" : "bad"}
+            />
+            <Stat
+              label="Costs cost you"
+              value={drag === null ? "—" : `${drag.toFixed(2)} pts/yr`}
+              tone="bad"
+            />
+          </div>
+
+          <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <Stat label="Total invested" value={rupees(result.totalInvested)} />
+            <Stat label="Sale value" value={rupees(result.saleValue)} />
+            <Stat
+              label="Net rent"
+              value={rupees(result.netRentalIncome)}
+              tone={result.netRentalIncome >= 0 ? "good" : "bad"}
+            />
+            <Stat label="Capital gains tax" value={rupees(result.capitalGainsTax)} tone="bad" />
+          </div>
+
+          {result.netRentalIncome < 0 && (
+            <p className="mt-2 flex items-start gap-1.5 text-[10px] leading-4 text-amber-500">
+              <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+              Maintenance exceeds the rent after tax — the flat costs money to hold, before any
+              appreciation.
+            </p>
+          )}
+          <p className="mt-2 text-[10px] leading-4 text-muted/60">
+            Total invested includes stamp duty, which also counts toward the cost of acquisition
+            and so reduces the taxable gain. Rent is taxed at your slab as ordinary income.
+            Long-term gains are 12.5% flat — indexation ended in July 2024.
+          </p>
+        </>
+      ) : (
+        <p className="mt-3 rounded-lg border border-border/40 bg-bg/40 px-3 py-2 text-[11px] text-muted">
+          Enter a price and a horizon of up to 100 years.
+        </p>
+      )}
+    </Card>
+  );
+}
+
 /**
  * The registry every rendering path reads from.
  *
@@ -2818,6 +3024,20 @@ const CALCULATORS: CalculatorEntry[] = [
     group: "planning",
     keywords: "emi loan instalment interest home loan against securities tenure",
     Component: EmiCalculator,
+  },
+  {
+    key: "gold-vs-equity",
+    title: "Gold vs Equity (after tax)",
+    group: "planning",
+    keywords: "gold vs equity sovereign bond etf digital gold after tax indexation comparison safe haven",
+    Component: GoldVsEquityCalculator,
+  },
+  {
+    key: "property-return",
+    title: "Property Return (real)",
+    group: "planning",
+    keywords: "property real estate flat house rental yield stamp duty maintenance return after tax buy vs rent",
+    Component: PropertyReturnCalculator,
   },
   {
     key: "nps",
