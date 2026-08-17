@@ -55,6 +55,7 @@ import {
   ArrowUpDown,
   GitCompare,
   Telescope,
+  HandCoins,
 } from "lucide-react";
 
 import { Card } from "@/components/ui/card";
@@ -86,6 +87,7 @@ import { expenseRatioDrag, swpPlan } from "@/shared/fund-tools";
 import { partialExit, trailingStop } from "@/shared/exit-tools";
 import { verticalSpread, type SpreadType } from "@/shared/spread-tools";
 import { earningsYieldGap, impliedGrowth } from "@/shared/valuation-tools";
+import { prepayVsInvest } from "@/shared/prepay-tools";
 import {
   coveredCall,
   impliedLeverage,
@@ -3265,6 +3267,132 @@ function ImpliedGrowthCalculator() {
   );
 }
 
+// ─── Prepay vs invest ────────────────────────────────────────────────────────
+
+function PrepayVsInvestCalculator() {
+  const [principal, setPrincipal] = useState("5000000");
+  const [rate, setRate] = useState("8.5");
+  const [months, setMonths] = useState("240");
+  const [surplus, setSurplus] = useState("500000");
+  const [expectedReturn, setExpectedReturn] = useState("12");
+  const [tax, setTax] = useState("12.5");
+
+  const result = useMemo(
+    () =>
+      prepayVsInvest({
+        outstandingPrincipal: parse(principal),
+        annualRatePercent: parse(rate),
+        remainingMonths: parse(months),
+        surplus: parse(surplus),
+        expectedReturnPercent: parse(expectedReturn),
+        taxPercent: parse(tax),
+      }),
+    [principal, rate, months, surplus, expectedReturn, tax]
+  );
+
+  return (
+    <Card className="p-4">
+      <div className="flex items-center gap-2">
+        <HandCoins className="h-4 w-4 text-accent" />
+        <h2 className="text-base font-semibold">Prepay Loan or Invest?</h2>
+      </div>
+      <p className="mt-1 text-[11px] leading-4 text-muted">
+        &ldquo;8.5% loan, 12% equity — obviously invest.&rdquo; That comparison is wrong twice: the
+        loan saving is tax-free, and prepaying frees the EMI years early.
+      </p>
+
+      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+        <Field label="Outstanding" value={principal} onChange={setPrincipal} suffix="₹" />
+        <Field label="Loan rate" value={rate} onChange={setRate} suffix="%" />
+        <Field label="Months left" value={months} onChange={setMonths} />
+        <Field label="Surplus" value={surplus} onChange={setSurplus} suffix="₹" />
+        <Field label="Expected return" value={expectedReturn} onChange={setExpectedReturn} suffix="%" />
+        <Field label="Tax on gains" value={tax} onChange={setTax} suffix="%" />
+      </div>
+
+      {result ? (
+        <>
+          <div
+            className={`mt-3 rounded-lg border px-3 py-3 ${
+              result.investingWins
+                ? "border-accent/30 bg-accent/5"
+                : "border-success/30 bg-success/5"
+            }`}
+          >
+            <p className="text-[10px] text-muted">At {parse(expectedReturn)}% expected return</p>
+            <p
+              className={`text-lg font-bold ${
+                result.investingWins ? "text-accent" : "text-success"
+              }`}
+            >
+              {result.investingWins ? "Investing wins" : "Prepaying wins"} by{" "}
+              {rupees(Math.abs(result.advantageOfInvesting))}
+            </p>
+            <p className="mt-0.5 text-[10px] leading-4 text-muted/70">
+              Measured at the same finishing line — both paths spend the surplus plus one EMI a
+              month for {parse(months)} months.
+            </p>
+          </div>
+
+          {result.breakEvenReturnPercent !== null && (
+            <div className="mt-2 rounded-lg border border-border/40 bg-bg/40 px-3 py-2.5">
+              <p className="text-[10px] text-muted">Investing only wins above</p>
+              <p className="text-base font-bold tabular-nums">
+                {result.breakEvenReturnPercent.toFixed(2)}% a year
+              </p>
+              <p className="mt-0.5 text-[10px] leading-4 text-muted/70">
+                And prepaying delivers its return with certainty. An expected return is not the
+                same kind of number.
+              </p>
+            </div>
+          )}
+
+          <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <Stat label="Your EMI" value={rupees(result.emi)} />
+            <Stat label="Interest saved" value={rupees(result.interestSaved)} tone="good" />
+            <Stat
+              label="Loan ends earlier by"
+              value={`${Math.floor(result.monthsSaved / 12)}y ${result.monthsSaved % 12}m`}
+              tone="good"
+            />
+            <Stat
+              label="Loan rate, pre-tax equivalent"
+              value={`${result.taxAdjustedLoanRatePercent.toFixed(2)}%`}
+            />
+          </div>
+
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            <Stat
+              label="End wealth if prepaid"
+              value={rupees(result.wealthIfPrepaid)}
+              tone={result.investingWins ? undefined : "good"}
+            />
+            <Stat
+              label="End wealth if invested"
+              value={rupees(result.wealthIfInvested)}
+              tone={result.investingWins ? "good" : undefined}
+            />
+          </div>
+
+          <p className="mt-2 flex items-start gap-1.5 text-[10px] leading-4 text-muted/60">
+            <Info className="mt-0.5 h-3 w-3 shrink-0" />
+            A {parse(rate)}% tax-free saving needs{" "}
+            {result.taxAdjustedLoanRatePercent.toFixed(2)}% before tax to be matched, not{" "}
+            {parse(rate)}%. Not modelled: the 80C and 24(b) deductions on a home loan under the old
+            regime, which push the case toward keeping it, and prepayment charges, which most
+            lenders cannot levy on floating-rate home loans to individuals.
+          </p>
+        </>
+      ) : (
+        <p className="mt-3 rounded-lg border border-border/40 bg-bg/40 px-3 py-2 text-[11px] text-muted">
+          Enter an outstanding balance and a surplus smaller than it — a surplus covering the whole
+          loan is a closure, not a choice.
+        </p>
+      )}
+    </Card>
+  );
+}
+
 const GROUPS = [
   { key: "trading", label: "Trading", blurb: "Costs and sizing for a trade you are about to place." },
   { key: "equity", label: "Equity", blurb: "Questions about a position you hold or are building." },
@@ -4139,6 +4267,14 @@ const CALCULATORS: CalculatorEntry[] = [
     group: "planning",
     keywords: "nps national pension system annuity corpus tier 1 retirement government pension vesting",
     Component: NpsCalculator,
+  },
+  {
+    key: "prepay-vs-invest",
+    title: "Prepay Loan or Invest?",
+    group: "planning",
+    keywords:
+      "prepay home loan part payment foreclose vs invest emi tenure reduction interest saved break even return opportunity cost mortgage 80c 24b",
+    Component: PrepayVsInvestCalculator,
   },
   {
     key: "expense-ratio",
