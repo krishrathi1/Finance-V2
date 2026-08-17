@@ -44,6 +44,10 @@ import {
   Dices,
   Gem,
   Home,
+  Gift,
+  Ticket,
+  Info,
+  RefreshCcw,
 } from "lucide-react";
 
 import { Card } from "@/components/ui/card";
@@ -65,6 +69,12 @@ import { fdVsEquity } from "@/shared/fd-vs-equity";
 import { npsProjection } from "@/shared/nps-tools";
 import { kellyStake, tradingExpectancy } from "@/shared/expectancy-tools";
 import { goldVsEquity, propertyReturn } from "@/shared/asset-class-tools";
+import {
+  bonusIssue,
+  buybackTender,
+  rightsIssue,
+  stockSplit,
+} from "@/shared/corporate-action-tools";
 import {
   coveredCall,
   impliedLeverage,
@@ -2235,6 +2245,298 @@ function CoastFireCalculator() {
   );
 }
 
+// ─── Bonus & split ───────────────────────────────────────────────────────────
+
+/**
+ * Bonus and split share one card because they share one answer: more shares,
+ * proportionally lower cost, identical total. Splitting them into two cards
+ * would imply the outcomes differ, which is the misconception this is here to
+ * correct.
+ */
+function BonusSplitCalculator() {
+  const [mode, setMode] = useState<"bonus" | "split">("bonus");
+  const [quantity, setQuantity] = useState("100");
+  const [buyPrice, setBuyPrice] = useState("500");
+  const [bonusNew, setBonusNew] = useState("1");
+  const [bonusHeld, setBonusHeld] = useState("1");
+  const [oldFace, setOldFace] = useState("10");
+  const [newFace, setNewFace] = useState("1");
+
+  const result = useMemo(() => {
+    const shared = { quantity: parse(quantity), buyPrice: parse(buyPrice) };
+    return mode === "bonus"
+      ? bonusIssue({ ...shared, bonusNew: parse(bonusNew), bonusHeld: parse(bonusHeld) })
+      : stockSplit({ ...shared, oldFaceValue: parse(oldFace), newFaceValue: parse(newFace) });
+  }, [mode, quantity, buyPrice, bonusNew, bonusHeld, oldFace, newFace]);
+
+  const priceDrop = result === null ? null : 100 - result.adjustmentFactor * 100;
+
+  return (
+    <Card className="p-4">
+      <div className="flex items-center gap-2">
+        <Gift className="h-4 w-4 text-accent" />
+        <h2 className="text-base font-semibold">Bonus &amp; Split</h2>
+      </div>
+      <p className="mt-1 text-[11px] leading-4 text-muted">
+        Neither creates value. The share count rises, the price falls by the same proportion, and
+        what you own is worth exactly what it was the day before.
+      </p>
+
+      <div className="mt-3 flex gap-1 rounded-lg border border-border/40 bg-bg/40 p-1">
+        {(["bonus", "split"] as const).map((option) => (
+          <button
+            key={option}
+            type="button"
+            onClick={() => setMode(option)}
+            aria-pressed={mode === option}
+            className={`flex-1 rounded-md px-3 py-1.5 text-[11px] font-medium capitalize transition ${
+              mode === option ? "bg-accent text-bg" : "text-muted hover:text-fg"
+            }`}
+          >
+            {option === "bonus" ? "Bonus issue" : "Stock split"}
+          </button>
+        ))}
+      </div>
+
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <Field label="Shares held" value={quantity} onChange={setQuantity} />
+        <Field label="Your avg price" value={buyPrice} onChange={setBuyPrice} suffix="₹" />
+        {mode === "bonus" ? (
+          <>
+            <Field label="Bonus — new" value={bonusNew} onChange={setBonusNew} />
+            <Field label="Bonus — per held" value={bonusHeld} onChange={setBonusHeld} />
+          </>
+        ) : (
+          <>
+            <Field label="Old face value" value={oldFace} onChange={setOldFace} suffix="₹" />
+            <Field label="New face value" value={newFace} onChange={setNewFace} suffix="₹" />
+          </>
+        )}
+      </div>
+
+      {result ? (
+        <>
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <Stat label="Shares after" value={result.newQuantity.toLocaleString("en-IN")} />
+            <Stat label="New avg price" value={rupees(result.newAveragePrice)} />
+            <Stat
+              label="Price adjusts by"
+              value={priceDrop === null ? "—" : `−${priceDrop.toFixed(2)}%`}
+            />
+            <Stat label="Total invested" value={rupees(result.totalInvested)} />
+          </div>
+
+          {mode === "bonus" && result.sharesReceived > 0 && (
+            <p className="mt-2 text-[10px] leading-4 text-muted/60">
+              {result.sharesReceived.toLocaleString("en-IN")} free shares credited. Fractional
+              entitlements are settled in cash, so the count is rounded down.
+            </p>
+          )}
+          <p className="mt-2 flex items-start gap-1.5 text-[10px] leading-4 text-muted/60">
+            <Info className="mt-0.5 h-3 w-3 shrink-0" />
+            Your holding is still worth {rupees(result.totalInvested)} at cost — the apparent fall
+            on the chart is the adjustment, not a loss. Holding period for tax purposes carries
+            over from the original shares.
+          </p>
+        </>
+      ) : (
+        <p className="mt-3 rounded-lg border border-border/40 bg-bg/40 px-3 py-2 text-[11px] text-muted">
+          {mode === "split"
+            ? "Enter a new face value below the old one — a rise is a reverse split, which works differently."
+            : "Enter a holding and a bonus ratio, such as 1 new share for every 1 held."}
+        </p>
+      )}
+    </Card>
+  );
+}
+
+// ─── Rights issue ────────────────────────────────────────────────────────────
+
+function RightsIssueCalculator() {
+  const [quantity, setQuantity] = useState("100");
+  const [buyPrice, setBuyPrice] = useState("500");
+  const [rightsNew, setRightsNew] = useState("1");
+  const [rightsHeld, setRightsHeld] = useState("2");
+  const [rightsPrice, setRightsPrice] = useState("400");
+  const [marketPrice, setMarketPrice] = useState("600");
+
+  const result = useMemo(
+    () =>
+      rightsIssue({
+        quantity: parse(quantity),
+        buyPrice: parse(buyPrice),
+        rightsNew: parse(rightsNew),
+        rightsHeld: parse(rightsHeld),
+        rightsPrice: parse(rightsPrice),
+        marketPrice: parse(marketPrice),
+      }),
+    [quantity, buyPrice, rightsNew, rightsHeld, rightsPrice, marketPrice]
+  );
+
+  return (
+    <Card className="p-4">
+      <div className="flex items-center gap-2">
+        <Ticket className="h-4 w-4 text-accent" />
+        <h2 className="text-base font-semibold">Rights Issue</h2>
+      </div>
+      <p className="mt-1 text-[11px] leading-4 text-muted">
+        The only corporate action that takes fresh money. Declining is not free — the price still
+        drifts to the ex-rights level, just without the discounted shares to offset it.
+      </p>
+
+      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+        <Field label="Shares held" value={quantity} onChange={setQuantity} />
+        <Field label="Your avg price" value={buyPrice} onChange={setBuyPrice} suffix="₹" />
+        <Field label="Market price" value={marketPrice} onChange={setMarketPrice} suffix="₹" />
+        <Field label="Rights — new" value={rightsNew} onChange={setRightsNew} />
+        <Field label="Rights — per held" value={rightsHeld} onChange={setRightsHeld} />
+        <Field label="Rights price" value={rightsPrice} onChange={setRightsPrice} suffix="₹" />
+      </div>
+
+      {result ? (
+        <>
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <Stat
+              label="You can buy"
+              value={`${result.entitlement.toLocaleString("en-IN")} sh`}
+            />
+            <Stat label="Costs you" value={rupees(result.costToSubscribe)} tone="bad" />
+            <Stat
+              label="Each right is worth"
+              value={rupees(result.valuePerRight)}
+              tone={result.valuePerRight > 0 ? "good" : undefined}
+            />
+            <Stat label="Ex-rights price" value={rupees(result.theoreticalExRightsPrice)} />
+          </div>
+
+          <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <Stat
+              label="Shares after"
+              value={result.quantityIfSubscribed.toLocaleString("en-IN")}
+            />
+            <Stat label="New avg price" value={rupees(result.averagePriceIfSubscribed)} />
+            <Stat label="Total invested" value={rupees(result.totalInvestedIfSubscribed)} />
+          </div>
+
+          {result.worthSubscribing ? (
+            <p className="mt-2 text-[10px] leading-4 text-muted/60">
+              The offer is below the market price, so the entitlement carries real value. If you do
+              not want more of the stock, rights are usually tradable on the exchange during the
+              issue — letting them lapse gives that value away.
+            </p>
+          ) : (
+            <p className="mt-2 flex items-start gap-1.5 text-[10px] leading-4 text-amber-500">
+              <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+              The rights price is at or above the market price. There is nothing to gain here — the
+              shares can be bought more cheaply on the exchange.
+            </p>
+          )}
+        </>
+      ) : (
+        <p className="mt-3 rounded-lg border border-border/40 bg-bg/40 px-3 py-2 text-[11px] text-muted">
+          Enter a holding, a rights ratio and both prices.
+        </p>
+      )}
+    </Card>
+  );
+}
+
+// ─── Buyback tender ──────────────────────────────────────────────────────────
+
+function BuybackCalculator() {
+  const [sharesHeld, setSharesHeld] = useState("100");
+  const [buyPrice, setBuyPrice] = useState("400");
+  const [buybackPrice, setBuybackPrice] = useState("600");
+  const [marketPrice, setMarketPrice] = useState("500");
+  const [acceptance, setAcceptance] = useState("15");
+
+  const result = useMemo(
+    () =>
+      buybackTender({
+        sharesHeld: parse(sharesHeld),
+        buyPrice: parse(buyPrice),
+        buybackPrice: parse(buybackPrice),
+        marketPrice: parse(marketPrice),
+        acceptanceRatioPercent: parse(acceptance),
+      }),
+    [sharesHeld, buyPrice, buybackPrice, marketPrice, acceptance]
+  );
+
+  return (
+    <Card className="p-4">
+      <div className="flex items-center gap-2">
+        <RefreshCcw className="h-4 w-4 text-accent" />
+        <h2 className="text-base font-semibold">Buyback Tender</h2>
+      </div>
+      <p className="mt-1 text-[11px] leading-4 text-muted">
+        The premium is real, but it only applies to the shares the company actually accepts. The
+        rest come back to you — often into a price with the buyback support removed.
+      </p>
+
+      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+        <Field label="Shares tendered" value={sharesHeld} onChange={setSharesHeld} />
+        <Field label="Your avg price" value={buyPrice} onChange={setBuyPrice} suffix="₹" />
+        <Field label="Market price" value={marketPrice} onChange={setMarketPrice} suffix="₹" />
+        <Field label="Buyback price" value={buybackPrice} onChange={setBuybackPrice} suffix="₹" />
+        <Field label="Acceptance ratio" value={acceptance} onChange={setAcceptance} suffix="%" />
+      </div>
+
+      {result ? (
+        <>
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <Stat
+              label="Accepted"
+              value={`${result.sharesAccepted.toLocaleString("en-IN")} sh`}
+              tone="good"
+            />
+            <Stat
+              label="Returned to you"
+              value={`${result.sharesReturned.toLocaleString("en-IN")} sh`}
+            />
+            <Stat
+              label="Premium"
+              value={`${result.premiumPercent.toFixed(2)}%`}
+              tone={result.premiumPercent >= 0 ? "good" : "bad"}
+            />
+            <Stat label="Proceeds" value={rupees(result.proceedsFromBuyback)} />
+          </div>
+
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            <Stat
+              label="Gain on accepted"
+              value={rupees(result.gainOnAccepted)}
+              tone={result.gainOnAccepted >= 0 ? "good" : "bad"}
+            />
+            <Stat
+              label="Better than selling by"
+              value={rupees(result.advantageOverSelling)}
+              tone={result.advantageOverSelling >= 0 ? "good" : "bad"}
+            />
+          </div>
+
+          {result.sharesAccepted === 0 && (
+            <p className="mt-2 flex items-start gap-1.5 text-[10px] leading-4 text-amber-500">
+              <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+              At this acceptance ratio none of your shares would be bought back — small holdings
+              can round down to nothing.
+            </p>
+          )}
+          <p className="mt-2 text-[10px] leading-4 text-muted/60">
+            Acceptance ratios are only known after the issue closes; the figure here is your
+            estimate. Retail holders under ₹2 lakh sit in a reserved category and usually see a far
+            higher ratio than the general one. Buyback proceeds are tax-free in your hands — the
+            company pays the tax.
+          </p>
+        </>
+      ) : (
+        <p className="mt-3 rounded-lg border border-border/40 bg-bg/40 px-3 py-2 text-[11px] text-muted">
+          Enter a holding, both prices and an acceptance ratio between 0 and 100.
+        </p>
+      )}
+    </Card>
+  );
+}
+
 const GROUPS = [
   { key: "trading", label: "Trading", blurb: "Costs and sizing for a trade you are about to place." },
   { key: "equity", label: "Equity", blurb: "Questions about a position you hold or are building." },
@@ -2908,6 +3210,30 @@ const CALCULATORS: CalculatorEntry[] = [
     group: "equity",
     keywords: "capital gains tax stcg ltcg short term long term exemption cess holding period",
     Component: TradeTaxCalculator,
+  },
+  {
+    key: "bonus-split",
+    title: "Bonus & Split",
+    group: "equity",
+    keywords:
+      "bonus issue stock split face value adjusted price ratio free shares record date ex date average cost adjustment 1:1 2:1 corporate action",
+    Component: BonusSplitCalculator,
+  },
+  {
+    key: "rights-issue",
+    title: "Rights Issue",
+    group: "equity",
+    keywords:
+      "rights issue entitlement subscribe renounce terp theoretical ex rights price dilution discount corporate action rights entitlement re",
+    Component: RightsIssueCalculator,
+  },
+  {
+    key: "buyback",
+    title: "Buyback Tender",
+    group: "equity",
+    keywords:
+      "buyback tender offer acceptance ratio premium retail category record date share repurchase corporate action",
+    Component: BuybackCalculator,
   },
 
   // F&O
