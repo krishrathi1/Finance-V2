@@ -41,6 +41,7 @@ import {
   Sailboat,
   Search,
   Vault,
+  Dices,
 } from "lucide-react";
 
 import { Card } from "@/components/ui/card";
@@ -60,6 +61,7 @@ import { todayIstDateKey } from "@/shared/market-status";
 import { coastFire, timeToGoal } from "@/shared/goal-tools";
 import { fdVsEquity } from "@/shared/fd-vs-equity";
 import { npsProjection } from "@/shared/nps-tools";
+import { kellyStake, tradingExpectancy } from "@/shared/expectancy-tools";
 import {
   coveredCall,
   impliedLeverage,
@@ -2474,6 +2476,138 @@ function NpsCalculator() {
   );
 }
 
+// ─── Trading expectancy & Kelly ──────────────────────────────────────────────
+
+function ExpectancyCalculator() {
+  const [winRate, setWinRate] = useState("40");
+  const [avgWin, setAvgWin] = useState("3000");
+  const [avgLoss, setAvgLoss] = useState("1000");
+  const [tradesPerYear, setTradesPerYear] = useState("200");
+  const [capital, setCapital] = useState("500000");
+
+  const edge = useMemo(
+    () =>
+      tradingExpectancy({
+        winRatePercent: parse(winRate),
+        averageWin: parse(avgWin),
+        averageLoss: parse(avgLoss),
+        tradesPerYear: tradesPerYear.trim() === "" ? undefined : parse(tradesPerYear),
+      }),
+    [winRate, avgWin, avgLoss, tradesPerYear]
+  );
+  const stake = useMemo(
+    () =>
+      kellyStake({
+        winRatePercent: parse(winRate),
+        averageWin: parse(avgWin),
+        averageLoss: parse(avgLoss),
+        capital: capital.trim() === "" ? undefined : parse(capital),
+      }),
+    [winRate, avgWin, avgLoss, capital]
+  );
+
+  return (
+    <Card className="p-4">
+      <div className="flex items-center gap-2">
+        <Dices className="h-4 w-4 text-accent" />
+        <h2 className="text-base font-semibold">System Edge &amp; Bet Size</h2>
+      </div>
+      <p className="mt-1 text-[11px] leading-4 text-muted">
+        Every other tool here prices one trade. This prices the system — and no entry, stop or
+        position size rescues a negative edge.
+      </p>
+
+      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+        <Field label="Win rate" value={winRate} onChange={setWinRate} suffix="%" />
+        <Field label="Average win" value={avgWin} onChange={setAvgWin} suffix="₹" />
+        <Field label="Average loss" value={avgLoss} onChange={setAvgLoss} suffix="₹" />
+        <Field label="Trades / year" value={tradesPerYear} onChange={setTradesPerYear} />
+        <Field label="Capital" value={capital} onChange={setCapital} suffix="₹" />
+      </div>
+
+      {edge ? (
+        <>
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <Stat
+              label="Per trade"
+              value={rupees(edge.perTrade)}
+              tone={edge.profitable ? "good" : "bad"}
+            />
+            <Stat label="In R" value={`${edge.perTradeR >= 0 ? "+" : ""}${edge.perTradeR.toFixed(2)}R`} />
+            <Stat
+              label="Profit factor"
+              value={edge.profitFactor >= 999 ? "∞" : edge.profitFactor.toFixed(2)}
+              tone={edge.profitFactor > 1 ? "good" : "bad"}
+            />
+            <Stat
+              label="Per year"
+              value={edge.annualExpectancy === null ? "—" : rupees(edge.annualExpectancy)}
+              tone={edge.profitable ? "good" : "bad"}
+            />
+          </div>
+
+          {/* The figure most worth reading — a payoff ratio sets the bar the
+              win rate has to clear, and "I win more than I lose" says nothing
+              until you know where that bar is. */}
+          <div className="mt-2 rounded-xl border border-border/40 bg-bg/30 px-3 py-2.5">
+            <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+              <span className="text-[11px] text-muted">
+                At {edge.rewardRiskRatio.toFixed(2)}:1, breakeven needs
+              </span>
+              <span className="text-sm font-bold tabular-nums">
+                {edge.breakevenWinRatePercent.toFixed(1)}% wins
+              </span>
+            </div>
+            <p
+              className={`mt-1 text-[11px] leading-4 ${
+                edge.edgePercentagePoints > 0 ? "text-success" : "text-danger"
+              }`}
+            >
+              You win {parse(winRate)}% —{" "}
+              {edge.edgePercentagePoints > 0
+                ? `${edge.edgePercentagePoints.toFixed(1)} points above the bar.`
+                : `${Math.abs(edge.edgePercentagePoints).toFixed(1)} points below it, so this loses money over time.`}
+            </p>
+          </div>
+
+          {stake && (
+            <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+              <Stat
+                label="Half Kelly (use this)"
+                value={`${stake.halfKellyPercent.toFixed(1)}%`}
+                tone={stake.noEdge ? "bad" : "good"}
+              />
+              <Stat label="Full Kelly" value={`${stake.fullKellyPercent.toFixed(1)}%`} />
+              <Stat
+                label="Risk per trade"
+                value={stake.halfKellyAmount === null ? "—" : rupees(stake.halfKellyAmount)}
+              />
+            </div>
+          )}
+
+          {stake?.noEdge ? (
+            <p className="mt-2 flex items-start gap-1.5 text-[10px] leading-4 text-danger">
+              <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+              No edge, so the correct stake is nothing. There is no bet size that makes a losing
+              system profitable — scaling down only loses more slowly.
+            </p>
+          ) : (
+            <p className="mt-2 text-[10px] leading-4 text-muted/60">
+              Half Kelly is the number to use. Full Kelly is growth-optimal only if these
+              probabilities are exact and never drift, and its drawdowns are severe enough that
+              most people abandon the system before the maths pays off.
+            </p>
+          )}
+        </>
+      ) : (
+        <p className="mt-3 rounded-lg border border-border/40 bg-bg/40 px-3 py-2 text-[11px] text-muted">
+          Win rate must be 0–100, and both averages positive.
+        </p>
+      )}
+    </Card>
+  );
+}
+
 /**
  * The registry every rendering path reads from.
  *
@@ -2510,6 +2644,13 @@ const CALCULATORS: CalculatorEntry[] = [
     group: "trading",
     keywords: "position sizing risk per trade quantity shares stop loss capital allocation money management",
     Component: PositionSizeCalculator,
+  },
+  {
+    key: "expectancy",
+    title: "System Edge & Bet Size",
+    group: "trading",
+    keywords: "expectancy edge win rate profit factor kelly criterion bet size system backtest r multiple breakeven win rate",
+    Component: ExpectancyCalculator,
   },
   {
     key: "stop-loss",

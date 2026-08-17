@@ -614,34 +614,63 @@ describe("never emits NaN or Infinity", () => {
   const optionTypes = ["call", "put"] as const;
   const positions = ["long", "short"] as const;
 
-  const expectFinite = (result: unknown): void => {
+  /**
+   * Collects every non-finite value it finds instead of asserting on each one.
+   *
+   * The sweeps below cover a large cartesian product — the curve sweep alone
+   * reaches roughly 370,000 numeric fields — and an `expect()` per field made
+   * that test take 4.6s against vitest's 5s default timeout. It passed on a
+   * warm machine and failed on a cold one, which is a flake rather than a
+   * finding. Gathering offenders and asserting once at the end keeps the
+   * coverage identical, reports every offender rather than dying at the first,
+   * and takes a fraction of the time.
+   */
+  const collectNonFinite = (result: unknown, path: string, found: string[]): void => {
     if (result === null || result === undefined) return;
     if (typeof result === "number") {
-      expect(Number.isFinite(result)).toBe(true);
+      if (!Number.isFinite(result)) found.push(`${path} = ${result}`);
       return;
     }
     if (Array.isArray(result)) {
-      for (const value of result) expectFinite(value);
+      result.forEach((value, index) => collectNonFinite(value, `${path}[${index}]`, found));
       return;
     }
     if (typeof result === "object") {
-      for (const value of Object.values(result as Record<string, unknown>)) expectFinite(value);
+      for (const [key, value] of Object.entries(result as Record<string, unknown>)) {
+        collectNonFinite(value, `${path}.${key}`, found);
+      }
     }
   };
 
+  /**
+   * Assert-per-call form, kept for the small sweeps below where the cost is
+   * irrelevant and reading `expectFinite(x)` beats threading an accumulator.
+   */
+  const expectFinite = (result: unknown): void => {
+    const found: string[] = [];
+    collectNonFinite(result, "value", found);
+    expect(found).toEqual([]);
+  };
+
   it("across every optionPayoff and optionBreakeven combination", () => {
+    const found: string[] = [];
     for (const optionType of optionTypes) {
       for (const strikePrice of nasty) {
         for (const premium of nasty) {
-          expectFinite(optionBreakeven({ optionType, strikePrice, premium }));
+          collectNonFinite(optionBreakeven({ optionType, strikePrice, premium }), "breakeven", found);
           for (const position of positions) {
             for (const spotAtExpiry of nasty) {
-              expectFinite(optionPayoff({ optionType, position, strikePrice, premium, spotAtExpiry }));
+              collectNonFinite(
+                optionPayoff({ optionType, position, strikePrice, premium, spotAtExpiry }),
+                "payoff",
+                found
+              );
             }
           }
         }
       }
     }
+    expect(found).toEqual([]);
   });
 
   it("across every optionPayoff lotSize", () => {
@@ -664,27 +693,35 @@ describe("never emits NaN or Infinity", () => {
   });
 
   it("across every optionPayoffCurve strike/premium/range combination", () => {
+    const found: string[] = [];
     for (const optionType of optionTypes) {
       for (const position of positions) {
         for (const strikePrice of nasty) {
           for (const premium of nasty) {
             for (const range of nasty) {
-              expectFinite(optionPayoffCurve({ optionType, position, strikePrice, premium, range }));
+              collectNonFinite(
+                optionPayoffCurve({ optionType, position, strikePrice, premium, range }),
+                "curve",
+                found
+              );
             }
           }
         }
       }
     }
+    expect(found).toEqual([]);
   });
 
   it("across every impliedLeverage combination", () => {
+    const found: string[] = [];
     for (const premium of nasty) {
       for (const strikePrice of nasty) {
         for (const spotPrice of nasty) {
-          expectFinite(impliedLeverage({ premium, strikePrice, spotPrice }));
+          collectNonFinite(impliedLeverage({ premium, strikePrice, spotPrice }), "leverage", found);
         }
       }
     }
+    expect(found).toEqual([]);
   });
 
   it("across coveredCall and protectivePut, one parameter perturbed at a time", () => {
