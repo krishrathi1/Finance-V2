@@ -90,6 +90,7 @@ import { verticalSpread, type SpreadType } from "@/shared/spread-tools";
 import { earningsYieldGap, impliedGrowth } from "@/shared/valuation-tools";
 import { prepayVsInvest } from "@/shared/prepay-tools";
 import { volatilityStructure } from "@/shared/volatility-tools";
+import { pyramidPosition } from "@/shared/pyramid-tools";
 import {
   coveredCall,
   impliedLeverage,
@@ -3542,6 +3543,124 @@ function VolatilityStructureCalculator() {
   );
 }
 
+// ─── Pyramiding ──────────────────────────────────────────────────────────────
+
+function PyramidCalculator() {
+  const [quantity, setQuantity] = useState("100");
+  const [buyPrice, setBuyPrice] = useState("1000");
+  const [addQuantity, setAddQuantity] = useState("50");
+  const [addPrice, setAddPrice] = useState("1200");
+  const [stopPrice, setStopPrice] = useState("1100");
+  const [riskLimit, setRiskLimit] = useState("20000");
+
+  const result = useMemo(
+    () =>
+      pyramidPosition({
+        quantity: parse(quantity),
+        buyPrice: parse(buyPrice),
+        addQuantity: parse(addQuantity),
+        addPrice: parse(addPrice),
+        stopPrice: parse(stopPrice),
+        riskLimit: parse(riskLimit),
+      }),
+    [quantity, buyPrice, addQuantity, addPrice, stopPrice, riskLimit]
+  );
+
+  const cushionLost =
+    result === null ? null : result.openProfitPercentBefore - result.openProfitPercentAfter;
+
+  return (
+    <Card className="p-4">
+      <div className="flex items-center gap-2">
+        <Layers className="h-4 w-4 text-accent" />
+        <h2 className="text-base font-semibold">Pyramiding — Adding to a Winner</h2>
+      </div>
+      <p className="mt-1 text-[11px] leading-4 text-muted">
+        Averaging down gets all the warnings. Averaging up has a quieter cost: it drags your
+        breakeven up behind it, and the position that was well in front is suddenly less so.
+      </p>
+
+      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+        <Field label="Shares held" value={quantity} onChange={setQuantity} />
+        <Field label="Your avg price" value={buyPrice} onChange={setBuyPrice} suffix="₹" />
+        <Field label="Stop price" value={stopPrice} onChange={setStopPrice} suffix="₹" />
+        <Field label="Shares to add" value={addQuantity} onChange={setAddQuantity} />
+        <Field label="Adding at" value={addPrice} onChange={setAddPrice} suffix="₹" />
+        <Field label="Risk limit" value={riskLimit} onChange={setRiskLimit} suffix="₹" />
+      </div>
+
+      {result ? (
+        <>
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <Stat label="Shares after" value={result.newQuantity.toLocaleString("en-IN")} />
+            <Stat label="New avg price" value={rupees(result.blendedAverage)} />
+            <Stat label="Open profit" value={rupees(result.openProfitAfter)} tone="good" />
+            <Stat
+              label={result.isProfitLocked ? "Locked in at stop" : "At risk to stop"}
+              value={rupees(Math.abs(result.riskAtStop))}
+              tone={result.isProfitLocked ? "good" : "bad"}
+            />
+          </div>
+
+          <div className="mt-2 rounded-lg border border-border/40 bg-bg/40 px-3 py-2.5">
+            <p className="text-[10px] text-muted">Your cushion</p>
+            <p className="text-sm font-bold tabular-nums">
+              {result.openProfitPercentBefore.toFixed(2)}% →{" "}
+              <span className="text-amber-500">
+                {result.openProfitPercentAfter.toFixed(2)}%
+              </span>
+            </p>
+            <p className="mt-0.5 text-[10px] leading-4 text-muted/70">
+              The rupee profit did not move — nothing was sold. But it now sits against a bigger
+              cost, so you gave up {cushionLost === null ? "—" : cushionLost.toFixed(2)} points of
+              headroom. That is the real price of adding, and only the percentage shows it.
+            </p>
+          </div>
+
+          {result.maxSharesToAdd !== null && (
+            <p
+              className={`mt-2 rounded-lg border px-3 py-2 text-[11px] leading-4 ${
+                result.maxSharesToAdd === 0
+                  ? "border-amber-500/30 bg-amber-500/5 text-amber-500"
+                  : "border-border/40 bg-bg/40 text-muted"
+              }`}
+            >
+              {result.maxSharesToAdd === 0 ? (
+                <>
+                  Your existing shares alone already risk more than{" "}
+                  {rupees(parse(riskLimit))} against this stop. Adding anything makes it worse —
+                  raise the stop or cut the position first.
+                </>
+              ) : (
+                <>
+                  Within a {rupees(parse(riskLimit))} limit you could add up to{" "}
+                  <span className="font-semibold text-fg">
+                    {result.maxSharesToAdd.toLocaleString("en-IN")} shares
+                  </span>
+                  {result.isProfitLocked
+                    ? " — more than you might expect, because a stop above your cost turns the existing shares into a guaranteed gain that the new ones can spend."
+                    : "."}
+                </>
+              )}
+            </p>
+          )}
+
+          <p className="mt-2 text-[10px] leading-4 text-muted/60">
+            Risk here is the whole position measured to the stop, not just the new shares — the
+            old ones are still exposed. Brokerage, STT and tax are not counted. A stop is also not
+            a guarantee: a gap opens through it.
+          </p>
+        </>
+      ) : (
+        <p className="mt-3 rounded-lg border border-border/40 bg-bg/40 px-3 py-2 text-[11px] text-muted">
+          Enter a stop below the price you are adding at — at or above it, the position would be
+          stopped out the moment it was opened.
+        </p>
+      )}
+    </Card>
+  );
+}
+
 const GROUPS = [
   { key: "trading", label: "Trading", blurb: "Costs and sizing for a trade you are about to place." },
   { key: "equity", label: "Equity", blurb: "Questions about a position you hold or are building." },
@@ -4164,6 +4283,14 @@ const CALCULATORS: CalculatorEntry[] = [
     group: "trading",
     keywords: "expectancy edge win rate profit factor kelly criterion bet size system backtest r multiple breakeven win rate",
     Component: ExpectancyCalculator,
+  },
+  {
+    key: "pyramiding",
+    title: "Pyramiding",
+    group: "trading",
+    keywords:
+      "pyramiding add to position averaging up scale in blended average breakeven drift cushion risk limit max size winner adding",
+    Component: PyramidCalculator,
   },
   {
     key: "partial-exit",
