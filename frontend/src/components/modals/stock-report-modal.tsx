@@ -42,7 +42,7 @@ export function StockReportModal({
     netIncome: toNumber(is0.netIncome),
     operatingCashFlow: toNumber(cf0.operatingCashFlow),
     totalAssets: toNumber(bs0.totalAssets),
-    promoterPledgePct: data.shareholding?.promoterPledge,
+    promoterPledgePct: undefined, // Not available in current shareholding type
   });
 
   // Helper to convert string/number/null to number | undefined
