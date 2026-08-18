@@ -28,16 +28,12 @@ services:
       MYSQL_DATABASE: financial_forensics
       NEXT_PUBLIC_API_BASE: http://dev.mystockvision.com
       INTERNAL_API_BASE: http://dev.mystockvision.com
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
-      - /app/scripts/node_modules
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-change-this-to-a-secure-random-key}
     depends_on:
       mysql:
         condition: service_healthy
     ports:
       - "3003:3000"
-    command: sh -c "node scripts/init-db.js && npm run dev -- --hostname 0.0.0.0 --port 3000"
 
 volumes:
   mysql_data:
