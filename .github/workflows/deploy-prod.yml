@@ -1,4 +1,4 @@
-name: Deploy to VPS
+name: Deploy Production to VPS
 
 on:
   workflow_run:
@@ -10,12 +10,11 @@ on:
 
 jobs:
   deploy:
-    # Only deploy when CI passed — broken commits never reach production.
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
 
     steps:
-      - name: Deploy to Hostinger VPS
+      - name: Deploy to Hostinger VPS (Production)
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.VPS_HOST }}
@@ -31,4 +30,4 @@ jobs:
             docker compose -f docker-compose.prod.yml down
             docker compose -f docker-compose.prod.yml up -d --build
 
-            echo "Deployment complete!"
+            echo "Production Deployment complete!"
