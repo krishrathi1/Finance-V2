@@ -119,11 +119,14 @@ const GOAL_SCREENS = [
 
 // Expert preset screens
 const PRESET_SCREENS = [
-  { label: "🔥 High Dividend", query: "High dividend yield stocks above 3%" },
+  { label: "⚡ Volume Shockers (3x+ Vol)", query: "NSE stocks trading with massive volume surges above 3x 20-day average" },
+  { label: "🏆 52-Week High Breakouts", query: "High momentum stocks breaking 52-week highs with strong institutional volume" },
+  { label: "🛡️ Clean Forensics (High F-Score)", query: "Zero debt companies with Piotroski score 8+ and clean accounting M-Score" },
+  { label: "🔥 High Dividend Yield", query: "High dividend yield stocks above 3% with consistent payout track record" },
   { label: "📈 Low PE Growth", query: "Undervalued stocks with PE under 20 and positive ROE" },
-  { label: "💎 Debt Free", query: "Debt-free large cap IT stocks" },
+  { label: "💎 Debt Free Tech", query: "Debt-free large and mid cap IT stocks" },
   { label: "🚀 Small Cap Pharma", query: "Small cap pharma companies with strong fundamentals" },
-  { label: "🏦 Banking Leaders", query: "Top private banking stocks with high ROE" },
+  { label: "🏦 Banking Leaders", query: "Top private banking stocks with high ROE and low NPA" },
 ];
 
 type SortKey = keyof Pick<

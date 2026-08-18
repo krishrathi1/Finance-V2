@@ -14,6 +14,7 @@ import { NavLinks } from "@/components/nav-links";
 import { ScrollProgress } from "@/components/scroll-progress";
 import { SmoothExperience } from "@/components/smooth-experience";
 import { ThemeProvider } from "@/components/theme-provider";
+import { AiCopilotDrawer } from "@/components/ai-copilot-drawer";
 import { OG_IMAGE_PATH, SITE_DESCRIPTION, SITE_NAME, SITE_TITLE, SITE_URL } from "@/shared/seo";
 
 import "./globals.css";
@@ -338,6 +339,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 </div>
               </div>
             </footer>
+            <AiCopilotDrawer />
           </AuthProvider>
         </ThemeProvider>
       </body>

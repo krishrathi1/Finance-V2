@@ -8,6 +8,7 @@ import {
   Bell,
   CheckCircle,
   Edit2,
+  FileSpreadsheet,
   Plus,
   Receipt,
   Search,
@@ -32,6 +33,9 @@ import { useVisibilityPolling } from "@/hooks/useVisibilityPolling";
 import { fetchAIScreenerResults, fetchTickerTape, fetchPortfolioRiskAssessment, searchStocks, parsePortfolioDocument } from "@/lib/api";
 import { addAlert, getAlertsForSymbol, removeAlert } from "@/lib/alerts";
 import { ImportModal } from "@/components/modals/import-modal";
+import { BrokerImportModal } from "@/components/modals/broker-import-modal";
+import { PortfolioBenchmark } from "@/components/sections/portfolio-benchmark";
+import { DividendCalendar } from "@/components/sections/dividend-calendar";
 import {
   PORTFOLIO_SYNCED_EVENT,
   addHolding,
@@ -773,6 +777,7 @@ export default function PortfolioPage() {
 
   useEffect(() => { setMounted(true); }, []);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [showBrokerImportModal, setShowBrokerImportModal] = useState(false);
 
   const loadPortfolio = useCallback(async (options: { force?: boolean; keepLoading?: boolean } = {}) => {
     const { force = false, keepLoading = true } = options;
@@ -913,6 +918,13 @@ export default function PortfolioPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2 sm:gap-3">
+          <button
+            onClick={() => (user ? setShowBrokerImportModal(true) : requestAuthPanel("signup"))}
+            className="flex items-center gap-2 rounded-xl border border-primary/40 bg-primary/10 px-4 py-2.5 text-sm font-semibold text-primary transition hover:bg-primary/20 shadow-sm"
+          >
+            <FileSpreadsheet className="h-4 w-4" />
+            Import Broker CSV
+          </button>
           <button
             onClick={() => (user ? setShowImportModal(true) : requestAuthPanel("signup"))}
             className="flex items-center gap-2 rounded-xl border border-accent/30 bg-bg px-4 py-2.5 text-sm font-semibold text-accent transition hover:bg-accent/5"
@@ -1115,10 +1127,16 @@ export default function PortfolioPage() {
             )}
           </div>
 
+          {/* Benchmark Performance & Risk-Adjusted Alpha */}
+          <PortfolioBenchmark holdings={holdings} />
+
           {/* Measured concentration, paired with the AI commentary above rather
               than folded into it — "you are over-concentrated" is arithmetic,
               and it should hold when the model is unavailable. */}
           <ConcentrationRisk holdings={holdings} />
+
+          {/* Dividend Calendar & Passive Income Planner */}
+          <DividendCalendar holdings={holdings} />
 
           {/* Diagnosis above, prescription here. */}
           <RebalancePlan holdings={holdings} />
@@ -1203,6 +1221,13 @@ export default function PortfolioPage() {
       )}
       {mounted && showImportModal && (
         <ImportModal onClose={() => setShowImportModal(false)} onSave={loadPortfolio} />
+      )}
+      {mounted && showBrokerImportModal && (
+        <BrokerImportModal
+          isOpen={showBrokerImportModal}
+          onClose={() => setShowBrokerImportModal(false)}
+          onImportComplete={() => loadPortfolio({ force: true })}
+        />
       )}
       {mounted && sellTarget && (
         <SellHoldingModal

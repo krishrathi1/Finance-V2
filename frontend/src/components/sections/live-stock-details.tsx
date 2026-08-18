@@ -22,6 +22,11 @@ import { ShareholdingSection } from "@/components/sections/shareholding-section"
 import { FundamentalSignals } from "@/components/sections/fundamental-signals";
 import { PriceRiskProfile } from "@/components/sections/price-risk-profile";
 import { PeerValuation } from "@/components/sections/peer-valuation";
+import { ForensicsSection } from "@/components/sections/forensics-section";
+import { OptionsChainTable } from "@/components/sections/options-chain-table";
+import { InstitutionalTracker } from "@/components/sections/institutional-tracker";
+import { StockReportModal } from "@/components/modals/stock-report-modal";
+import { FileText, Printer } from "lucide-react";
 import { QualityScore } from "@/components/sections/quality-score";
 import { ReturnAnalysis } from "@/components/sections/return-analysis";
 import { RollingReturns } from "@/components/sections/rolling-returns";
@@ -73,6 +78,7 @@ function hasMeaningfulDashboard(data: DashboardData) {
 
 export function LiveStockDetails({ initialData, symbol, exchange }: { initialData: DashboardData; symbol: string; exchange: string }) {
   const [data, setData] = useState(initialData);
+  const [showReportModal, setShowReportModal] = useState(false);
 
   const refreshRef = useRef<() => void>(() => {});
 
@@ -130,6 +136,20 @@ export function LiveStockDetails({ initialData, symbol, exchange }: { initialDat
   return (
     <>
       <section id="overview" className="space-y-4">
+        <div className="flex items-center justify-between p-3 rounded-2xl border border-border/70 bg-panel/80">
+          <div className="flex items-center gap-2 text-xs text-muted">
+            <FileText className="h-4 w-4 text-primary" />
+            <span>Need an offline briefing? Generate a clean, 2-page executive summary.</span>
+          </div>
+          <button
+            onClick={() => setShowReportModal(true)}
+            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-primary text-primary-foreground text-xs font-semibold hover:brightness-110 shadow-sm transition-all"
+          >
+            <Printer className="h-3.5 w-3.5" />
+            <span>1-Click PDF Report</span>
+          </button>
+        </div>
+
         <CompanyOverview
           description={data.profile.description}
           incorporationYear={data.profile.incorporationYear}
@@ -177,6 +197,19 @@ export function LiveStockDetails({ initialData, symbol, exchange }: { initialDat
             label={riskScore.label}
           />
         </div>
+
+        {/* Phase 1: Forensic Accounting & Red Flag Audit */}
+        <section id="forensics" className="space-y-4">
+          <ForensicsSection stockData={data} />
+        </section>
+
+        {/* Phase 2: Options Chain & Greeks Analytics */}
+        <section id="options-chain" className="space-y-4">
+          <OptionsChainTable symbol={symbol} currentPrice={data.price?.cmp} />
+        </section>
+
+        {/* Institutional FII/DII Flows Tracker */}
+        <InstitutionalTracker />
 
         {/* Quality & Safety scores today's ratios against fixed thresholds;
             these two answer the questions it can't — did the business improve
@@ -324,6 +357,14 @@ export function LiveStockDetails({ initialData, symbol, exchange }: { initialDat
 
         <NewsSectionLive symbol={symbol} fallbackNews={data.news} />
       </StockAuthWall>
+
+      {showReportModal && (
+        <StockReportModal
+          isOpen={showReportModal}
+          onClose={() => setShowReportModal(false)}
+          data={data}
+        />
+      )}
     </>
   );
 }

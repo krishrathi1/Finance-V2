@@ -4,6 +4,8 @@ import { useAuth } from "@/hooks/useAuth";
 
 const allSections = [
   { id: "overview", label: "Overview" },
+  { id: "forensics", label: "Forensics & M-Score" },
+  { id: "options-chain", label: "Options & Greeks" },
   { id: "corporate-actions", label: "Corporate Actions" },
   { id: "financials", label: "Financials" },
   { id: "shareholding", label: "Shareholding" },
