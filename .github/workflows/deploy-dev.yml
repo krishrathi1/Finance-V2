@@ -6,7 +6,7 @@ on:
     types:
       - completed
     branches:
-      - dev
+      - main
 
 jobs:
   deploy:
@@ -24,7 +24,7 @@ jobs:
             cd /root/Finance-Dev
 
             # Pull latest code
-            git pull origin dev
+            git pull origin main
 
             # Rebuild and restart containers with dev config (docker-compose.yml)
             docker compose -f docker-compose.yml down
