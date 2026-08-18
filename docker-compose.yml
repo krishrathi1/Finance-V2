@@ -6,7 +6,7 @@ services:
       MYSQL_DATABASE: financial_forensics
       MYSQL_ROOT_PASSWORD: ffa_dev
     ports:
-      - "127.0.0.1:3306:3306"
+      - "127.0.0.1:3308:3306"
     volumes:
       - mysql_data:/var/lib/mysql
     healthcheck:
@@ -26,8 +26,8 @@ services:
       MYSQL_USER: root
       MYSQL_PASSWORD: ffa_dev
       MYSQL_DATABASE: financial_forensics
-      NEXT_PUBLIC_API_BASE: http://localhost:3000
-      INTERNAL_API_BASE: http://127.0.0.1:3000
+      NEXT_PUBLIC_API_BASE: http://dev.mystockvision.com
+      INTERNAL_API_BASE: http://dev.mystockvision.com
     volumes:
       - ./frontend:/app
       - /app/node_modules
@@ -35,7 +35,7 @@ services:
       mysql:
         condition: service_healthy
     ports:
-      - "3000:3000"
+      - "3003:3000"
     command: sh -c "node scripts/init-db.js && npm run dev -- --hostname 0.0.0.0 --port 3000"
 
 volumes:
