@@ -37,11 +37,11 @@ export function StockReportModal({
 
   const audit = computeForensicAudit({
     marketCap: mcap,
-    revenue: is0.revenue || is0.totalRevenue,
-    grossProfit: is0.grossProfit,
-    netIncome: is0.netIncome,
-    operatingCashFlow: cf0.operatingCashFlow,
-    totalAssets: bs0.totalAssets,
+    revenue: (is0.revenue ?? is0.totalRevenue) ?? undefined,
+    grossProfit: is0.grossProfit ?? undefined,
+    netIncome: is0.netIncome ?? undefined,
+    operatingCashFlow: cf0.operatingCashFlow ?? undefined,
+    totalAssets: bs0.totalAssets ?? undefined,
     promoterPledgePct: data.shareholding?.promoterPledge,
   });
 
