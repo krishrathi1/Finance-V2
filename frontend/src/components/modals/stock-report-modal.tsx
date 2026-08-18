@@ -37,13 +37,20 @@ export function StockReportModal({
 
   const audit = computeForensicAudit({
     marketCap: mcap,
-    revenue: (is0.revenue ?? is0.totalRevenue) ?? undefined,
-    grossProfit: is0.grossProfit ?? undefined,
-    netIncome: is0.netIncome ?? undefined,
-    operatingCashFlow: cf0.operatingCashFlow ?? undefined,
-    totalAssets: bs0.totalAssets ?? undefined,
+    revenue: toNumber(is0.revenue ?? is0.totalRevenue),
+    grossProfit: toNumber(is0.grossProfit),
+    netIncome: toNumber(is0.netIncome),
+    operatingCashFlow: toNumber(cf0.operatingCashFlow),
+    totalAssets: toNumber(bs0.totalAssets),
     promoterPledgePct: data.shareholding?.promoterPledge,
   });
+
+  // Helper to convert string/number/null to number | undefined
+  function toNumber(value: string | number | null | undefined): number | undefined {
+    if (value === null || value === undefined) return undefined;
+    const num = typeof value === 'string' ? parseFloat(value) : value;
+    return isNaN(num) ? undefined : num;
+  }
 
   const handlePrint = () => {
     window.print();
