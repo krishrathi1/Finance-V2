@@ -28,6 +28,71 @@ const QUICK_PROMPTS = [
   "How are FII/DII flows trending?",
 ];
 
+function formatMessageText(text: string): React.ReactNode {
+  const lines = text.split("\n");
+  return lines.map((line, idx) => {
+    let currentLine = line;
+    let isHeader = false;
+    let isBullet = false;
+
+    // Check headers
+    if (currentLine.startsWith("### ")) {
+      currentLine = currentLine.substring(4);
+      isHeader = true;
+    } else if (currentLine.startsWith("## ")) {
+      currentLine = currentLine.substring(3);
+      isHeader = true;
+    } else if (currentLine.startsWith("# ")) {
+      currentLine = currentLine.substring(2);
+      isHeader = true;
+    }
+
+    // Check bullets
+    if (currentLine.trim().startsWith("- ")) {
+      currentLine = currentLine.trim().substring(2);
+      isBullet = true;
+    }
+
+    // Parse inline bold (**text**) and italic (*text*)
+    const parts: React.ReactNode[] = [];
+    const regex = /(\*\*.*?\*\*|\*.*?\*)/g;
+    const splitParts = currentLine.split(regex);
+
+    splitParts.forEach((part, pIdx) => {
+      if (part.startsWith("**") && part.endsWith("**")) {
+        parts.push(<strong key={pIdx} className="font-bold text-fg">{part.slice(2, -2)}</strong>);
+      } else if (part.startsWith("*") && part.endsWith("*")) {
+        parts.push(<em key={pIdx} className="italic text-muted-fg">{part.slice(1, -1)}</em>);
+      } else {
+        parts.push(part);
+      }
+    });
+
+    if (isHeader) {
+      return (
+        <h4 key={idx} className="text-xs font-bold mt-2.5 mb-1 text-primary">
+          {parts}
+        </h4>
+      );
+    }
+
+    if (isBullet) {
+      return (
+        <div key={idx} className="flex items-start gap-1.5 ml-1.5 my-0.5">
+          <span className="text-primary mt-1 shrink-0 text-[10px]">•</span>
+          <span>{parts}</span>
+        </div>
+      );
+    }
+
+    return (
+      <p key={idx} className={line.trim() === "" ? "h-1.5" : "my-0.5"}>
+        {parts}
+      </p>
+    );
+  });
+}
+
 export function AiCopilotDrawer() {
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState("");
@@ -178,7 +243,11 @@ export function AiCopilotDrawer() {
                       : "bg-secondary/60 text-fg border border-border/60 rounded-bl-none prose prose-invert prose-xs"
                   }`}
                 >
-                  <p className="whitespace-pre-line">{m.text}</p>
+                  {m.sender === "user" ? (
+                    <p className="whitespace-pre-line">{m.text}</p>
+                  ) : (
+                    <div className="space-y-0.5">{formatMessageText(m.text)}</div>
+                  )}
                 </div>
                 <span className="text-[9px] text-muted font-mono mt-1 px-1">{m.timestamp}</span>
               </div>
