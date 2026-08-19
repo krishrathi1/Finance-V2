@@ -33,21 +33,22 @@ export function InteractiveChartsSuite({ data }: { data: DashboardData }) {
     // Process rolling averages
     const sorted = [...history].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
     return sorted.map((pt, idx) => {
+      const priceVal = pt.close;
       let sma50: number | null = null;
       let sma200: number | null = null;
 
       if (idx >= 49) {
         const slice50 = sorted.slice(idx - 49, idx + 1);
-        sma50 = Math.round((slice50.reduce((acc, p) => acc + p.price, 0) / 50) * 100) / 100;
+        sma50 = Math.round((slice50.reduce((acc, p) => acc + p.close, 0) / 50) * 100) / 100;
       }
       if (idx >= 199) {
         const slice200 = sorted.slice(idx - 199, idx + 1);
-        sma200 = Math.round((slice200.reduce((acc, p) => acc + p.price, 0) / 200) * 100) / 100;
+        sma200 = Math.round((slice200.reduce((acc, p) => acc + p.close, 0) / 200) * 100) / 100;
       }
 
       return {
         date: pt.date,
-        price: pt.price,
+        price: priceVal,
         sma50,
         sma200,
       };
@@ -59,9 +60,9 @@ export function InteractiveChartsSuite({ data }: { data: DashboardData }) {
     const yearly = data.financials?.yearly || [];
     if (!yearly.length) return [];
     return yearly.map((yr) => ({
-      period: yr.period || yr.year || "FY",
-      revenue: yr.revenueCr ?? yr.sales ?? null,
-      netProfit: yr.netProfitCr ?? yr.netProfit ?? null,
+      period: yr.period || "FY",
+      revenue: yr.revenue ?? null,
+      netProfit: yr.profit ?? null,
     })).filter((item) => item.revenue !== null || item.netProfit !== null);
   }, [data.financials?.yearly]);
 
@@ -100,12 +101,13 @@ export function InteractiveChartsSuite({ data }: { data: DashboardData }) {
 
     let peak = -Infinity;
     return sorted.map((pt) => {
-      if (pt.price > peak) peak = pt.price;
-      const drawdown = peak > 0 ? ((pt.price - peak) / peak) * 100 : 0;
+      const priceVal = pt.close;
+      if (priceVal > peak) peak = priceVal;
+      const drawdown = peak > 0 ? ((priceVal - peak) / peak) * 100 : 0;
       return {
         date: pt.date,
         drawdown: Math.round(drawdown * 100) / 100,
-        price: pt.price,
+        price: priceVal,
       };
     });
   }, [data.price?.history]);
@@ -123,11 +125,12 @@ export function InteractiveChartsSuite({ data }: { data: DashboardData }) {
     const points: Array<{ date: string; invested: number; value: number }> = [];
 
     sorted.forEach((pt, idx) => {
+      const priceVal = pt.close;
       if (idx % 20 === 0) {
         invested += monthlyInstallment;
-        totalUnits += monthlyInstallment / pt.price;
+        totalUnits += monthlyInstallment / (priceVal || 1);
       }
-      const currentValue = Math.round(totalUnits * pt.price);
+      const currentValue = Math.round(totalUnits * priceVal);
       if (idx % 5 === 0 || idx === sorted.length - 1) {
         points.push({
           date: pt.date,

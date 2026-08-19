@@ -13,8 +13,8 @@ export function EarningsSurpriseTracker({ data }: { data: DashboardData }) {
     if (!quarterly.length) return [];
 
     return quarterly.slice(0, 4).map((q, idx) => {
-      const actualSales = q.salesCr ?? q.sales ?? 1000;
-      const actualProfit = q.netProfitCr ?? q.netProfit ?? 150;
+      const actualSales = q.revenue ?? 1000;
+      const actualProfit = q.profit ?? 150;
 
       // Estimate proxy: actual with minor variance for demo estimate comparison
       const estProfit = Math.round(actualProfit * (1 + (idx % 2 === 0 ? -0.04 : 0.03)));
@@ -22,7 +22,7 @@ export function EarningsSurpriseTracker({ data }: { data: DashboardData }) {
       const isBeat = beatPercent >= 0;
 
       return {
-        quarter: q.quarter || `Q${4 - idx}`,
+        quarter: q.period || `Q${4 - idx}`,
         actualProfit,
         estProfit,
         beatPercent,
