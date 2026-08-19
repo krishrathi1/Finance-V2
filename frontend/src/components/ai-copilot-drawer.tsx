@@ -173,7 +173,7 @@ export function AiCopilotDrawer() {
       {!isOpen && (
         <button
           onClick={() => setIsOpen(true)}
-          className="fixed bottom-6 right-6 z-40 flex items-center gap-2.5 px-4 py-3 rounded-full bg-gradient-to-r from-primary to-amber-500 text-primary-foreground font-bold text-xs shadow-2xl hover:scale-105 active:scale-95 transition-all group"
+          className="fixed bottom-6 right-20 z-40 flex items-center gap-2.5 px-4 py-3 rounded-full bg-gradient-to-r from-primary to-amber-500 text-primary-foreground font-bold text-xs shadow-2xl hover:scale-105 active:scale-95 transition-all group"
           title="Open Forensic Copilot"
         >
           <div className="relative">
