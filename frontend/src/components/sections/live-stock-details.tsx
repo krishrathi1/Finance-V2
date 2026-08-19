@@ -25,6 +25,7 @@ import { PeerValuation } from "@/components/sections/peer-valuation";
 import { ForensicsSection } from "@/components/sections/forensics-section";
 import { OptionsChainTable } from "@/components/sections/options-chain-table";
 import { InstitutionalTracker } from "@/components/sections/institutional-tracker";
+import { InteractiveChartsSuite } from "@/components/sections/interactive-charts-suite";
 import { StockReportModal } from "@/components/modals/stock-report-modal";
 import { FileText, Printer } from "lucide-react";
 import { QualityScore } from "@/components/sections/quality-score";
@@ -170,6 +171,7 @@ export function LiveStockDetails({ initialData, symbol, exchange }: { initialDat
           sector={data.sector}
           industry={data.profile.industry}
         />
+        <InteractiveChartsSuite data={data} />
         <PeerValuation
           metrics={data.metrics}
           competitors={data.competitors}
