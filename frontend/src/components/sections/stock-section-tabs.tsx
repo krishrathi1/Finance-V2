@@ -28,7 +28,7 @@ export function StockSectionTabs() {
   };
 
   return (
-    <div className="sticky top-[96px] z-30 -mx-3 overflow-x-auto no-scrollbar rounded-2xl border border-border/80 bg-panel/95 backdrop-blur-xl p-1.5 shadow-lg sm:-mx-0 sm:top-[118px] sm:p-2 md:top-[122px]">
+    <div className="sticky top-[96px] z-30 -mx-1 overflow-x-auto no-scrollbar rounded-2xl border border-border/80 bg-panel/95 backdrop-blur-xl p-1.5 shadow-lg sm:-mx-0 sm:top-[118px] sm:p-2 md:top-[122px]">
       <div className="flex min-w-max items-center gap-1 sm:gap-1.5">
         {sections.map((item) => (
           <a

@@ -39,7 +39,7 @@ export function PageHero({
   return (
     <ViewportMotionSection
       className={cn(
-        "page-hero-shell gradient-border relative overflow-visible rounded-[28px] px-5 py-5 sm:px-7 sm:py-7 lg:px-8",
+        "page-hero-shell gradient-border relative overflow-visible rounded-[24px] px-4 py-4 sm:px-6 sm:py-6 lg:px-6",
         className
       )}
     >

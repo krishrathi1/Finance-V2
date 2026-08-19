@@ -196,7 +196,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             </Suspense>
 
             <header className="header-enter sticky top-0 z-40 border-b border-border/40 bg-bg/80 backdrop-blur-xl">
-              <div className="mx-auto flex max-w-[1640px] items-center justify-between px-3 py-2.5 sm:px-5 sm:py-3 md:px-7">
+              <div className="w-full flex items-center justify-between px-2.5 py-2 sm:px-4 sm:py-2.5 md:px-5">
                 <Link href="/" className="group min-w-0 flex-shrink-0">
                   <div className="flex items-center gap-2.5">
                     <div className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-accent to-amber-400 shadow-lg shadow-accent/30 transition group-hover:scale-105 group-hover:shadow-accent/50">
@@ -233,7 +233,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             </header>
 
             <StaggerSettle />
-            <main className="page-enter mx-auto max-w-[1640px] px-3 py-4 sm:px-5 sm:py-5 md:px-7 md:py-7">
+            <main className="page-enter w-full px-2 py-3 sm:px-4 sm:py-4 md:px-5 md:py-5">
               {children}
             </main>
             <FloatingAuth />
@@ -242,7 +242,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <footer className="mt-12 border-t border-border/40 bg-panel/20 backdrop-blur-sm">
               <div className="h-px w-full bg-gradient-to-r from-transparent via-accent/35 to-transparent" />
 
-              <div className="mx-auto max-w-[1640px] px-5 py-10 md:px-7">
+              <div className="w-full px-4 py-8 md:px-6">
                 <div className="grid grid-cols-2 gap-8 sm:grid-cols-2 md:grid-cols-4">
                   <div className="col-span-2 md:col-span-1">
                     <div className="flex items-center gap-2">
