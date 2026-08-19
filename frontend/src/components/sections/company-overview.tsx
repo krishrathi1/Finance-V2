@@ -26,15 +26,17 @@ export function CompanyOverview({
   ipoDate?: string;
   country?: string;
 }) {
-  const profileItems = [
+  const rawProfileItems = [
     ...(ceo ? [{ icon: <Briefcase className="h-3.5 w-3.5" />, label: "CEO", value: ceo }] : []),
-    { icon: <Calendar className="h-3.5 w-3.5" />, label: "Incorporation", value: incorporationYear ? String(incorporationYear) : "N/A" },
+    { icon: <Calendar className="h-3.5 w-3.5" />, label: "Incorporation", value: incorporationYear ? String(incorporationYear) : "" },
     ...(ipoDate ? [{ icon: <Calendar className="h-3.5 w-3.5" />, label: "IPO Date", value: ipoDate }] : []),
-    { icon: <Building2 className="h-3.5 w-3.5" />, label: "Headquarters", value: (headquarters || country) ? `${headquarters || ""}${headquarters && country ? ", " : ""}${country || ""}` : "N/A" },
+    { icon: <Building2 className="h-3.5 w-3.5" />, label: "Headquarters", value: (headquarters || country) ? `${headquarters || ""}${headquarters && country ? ", " : ""}${country || ""}` : "" },
     ...(employees ? [{ icon: <Users className="h-3.5 w-3.5" />, label: "Employees", value: Number(employees).toLocaleString("en-IN") }] : []),
-    { icon: <User className="h-3.5 w-3.5" />, label: "Chairman", value: chairman || "N/A" },
-    { icon: <History className="h-3.5 w-3.5" />, label: "Previous Name", value: previousName || "N/A" },
+    { icon: <User className="h-3.5 w-3.5" />, label: "Chairman", value: chairman || "" },
+    { icon: <History className="h-3.5 w-3.5" />, label: "Previous Name", value: previousName || "" },
   ];
+
+  const profileItems = rawProfileItems.filter((item) => item.value && item.value !== "N/A");
 
   return (
     <div className="grid gap-3 xl:grid-cols-3">

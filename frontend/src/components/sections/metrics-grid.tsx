@@ -84,6 +84,19 @@ function isLender(sector?: string, industry?: string) {
   return normalized === "banking" || normalized === "finance" || normalized === "financial services";
 }
 
+function getMetricBadge(key: string, val: MetricValue): { text: string; color: string } | null {
+  if (!isValid(val)) return null;
+  const num = Number(val);
+  if (key === "roe" && num >= 15) return { text: "High Return", color: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30" };
+  if (key === "roce" && num >= 20) return { text: "Capital Efficient", color: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30" };
+  if (key === "debtToEquity" && num <= 0.5) return { text: "Low Debt", color: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30" };
+  if (key === "debtToEquity" && num >= 1.5) return { text: "High Leverage", color: "bg-rose-500/15 text-rose-400 border-rose-500/30" };
+  if (key === "dividendYield" && num >= 2.0) return { text: "Good Yield", color: "bg-amber-500/15 text-amber-400 border-amber-500/30" };
+  if (key === "peRatio" && num > 0 && num <= 15) return { text: "Value Zone", color: "bg-cyan-500/15 text-cyan-400 border-cyan-500/30" };
+  if (key === "peRatio" && num >= 50) return { text: "Growth Premium", color: "bg-purple-500/15 text-purple-400 border-purple-500/30" };
+  return null;
+}
+
 export function MetricsGrid({
   metrics,
   keyRatioTrends,
@@ -105,19 +118,17 @@ export function MetricsGrid({
   const bookValuePb =
     isValid(bookValue) && isValid(pbRatio) ? `₹ ${formatNumber(Number(bookValue))} x ${formatNumber(Number(pbRatio))}` : "N/A";
 
-  // Never hide a tile that actually has data — sector/industry text can be
-  // missing (profile fetch failed, NSE-only data path) even for a real bank
-  // whose CASA/NIM values came through via keyRatioTrends, so the classifier
-  // is only used to hide the tile when there's also no data to show.
   const visibleMetrics = metricConfig.filter((metric) => {
     if (BANK_ONLY_METRICS.has(metric.key)) return isBank(sector, industry) || isValid(mergedMetrics[metric.key]);
     if (LENDER_METRICS.has(metric.key)) return isLender(sector, industry) || isValid(mergedMetrics[metric.key]);
+    // Hide tile if it evaluates to N/A unless it's a core metric (marketCap, peRatio, roe, eps, faceValue)
+    const val = metric.type === "bookValuePb" ? bookValuePb : metricText(mergedMetrics[metric.key], metric.type);
+    if (val === "N/A" && !["marketCap", "peRatio", "roe", "eps", "faceValue"].includes(metric.key)) {
+      return false;
+    }
     return true;
   });
 
-  // SEBI's classification is rank-based (top 100 large, 101-250 mid, rest
-  // small), which needs the whole ranked universe. These crore thresholds are
-  // the widely used proxy and are what Indian screeners display.
   const marketCapCr = mergedMetrics.marketCap;
   const marketCapCategory =
     typeof marketCapCr === "number" && Number.isFinite(marketCapCr) && marketCapCr > 0
@@ -133,29 +144,40 @@ export function MetricsGrid({
   return (
     <TooltipProvider>
       <div className="grid grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-4">
-        {visibleMetrics.map((metric) => (
-          <Card key={metric.key} className="min-h-[90px] p-3 sm:min-h-[108px] sm:p-4">
-            <div className="flex items-start justify-between gap-2">
-              <p className="text-sm text-muted">{metric.label}</p>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button type="button" className="shrink-0 text-muted transition hover:text-text" aria-label={`${metric.label} formula`}>
-                    <Info className="h-3.5 w-3.5" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent>{metric.formula}</TooltipContent>
-              </Tooltip>
-            </div>
-            <p className="mt-2 text-lg font-semibold sm:mt-3 sm:text-2xl">
-              {metric.type === "bookValuePb" ? bookValuePb : metricText(mergedMetrics[metric.key], metric.type)}
-            </p>
-            {/* SEBI size class, shown the way every peer platform does — a bare
-                market cap in crore doesn't tell a reader where the company sits. */}
-            {metric.key === "marketCap" && marketCapCategory ? (
-              <p className="mt-1 text-xs font-medium text-muted">{marketCapCategory}</p>
-            ) : null}
-          </Card>
-        ))}
+        {visibleMetrics.map((metric) => {
+          const formattedVal = metric.type === "bookValuePb" ? bookValuePb : metricText(mergedMetrics[metric.key], metric.type);
+          const badge = getMetricBadge(metric.key, mergedMetrics[metric.key]);
+          return (
+            <Card key={metric.key} className="min-h-[90px] p-3 sm:min-h-[108px] sm:p-4 hover:border-accent/40 transition-colors">
+              <div className="flex items-start justify-between gap-2">
+                <p className="text-xs text-muted font-medium uppercase tracking-wider">{metric.label}</p>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button type="button" className="shrink-0 text-muted transition hover:text-text" aria-label={`${metric.label} formula`}>
+                      <Info className="h-3.5 w-3.5" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent>{metric.formula}</TooltipContent>
+                </Tooltip>
+              </div>
+              <p className="mt-2 text-lg font-bold sm:mt-3 sm:text-2xl">
+                {formattedVal}
+              </p>
+              <div className="mt-1.5 flex items-center gap-2">
+                {metric.key === "marketCap" && marketCapCategory ? (
+                  <span className="px-2 py-0.5 text-[10px] font-semibold rounded-full border border-border/60 bg-bg/50 text-muted">
+                    {marketCapCategory}
+                  </span>
+                ) : null}
+                {badge ? (
+                  <span className={`px-2 py-0.5 text-[10px] font-semibold rounded-full border ${badge.color}`}>
+                    {badge.text}
+                  </span>
+                ) : null}
+              </div>
+            </Card>
+          );
+        })}
       </div>
     </TooltipProvider>
   );

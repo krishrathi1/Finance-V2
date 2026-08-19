@@ -170,6 +170,12 @@ export function LiveStockDetails({ initialData, symbol, exchange }: { initialDat
           sector={data.sector}
           industry={data.profile.industry}
         />
+        <PeerValuation
+          metrics={data.metrics}
+          competitors={data.competitors}
+          brokerageResearch={data.brokerageResearch}
+          currentPrice={data.price?.cmp}
+        />
       </section>
 
       <StockAuthWall>
