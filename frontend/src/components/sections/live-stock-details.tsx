@@ -79,6 +79,17 @@ function hasMeaningfulDashboard(data: DashboardData) {
   return Boolean(data?.price?.cmp || data?.price?.history?.length || data?.companyName);
 }
 
+function isDataEqual(a: DashboardData, b: DashboardData) {
+  if (!a || !b) return false;
+  return (
+    a.price?.cmp === b.price?.cmp &&
+    a.price?.change === b.price?.change &&
+    a.price?.changePercent === b.price?.changePercent &&
+    a.metrics?.marketCap === b.metrics?.marketCap &&
+    a.metrics?.peRatio === b.metrics?.peRatio
+  );
+}
+
 export function LiveStockDetails({ initialData, symbol, exchange }: { initialData: DashboardData; symbol: string; exchange: string }) {
   const [data, setData] = useState(initialData);
   const [showReportModal, setShowReportModal] = useState(false);
@@ -92,7 +103,10 @@ export function LiveStockDetails({ initialData, symbol, exchange }: { initialDat
       try {
         const envelope = await fetchDashboardEnvelope(symbol, { exchange, force: true });
         if (!alive || !hasMeaningfulDashboard(envelope.data)) return;
-        setData((current) => mergeDashboardData(current, envelope.data));
+        setData((current) => {
+          const merged = mergeDashboardData(current, envelope.data);
+          return isDataEqual(current, merged) ? current : merged;
+        });
       } catch (error) {
         if (!alive) return;
         console.error("Live dashboard refresh failed:", error);
@@ -100,7 +114,6 @@ export function LiveStockDetails({ initialData, symbol, exchange }: { initialDat
     };
 
     refreshRef.current = () => void refresh();
-    refresh();
 
     return () => {
       alive = false;
