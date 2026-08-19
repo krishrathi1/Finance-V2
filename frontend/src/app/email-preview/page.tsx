@@ -2,12 +2,13 @@
 
 import { useState } from 'react';
 import { getWelcomeEmailTemplate, getPremiumUpgradeTemplate, getPasswordResetTemplate } from '@/server/application/services/email-templates';
+import { SITE_NAME, SITE_URL } from '@/shared/seo';
 
 export default function EmailPreviewPage() {
   const [selectedEmail, setSelectedEmail] = useState<'verification' | 'welcome' | 'premium' | 'reset'>('verification');
 
   const getVerificationEmailHtml = () => {
-    const frontendUrl = 'http://localhost:3000';
+    const frontendUrl = typeof window !== 'undefined' ? window.location.origin : SITE_URL;
     const verificationLink = `${frontendUrl}/verify-email?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...`;
 
     return `
@@ -16,7 +17,7 @@ export default function EmailPreviewPage() {
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>Verify Your Email - Financial Forensics AI</title>
+      <title>Verify Your Email - ${SITE_NAME}</title>
       <style>
         body {
           font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
@@ -187,7 +188,7 @@ export default function EmailPreviewPage() {
         <div class="container">
           <div class="header">
             <div class="header-icon">🔍</div>
-            <h1>Financial Forensics AI</h1>
+            <h1>${SITE_NAME}</h1>
             <p>Verify Your Email Address</p>
           </div>
 
@@ -196,7 +197,7 @@ export default function EmailPreviewPage() {
               Hey there! 👋
             </p>
             <p class="greeting">
-              Welcome to <strong>Financial Forensics AI</strong> – your intelligent financial analysis companion. We're thrilled to have you on board!
+              Welcome to <strong>${SITE_NAME}</strong> – your intelligent financial analysis companion. We're thrilled to have you on board!
             </p>
 
             <div class="message">
@@ -227,7 +228,7 @@ export default function EmailPreviewPage() {
             <div class="footer-text">
               <strong>Why verify?</strong> Email verification keeps your account secure and ensures you receive important updates about your portfolio and exclusive features.
               <br><br>
-              <strong>Didn't create this account?</strong> If you didn't sign up for Financial Forensics AI, please disregard this email. Your email address will not be activated without your verification.
+              <strong>Didn't create this account?</strong> If you didn't sign up for ${SITE_NAME}, please disregard this email. Your email address will not be activated without your verification.
               <br><br>
               This verification link expires in <strong>24 hours</strong> for your security.
             </div>
@@ -235,7 +236,7 @@ export default function EmailPreviewPage() {
 
           <div class="bottom-footer">
             <p style="margin: 0;">
-              © 2026 Financial Forensics AI. All rights reserved.<br>
+              © 2026 ${SITE_NAME}. All rights reserved.<br>
               <a href="#">Privacy Policy</a> • <a href="#">Terms of Service</a> • <a href="#">Contact Support</a>
             </p>
           </div>
@@ -257,11 +258,11 @@ export default function EmailPreviewPage() {
     },
     premium: {
       name: 'Premium Upgrade',
-      html: getPremiumUpgradeTemplate('John Doe', 'https://financial-forensics-ai-india.onrender.com/premium'),
+      html: getPremiumUpgradeTemplate('John Doe', `${SITE_URL}/premium`),
     },
     reset: {
       name: 'Password Reset',
-      html: getPasswordResetTemplate('John Doe', 'https://financial-forensics-ai-india.onrender.com/reset-password?token=xyz123'),
+      html: getPasswordResetTemplate('John Doe', `${SITE_URL}/reset-password?token=xyz123`),
     },
   };
 
