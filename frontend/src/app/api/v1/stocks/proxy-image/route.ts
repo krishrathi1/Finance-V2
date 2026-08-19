@@ -26,21 +26,95 @@ const ALLOWED_IMAGE_TYPES = new Set([
   "image/webp",
 ]);
 
-function placeholderSvg() {
+const THEMES = [
+  {
+    category: "MARKET RALLY",
+    gradient: ["#052e16", "#047857", "#10b981"],
+    chartPath: "M 60 320 Q 200 280 350 200 T 740 80",
+    glowColor: "#34d399",
+    tag: "BULLISH MOMENTUM"
+  },
+  {
+    category: "FED & INTEREST RATES",
+    gradient: ["#0f172a", "#1e3a8a", "#3b82f6"],
+    chartPath: "M 60 120 Q 250 180 450 260 T 740 280",
+    glowColor: "#60a5fa",
+    tag: "CENTRAL BANK"
+  },
+  {
+    category: "TECH & IT SECTOR",
+    gradient: ["#2e1065", "#6b21a8", "#a855f7"],
+    chartPath: "M 60 280 Q 220 160 420 180 T 740 60",
+    glowColor: "#c084fc",
+    tag: "SECTOR INTELLIGENCE"
+  },
+  {
+    category: "SENSEX & NIFTY 50",
+    gradient: ["#1e1b4b", "#4338ca", "#6366f1"],
+    chartPath: "M 60 240 Q 240 280 440 180 T 740 100",
+    glowColor: "#818cf8",
+    tag: "EQUITY INDEX"
+  },
+  {
+    category: "MARKET VOLATILITY",
+    gradient: ["#450a0a", "#991b1b", "#ef4444"],
+    chartPath: "M 60 100 Q 220 140 420 280 T 740 320",
+    glowColor: "#f87171",
+    tag: "BEARISH WAVE"
+  },
+  {
+    category: "GLOBAL ECONOMY",
+    gradient: ["#14532d", "#15803d", "#22c55e"],
+    chartPath: "M 60 260 Q 220 200 450 160 T 740 90",
+    glowColor: "#4ade80",
+    tag: "MACRO RESEARCH"
+  }
+];
+
+function selectTheme(title: string, index: number) {
+  const lower = title.toLowerCase();
+  if (/fed|rate|rbi|inflation|bank|hike|interest/i.test(lower)) return THEMES[1];
+  if (/surge|jump|rally|rise|gain|soar|high|record|bull/i.test(lower)) return THEMES[0];
+  if (/fall|drop|slump|plunge|loss|decline|bear|red/i.test(lower)) return THEMES[4];
+  if (/tech|it|software|wipro|tcs|hcl|ai|digital/i.test(lower)) return THEMES[2];
+  if (/nifty|sensex|bse|nse|index/i.test(lower)) return THEMES[3];
+  
+  let hash = index;
+  for (let i = 0; i < title.length; i++) {
+    hash = (hash << 5) - hash + title.charCodeAt(i);
+  }
+  return THEMES[Math.abs(hash) % THEMES.length];
+}
+
+function placeholderSvg(title = "", idx = 0) {
+  const theme = selectTheme(title, idx);
+  const cleanTitle = title.length > 50 ? title.slice(0, 47) + "..." : title || "Market Intelligence";
+  const escapedTitle = cleanTitle.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
   return new NextResponse(
     `<svg xmlns="http://www.w3.org/2000/svg" width="800" height="450" viewBox="0 0 800 450" role="img" aria-label="Market news">
       <defs>
-        <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stop-color="#111827"/>
-          <stop offset="0.52" stop-color="#1f2937"/>
-          <stop offset="1" stop-color="#f97316"/>
+        <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="${theme.gradient[0]}"/>
+          <stop offset="50%" stop-color="${theme.gradient[1]}"/>
+          <stop offset="100%" stop-color="${theme.gradient[2]}"/>
         </linearGradient>
+        <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+          <path d="M 40 0 L 0 0 0 40" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="1"/>
+        </pattern>
       </defs>
       <rect width="800" height="450" fill="url(#bg)"/>
-      <path d="M90 320 230 205 350 260 505 140 710 245" fill="none" stroke="#ffffff" stroke-opacity=".82" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"/>
-      <circle cx="505" cy="140" r="18" fill="#fbbf24"/>
-      <text x="64" y="90" fill="#fff" font-family="Arial, sans-serif" font-size="38" font-weight="700">Market Insight</text>
-      <text x="64" y="132" fill="#fff" fill-opacity=".74" font-family="Arial, sans-serif" font-size="22">Live finance news</text>
+      <rect width="800" height="450" fill="url(#grid)"/>
+      
+      <path d="${theme.chartPath}" fill="none" stroke="${theme.glowColor}" stroke-opacity="0.3" stroke-width="28" stroke-linecap="round"/>
+      <path d="${theme.chartPath}" fill="none" stroke="#ffffff" stroke-opacity="0.85" stroke-width="12" stroke-linecap="round"/>
+      
+      <rect x="50" y="50" width="220" height="34" rx="17" fill="rgba(0,0,0,0.4)" stroke="rgba(255,255,255,0.2)" stroke-width="1"/>
+      <circle cx="70" cy="67" r="5" fill="${theme.glowColor}"/>
+      <text x="85" y="72" fill="#ffffff" font-family="system-ui, -apple-system, sans-serif" font-size="12" font-weight="700" letter-spacing="1.5">${theme.tag}</text>
+
+      <text x="50" y="330" fill="${theme.glowColor}" font-family="system-ui, -apple-system, sans-serif" font-size="16" font-weight="800" letter-spacing="2">${theme.category}</text>
+      <text x="50" y="375" fill="#ffffff" font-family="system-ui, -apple-system, sans-serif" font-size="24" font-weight="700">${escapedTitle}</text>
     </svg>`,
     {
       status: 200,
@@ -151,16 +225,16 @@ async function readLimitedBody(response: UndiciResponse): Promise<Uint8Array | n
 
 export async function GET(request: NextRequest) {
   const rawUrl = request.nextUrl.searchParams.get("url");
-  if (!rawUrl) return placeholderSvg();
+  const title = request.nextUrl.searchParams.get("title") || "";
+  const idx = Number(request.nextUrl.searchParams.get("idx") || 0);
+
+  if (!rawUrl) return placeholderSvg(title, idx);
 
   try {
     let targetUrl = new URL(rawUrl);
     for (let redirectCount = 0; redirectCount <= 3; redirectCount += 1) {
-      if (!isPlausiblyPublicUrl(targetUrl)) return placeholderSvg();
+      if (!isPlausiblyPublicUrl(targetUrl)) return placeholderSvg(title, idx);
 
-      // Use undici's fetch with a pinned-lookup dispatcher (not the global
-      // fetch) so the address validated by pinnedPublicLookup is the exact
-      // address connected to — see pinnedPublicLookup for why.
       const response = await undiciFetch(targetUrl.toString(), {
         dispatcher: pinnedDispatcher,
         headers: {
@@ -175,7 +249,7 @@ export async function GET(request: NextRequest) {
 
       if (response.status >= 300 && response.status < 400) {
         const location = response.headers.get("location");
-        if (!location || redirectCount === 3) return placeholderSvg();
+        if (!location || redirectCount === 3) return placeholderSvg(title, idx);
         targetUrl = new URL(location, targetUrl);
         continue;
       }
@@ -184,9 +258,9 @@ export async function GET(request: NextRequest) {
         .split(";", 1)[0]
         .trim()
         .toLowerCase();
-      if (!response.ok || !ALLOWED_IMAGE_TYPES.has(contentType)) return placeholderSvg();
+      if (!response.ok || !ALLOWED_IMAGE_TYPES.has(contentType)) return placeholderSvg(title, idx);
       const body = await readLimitedBody(response);
-      if (!body) return placeholderSvg();
+      if (!body) return placeholderSvg(title, idx);
 
       const responseBody = body.buffer.slice(
         body.byteOffset,
@@ -196,9 +270,9 @@ export async function GET(request: NextRequest) {
         headers: { ...IMAGE_HEADERS, "Content-Type": contentType },
       });
     }
-    return placeholderSvg();
+    return placeholderSvg(title, idx);
   } catch (error) {
     console.warn("Proxy image failed:", error);
-    return placeholderSvg();
+    return placeholderSvg(title, idx);
   }
 }

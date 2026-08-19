@@ -116,35 +116,27 @@ export function MarketNews() {
             rel="noreferrer"
             className="news-card group flex min-h-[260px] flex-col overflow-hidden rounded-xl border border-border/50 bg-panel hover:border-accent hover:bg-panel/80 active:scale-[0.98] sm:rounded-2xl"
           >
-            {article.imageUrl ? (
-              <div className="relative h-32 w-full shrink-0 overflow-hidden bg-background/50 sm:h-40">
-                <div className="absolute inset-0 z-[1] bg-gradient-to-t from-black/20 via-transparent to-transparent opacity-70" />
-                {hasUsableImage(article.imageUrl) ? (
+            {(() => {
+              const fallbackUrl = `/api/v1/stocks/proxy-image?placeholder=market&title=${encodeURIComponent(article.title)}&idx=${idx}`;
+              const imageSrc = hasUsableImage(article.imageUrl)
+                ? `/api/v1/stocks/proxy-image?url=${encodeURIComponent(article.imageUrl!)}&title=${encodeURIComponent(article.title)}&idx=${idx}`
+                : fallbackUrl;
+
+              return (
+                <div className="relative h-36 w-full shrink-0 overflow-hidden bg-background/50 sm:h-44">
+                  <div className="absolute inset-0 z-[1] bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-80" />
                   <img
-                    src={`/api/v1/stocks/proxy-image?url=${encodeURIComponent(article.imageUrl!)}`}
+                    src={imageSrc}
                     alt={article.title}
-                    className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
+                    className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
                     loading="lazy"
                     onError={(e) => {
-                      (e.target as HTMLImageElement).src = MARKET_PLACEHOLDER;
+                      (e.target as HTMLImageElement).src = fallbackUrl;
                     }}
                   />
-                ) : (
-                  <div className="flex h-full w-full items-center justify-center bg-muted/20">
-                    <img 
-                      src={MARKET_PLACEHOLDER} 
-                      className="h-full w-full object-cover opacity-60" 
-                      alt="Market"
-                    />
-                    <div className="absolute inset-0 flex items-center justify-center">
-                       <span className="text-xs font-medium text-muted-foreground uppercase tracking-widest opacity-80">Market Insight</span>
-                    </div>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="news-image-fallback flex h-32 w-full shrink-0 items-center justify-center text-xs text-muted sm:h-40">No Image</div>
-            )}
+                </div>
+              );
+            })()}
             <div className="flex flex-1 flex-col p-[var(--panel-padding)]">
               <div className="mb-2 flex items-center justify-between text-xs text-muted">
                 <span className="font-semibold text-accent/80">{article.source}</span>
