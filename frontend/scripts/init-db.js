@@ -34,12 +34,14 @@ async function initializeDatabase() {
   // the running app talks to the configured port — the app works and only the
   // schema init fails, which is a confusing way to find out.
   const port = Number(process.env.MYSQL_PORT || 3306);
+  const sslConfig = process.env.MYSQL_SSL === 'true' ? { rejectUnauthorized: false } : undefined;
 
   const bootstrapConnection = await mysql.createConnection({
     host: process.env.MYSQL_HOST || 'localhost',
     port,
     user: process.env.MYSQL_USER || 'root',
     password: process.env.MYSQL_PASSWORD || '',
+    ssl: sslConfig,
   });
   await bootstrapConnection.execute(`CREATE DATABASE IF NOT EXISTS \`${dbName}\``);
   await bootstrapConnection.end();
@@ -50,6 +52,7 @@ async function initializeDatabase() {
     user: process.env.MYSQL_USER || 'root',
     password: process.env.MYSQL_PASSWORD || '',
     database: dbName,
+    ssl: sslConfig,
   });
 
   try {

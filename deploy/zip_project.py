@@ -9,14 +9,14 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUTPUT_ZIP = os.path.join(REPO_ROOT, 'Finance_Deploy.zip')
 
 def zipdir(path, ziph):
-    skip_dirs = ['node_modules', '.next', '.venv', '.git', '__pycache__', '.open-next', '.wrangler', '.code-review-graph']
+    skip_dirs = ['node_modules', '.next', '.venv', '.git', '__pycache__', '.open-next', '.wrangler', '.code-review-graph', '.obsidian', '.claude']
     for root, dirs, files in os.walk(path):
         # modify dirs in place to skip certain directories
         dirs[:] = [d for d in dirs if d not in skip_dirs]
         for file in files:
             file_path = os.path.join(root, file)
-            # Skip the zip file itself so it doesn't try to zip itself recursively
-            if os.path.abspath(file_path) == OUTPUT_ZIP:
+            # Skip the zip file itself and other heavy archives to keep it light
+            if os.path.abspath(file_path) == OUTPUT_ZIP or file.endswith(('.tar', '.zip', '.tgz', '.rar')):
                 continue
             arcname = os.path.relpath(file_path, start=path)
             ziph.write(file_path, arcname)

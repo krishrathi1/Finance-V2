@@ -19,6 +19,7 @@ declare global {
 }
 
 function createPool(): Pool {
+  const sslConfig = process.env.MYSQL_SSL === "true" ? { rejectUnauthorized: false } : undefined;
   return mysql.createPool({
     host: process.env.MYSQL_HOST || "localhost",
     port: Number(process.env.MYSQL_PORT || 3306),
@@ -31,6 +32,7 @@ function createPool(): Pool {
     enableKeepAlive: true,
     // Allow JS Date params and return DATETIME as strings (stable JSON).
     dateStrings: true,
+    ssl: sslConfig,
   });
 }
 
