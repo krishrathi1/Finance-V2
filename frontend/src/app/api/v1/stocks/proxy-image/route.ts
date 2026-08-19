@@ -86,35 +86,54 @@ function selectTheme(title: string, index: number) {
   return THEMES[Math.abs(hash) % THEMES.length];
 }
 
+function decodeEntities(s: string): string {
+  return s
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;|&#34;/gi, '"')
+    .replace(/&apos;|&#39;|&rsquo;|&lsquo;/gi, "'");
+}
+
+function cleanXmlText(str: string): string {
+  return decodeEntities(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
 function placeholderSvg(title = "", idx = 0) {
   const theme = selectTheme(title, idx);
-  const cleanTitle = title.length > 50 ? title.slice(0, 47) + "..." : title || "Market Intelligence";
-  const escapedTitle = cleanTitle.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const plainTitle = decodeEntities(title.trim());
+  const displayCategory = theme.category;
+  const displayTag = theme.tag;
 
   return new NextResponse(
     `<svg xmlns="http://www.w3.org/2000/svg" width="800" height="450" viewBox="0 0 800 450" role="img" aria-label="Market news">
       <defs>
-        <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+        <linearGradient id="bg_${idx}" x1="0%" y1="0%" x2="100%" y2="100%">
           <stop offset="0%" stop-color="${theme.gradient[0]}"/>
           <stop offset="50%" stop-color="${theme.gradient[1]}"/>
           <stop offset="100%" stop-color="${theme.gradient[2]}"/>
         </linearGradient>
-        <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+        <pattern id="grid_${idx}" width="40" height="40" patternUnits="userSpaceOnUse">
           <path d="M 40 0 L 0 0 0 40" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="1"/>
         </pattern>
       </defs>
-      <rect width="800" height="450" fill="url(#bg)"/>
-      <rect width="800" height="450" fill="url(#grid)"/>
+      <rect width="800" height="450" fill="url(#bg_${idx})"/>
+      <rect width="800" height="450" fill="url(#grid_${idx})"/>
       
       <path d="${theme.chartPath}" fill="none" stroke="${theme.glowColor}" stroke-opacity="0.3" stroke-width="28" stroke-linecap="round"/>
       <path d="${theme.chartPath}" fill="none" stroke="#ffffff" stroke-opacity="0.85" stroke-width="12" stroke-linecap="round"/>
       
       <rect x="50" y="50" width="220" height="34" rx="17" fill="rgba(0,0,0,0.4)" stroke="rgba(255,255,255,0.2)" stroke-width="1"/>
       <circle cx="70" cy="67" r="5" fill="${theme.glowColor}"/>
-      <text x="85" y="72" fill="#ffffff" font-family="system-ui, -apple-system, sans-serif" font-size="12" font-weight="700" letter-spacing="1.5">${theme.tag}</text>
+      <text x="85" y="72" fill="#ffffff" font-family="system-ui, -apple-system, sans-serif" font-size="12" font-weight="700" letter-spacing="1.5">${cleanXmlText(displayTag)}</text>
 
-      <text x="50" y="330" fill="${theme.glowColor}" font-family="system-ui, -apple-system, sans-serif" font-size="16" font-weight="800" letter-spacing="2">${theme.category}</text>
-      <text x="50" y="375" fill="#ffffff" font-family="system-ui, -apple-system, sans-serif" font-size="24" font-weight="700">${escapedTitle}</text>
+      <text x="50" y="340" fill="${theme.glowColor}" font-family="system-ui, -apple-system, sans-serif" font-size="20" font-weight="800" letter-spacing="2">${cleanXmlText(displayCategory)}</text>
+      <text x="50" y="380" fill="#ffffff" fill-opacity="0.9" font-family="system-ui, -apple-system, sans-serif" font-size="18" font-weight="600">MYSTOCKVISION RESEARCH</text>
     </svg>`,
     {
       status: 200,
