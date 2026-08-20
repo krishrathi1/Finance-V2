@@ -144,18 +144,19 @@ export function InteractiveChartsSuite({ data }: { data: DashboardData }) {
   }, [data.price?.history]);
 
   const tabs: Array<{ id: TabKey; label: string; icon: React.ReactNode }> = [
-    { id: "price-dma", label: "Price & Moving Averages", icon: <LineChartIcon className="h-3.5 w-3.5" /> },
-    { id: "financials", label: "Financial Growth (Revenue vs Profit)", icon: <BarChart3 className="h-3.5 w-3.5" /> },
-    { id: "shareholding", label: "Shareholding Pattern Evolution", icon: <PieChart className="h-3.5 w-3.5" /> },
-    { id: "drawdown", label: "Drawdown Risk Curve", icon: <ShieldAlert className="h-3.5 w-3.5" /> },
-    { id: "sip", label: "SIP Wealth Growth", icon: <TrendingUp className="h-3.5 w-3.5" /> },
+    { id: "price-dma", label: "Price & DMAs", icon: <LineChartIcon className="h-3.5 w-3.5" /> },
+    { id: "financials", label: "Financial Growth", icon: <BarChart3 className="h-3.5 w-3.5" /> },
+    { id: "shareholding", label: "Shareholding", icon: <PieChart className="h-3.5 w-3.5" /> },
+    { id: "drawdown", label: "Drawdown Risk", icon: <ShieldAlert className="h-3.5 w-3.5" /> },
+    { id: "sip", label: "SIP Growth", icon: <TrendingUp className="h-3.5 w-3.5" /> },
   ];
 
   return (
     <Card className="p-4 sm:p-5">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-border/40 pb-4">
+      <div className="space-y-4 border-b border-border/40 pb-4">
+        {/* Header Title */}
         <div className="flex items-center gap-2.5">
-          <div className="p-2 rounded-xl bg-primary/15 text-primary">
+          <div className="p-2 rounded-xl bg-primary/15 text-primary shrink-0">
             <Activity className="h-5 w-5" />
           </div>
           <div>
@@ -164,20 +165,20 @@ export function InteractiveChartsSuite({ data }: { data: DashboardData }) {
           </div>
         </div>
 
-        {/* Tab Buttons */}
-        <div className="flex items-center gap-1 overflow-x-auto no-scrollbar rounded-xl border border-border/60 bg-bg/50 p-1">
+        {/* Unified Full-Width Segmented Tab Bar */}
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 rounded-2xl border border-border/70 bg-bg/60 p-1.5 backdrop-blur-sm">
           {tabs.map((t) => (
             <button
               key={t.id}
               onClick={() => setActiveTab(t.id)}
-              className={`flex items-center gap-1.5 whitespace-nowrap px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+              className={`flex items-center justify-center gap-2 px-3 py-2 text-xs font-semibold rounded-xl transition-all ${
                 activeTab === t.id
-                  ? "bg-primary text-primary-foreground shadow-md"
-                  : "text-muted hover:text-fg hover:bg-secondary/60"
+                  ? "bg-primary text-primary-foreground shadow-md ring-1 ring-white/10"
+                  : "text-muted hover:text-fg hover:bg-panel/80"
               }`}
             >
               {t.icon}
-              <span>{t.label}</span>
+              <span className="truncate">{t.label}</span>
             </button>
           ))}
         </div>
