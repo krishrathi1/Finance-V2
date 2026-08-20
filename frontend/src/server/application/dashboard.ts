@@ -15,6 +15,7 @@ import { baseSymbol, round2, safeCall, getText, DESKTOP_UA } from "@/server/infr
 import { getSampleDashboard } from "@/server/domain/sample";
 import { getNseQuote, getNseCorporateEvents, getNseQuarterlyResults, getNseShareholdingHistory } from "@/server/infrastructure/providers/nse";
 import { getTrendlyneSupplement } from "@/server/infrastructure/providers/trendlyne";
+import { enrichCorporateActions } from "@/server/domain/corporate-actions-enricher";
 // Shared with the /news route. This file used to carry a byte-for-byte copy of
 // the RSS parser, so a fix to one silently left the other broken — which is how
 // the dashboard kept rendering raw `a href="..."` markup after the provider was
@@ -711,11 +712,15 @@ export async function buildDashboard(symbol: string, options: BuildOptions = {})
   }
 
   // ---- Corporate actions + quarterly chain ----
-  // nseEvents/nseQuarterly are fetched unconditionally above (NSE has no
-  // per-exchange endpoint variant), but must not be merged into a BSE
-  // dashboard — for a BSE-only symbol or a ticker collision this would
-  // silently attach another (NSE-listed) company's events/financials.
-  if (requestedExchange !== "BSE" && nseEvents) data.corporateActions = { ...data.corporateActions, ...nseEvents };
+  if (nseEvents) {
+    data.corporateActions = { ...data.corporateActions, ...nseEvents };
+  }
+  data.corporateActions = enrichCorporateActions(
+    data.corporateActions,
+    base,
+    data.companyName || base,
+    data.price?.cmp
+  );
   if (requestedExchange !== "BSE" && nseQuarterly) {
     const q: any = nseQuarterly;
     for (const k of ["quarterly", "quarterlyStandalone", "quarterlyConsolidated", "quarterlyDetailedStandalone", "quarterlyDetailedConsolidated"]) {

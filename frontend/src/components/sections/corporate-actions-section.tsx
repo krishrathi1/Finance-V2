@@ -52,24 +52,35 @@ function ActionTable({ rows }: { rows: ActionRow[] }) {
         <thead className="sticky top-0 z-10 bg-bg">
           <tr>
             <th className="border-b border-border p-2 text-left">Date</th>
-            <th className="border-b border-border p-2 text-left">Client</th>
+            <th className="border-b border-border p-2 text-left">Client / Person</th>
             <th className="border-b border-border p-2 text-left">Order Type</th>
+            <th className="border-b border-border p-2 text-left">Transaction</th>
             <th className="border-b border-border p-2 text-left">Quantity</th>
             <th className="border-b border-border p-2 text-left">Average Price</th>
             <th className="border-b border-border p-2 text-left">Exchange</th>
           </tr>
         </thead>
         <tbody>
-          {rows.map((row, idx) => (
-            <tr key={idx} className="border-b border-border/50 last:border-none">
-              <td className="p-2">{row.date}</td>
-              <td className="p-2">{row.client}</td>
-              <td className="p-2">{row.orderType}</td>
-              <td className="p-2">{row.quantity}</td>
-              <td className="p-2">{row.price}</td>
-              <td className="p-2">{row.exchange}</td>
-            </tr>
-          ))}
+          {rows.map((row, idx) => {
+            const isBuy = (row.transactionType || row.orderType || "").toUpperCase().includes("BUY");
+            return (
+              <tr key={idx} className="border-b border-border/50 last:border-none hover:bg-panel/40">
+                <td className="p-2 font-medium">{row.date}</td>
+                <td className="p-2">{row.client}</td>
+                <td className="p-2 text-muted-fg">{row.orderType}</td>
+                <td className="p-2">
+                  <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-bold ${
+                    isBuy ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30" : "bg-rose-500/15 text-rose-400 border border-rose-500/30"
+                  }`}>
+                    {row.transactionType || (isBuy ? "BUY" : "SELL")}
+                  </span>
+                </td>
+                <td className="p-2 font-mono">{row.quantity}</td>
+                <td className="p-2 font-mono">{row.price}</td>
+                <td className="p-2 text-xs font-semibold text-muted">{row.exchange}</td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </TableShell>
@@ -118,8 +129,8 @@ function DealsTable({ rows }: { rows: ActionRow[] }) {
         <thead className="sticky top-0 z-10 bg-bg">
           <tr>
             <th className="border-b border-border p-2 text-left">Date</th>
-            <th className="border-b border-border p-2 text-left">Client</th>
-            <th className="border-b border-border p-2 text-left">Deal Type</th>
+            <th className="border-b border-border p-2 text-left">Institutional Client</th>
+            <th className="border-b border-border p-2 text-left">Deal Category</th>
             <th className="border-b border-border p-2 text-left">Order Type</th>
             <th className="border-b border-border p-2 text-left">Quantity</th>
             <th className="border-b border-border p-2 text-left">Average Price</th>
@@ -127,17 +138,30 @@ function DealsTable({ rows }: { rows: ActionRow[] }) {
           </tr>
         </thead>
         <tbody>
-          {rows.map((row, idx) => (
-            <tr key={idx} className="border-b border-border/50 last:border-none">
-              <td className="p-2">{row.date}</td>
-              <td className="p-2">{row.client}</td>
-              <td className="p-2">{row.dealType || "-"}</td>
-              <td className="p-2">{row.orderType}</td>
-              <td className="p-2">{row.quantity}</td>
-              <td className="p-2">{row.price}</td>
-              <td className="p-2">{row.exchange}</td>
-            </tr>
-          ))}
+          {rows.map((row, idx) => {
+            const isBuy = (row.orderType || "").toUpperCase().includes("BUY");
+            return (
+              <tr key={idx} className="border-b border-border/50 last:border-none hover:bg-panel/40">
+                <td className="p-2 font-medium">{row.date}</td>
+                <td className="p-2 font-semibold text-fg">{row.client}</td>
+                <td className="p-2">
+                  <span className="inline-flex items-center rounded-md bg-purple-500/15 text-purple-300 border border-purple-500/30 px-2 py-0.5 text-xs font-semibold">
+                    {row.dealType || "Bulk / Block"}
+                  </span>
+                </td>
+                <td className="p-2">
+                  <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-bold ${
+                    isBuy ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30" : "bg-rose-500/15 text-rose-400 border border-rose-500/30"
+                  }`}>
+                    {row.orderType || (isBuy ? "BUY" : "SELL")}
+                  </span>
+                </td>
+                <td className="p-2 font-mono">{row.quantity}</td>
+                <td className="p-2 font-mono">{row.price}</td>
+                <td className="p-2 text-xs font-semibold text-muted">{row.exchange}</td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </TableShell>
