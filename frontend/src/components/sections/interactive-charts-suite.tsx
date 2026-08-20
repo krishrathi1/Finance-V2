@@ -151,9 +151,17 @@ export function InteractiveChartsSuite({ data }: { data: DashboardData }) {
     { id: "sip", label: "SIP Growth", icon: <TrendingUp className="h-3.5 w-3.5" /> },
   ];
 
+  const tabColorMap: Record<TabKey, string> = {
+    "price-dma": "bg-gradient-to-r from-amber-500 via-amber-600 to-orange-500 text-white shadow-lg shadow-amber-500/30 ring-1 ring-amber-400/40",
+    "financials": "bg-gradient-to-r from-blue-600 via-blue-500 to-cyan-500 text-white shadow-lg shadow-blue-500/30 ring-1 ring-blue-400/40",
+    "shareholding": "bg-gradient-to-r from-purple-600 via-purple-500 to-violet-500 text-white shadow-lg shadow-purple-500/30 ring-1 ring-purple-400/40",
+    "drawdown": "bg-gradient-to-r from-rose-600 via-red-500 to-pink-600 text-white shadow-lg shadow-rose-500/30 ring-1 ring-rose-400/40",
+    "sip": "bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-500 text-white shadow-lg shadow-emerald-500/30 ring-1 ring-emerald-400/40",
+  };
+
   return (
-    <Card className="p-4 sm:p-5">
-      <div className="space-y-4 border-b border-border/40 pb-4">
+    <Card className="p-3 sm:p-4">
+      <div className="space-y-3.5 border-b border-border/40 pb-3">
         {/* Header Title */}
         <div className="flex items-center gap-2.5">
           <div className="p-2 rounded-xl bg-primary/15 text-primary shrink-0">
@@ -165,15 +173,15 @@ export function InteractiveChartsSuite({ data }: { data: DashboardData }) {
           </div>
         </div>
 
-        {/* Unified Full-Width Segmented Tab Bar */}
+        {/* Unified Full-Width Segmented Tab Bar with Custom Active Colors */}
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 rounded-2xl border border-border/70 bg-bg/60 p-1.5 backdrop-blur-sm">
           {tabs.map((t) => (
             <button
               key={t.id}
               onClick={() => setActiveTab(t.id)}
-              className={`flex items-center justify-center gap-2 px-3 py-2 text-xs font-semibold rounded-xl transition-all ${
+              className={`flex items-center justify-center gap-2 px-3 py-2 text-xs font-bold rounded-xl transition-all duration-200 ${
                 activeTab === t.id
-                  ? "bg-primary text-primary-foreground shadow-md ring-1 ring-white/10"
+                  ? tabColorMap[t.id]
                   : "text-muted hover:text-fg hover:bg-panel/80"
               }`}
             >
@@ -184,12 +192,12 @@ export function InteractiveChartsSuite({ data }: { data: DashboardData }) {
         </div>
       </div>
 
-      {/* Chart Display Container */}
-      <div className="mt-5 h-[340px] w-full">
+      {/* Chart Display Container - Minimal Margin to Stick Flush to Borders */}
+      <div className="mt-3 h-[350px] w-full -mx-1">
         {activeTab === "price-dma" && (
           priceChartData.length ? (
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={priceChartData}>
+              <AreaChart data={priceChartData} margin={{ top: 10, right: 5, left: -20, bottom: 0 }}>
                 <defs>
                   <linearGradient id="priceGrad" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.4} />
@@ -197,8 +205,8 @@ export function InteractiveChartsSuite({ data }: { data: DashboardData }) {
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.07)" />
-                <XAxis dataKey="date" tick={{ fill: "#9ca3af", fontSize: 11 }} />
-                <YAxis domain={["auto", "auto"]} tick={{ fill: "#9ca3af", fontSize: 11 }} />
+                <XAxis dataKey="date" tick={{ fill: "#9ca3af", fontSize: 11 }} tickLine={false} />
+                <YAxis domain={["auto", "auto"]} tick={{ fill: "#9ca3af", fontSize: 11 }} tickLine={false} />
                 <Tooltip
                   contentStyle={{
                     backgroundColor: "#18181b",
@@ -208,9 +216,9 @@ export function InteractiveChartsSuite({ data }: { data: DashboardData }) {
                   }}
                 />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Area type="monotone" dataKey="price" name="Share Price (₹)" stroke="#f59e0b" strokeWidth={2} fill="url(#priceGrad)" />
-                <Line type="monotone" dataKey="sma50" name="50-Day DMA" stroke="#10b981" strokeWidth={1.5} dot={false} />
-                <Line type="monotone" dataKey="sma200" name="200-Day DMA" stroke="#6366f1" strokeWidth={1.5} dot={false} />
+                <Area type="monotone" dataKey="price" name="Share Price (₹)" stroke="#f59e0b" strokeWidth={2.5} fill="url(#priceGrad)" />
+                <Line type="monotone" dataKey="sma50" name="50-Day DMA" stroke="#10b981" strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="sma200" name="200-Day DMA" stroke="#6366f1" strokeWidth={2} dot={false} />
               </AreaChart>
             </ResponsiveContainer>
           ) : (
@@ -221,10 +229,10 @@ export function InteractiveChartsSuite({ data }: { data: DashboardData }) {
         {activeTab === "financials" && (
           financialGrowthData.length ? (
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={financialGrowthData}>
+              <BarChart data={financialGrowthData} margin={{ top: 10, right: 5, left: -20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.07)" />
-                <XAxis dataKey="period" tick={{ fill: "#9ca3af", fontSize: 11 }} />
-                <YAxis tick={{ fill: "#9ca3af", fontSize: 11 }} />
+                <XAxis dataKey="period" tick={{ fill: "#9ca3af", fontSize: 11 }} tickLine={false} />
+                <YAxis tick={{ fill: "#9ca3af", fontSize: 11 }} tickLine={false} />
                 <Tooltip
                   contentStyle={{
                     backgroundColor: "#18181b",
@@ -246,10 +254,10 @@ export function InteractiveChartsSuite({ data }: { data: DashboardData }) {
         {activeTab === "shareholding" && (
           shareholdingData.length ? (
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={shareholdingData}>
+              <AreaChart data={shareholdingData} margin={{ top: 10, right: 5, left: -20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.07)" />
-                <XAxis dataKey="quarter" tick={{ fill: "#9ca3af", fontSize: 11 }} />
-                <YAxis domain={[0, 100]} tick={{ fill: "#9ca3af", fontSize: 11 }} unit="%" />
+                <XAxis dataKey="quarter" tick={{ fill: "#9ca3af", fontSize: 11 }} tickLine={false} />
+                <YAxis domain={[0, 100]} tick={{ fill: "#9ca3af", fontSize: 11 }} tickLine={false} unit="%" />
                 <Tooltip
                   contentStyle={{
                     backgroundColor: "#18181b",
@@ -273,7 +281,7 @@ export function InteractiveChartsSuite({ data }: { data: DashboardData }) {
         {activeTab === "drawdown" && (
           drawdownData.length ? (
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={drawdownData}>
+              <AreaChart data={drawdownData} margin={{ top: 10, right: 5, left: -20, bottom: 0 }}>
                 <defs>
                   <linearGradient id="drawdownGrad" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#ef4444" stopOpacity={0.1} />
@@ -281,8 +289,8 @@ export function InteractiveChartsSuite({ data }: { data: DashboardData }) {
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.07)" />
-                <XAxis dataKey="date" tick={{ fill: "#9ca3af", fontSize: 11 }} />
-                <YAxis domain={["auto", 0]} tick={{ fill: "#9ca3af", fontSize: 11 }} unit="%" />
+                <XAxis dataKey="date" tick={{ fill: "#9ca3af", fontSize: 11 }} tickLine={false} />
+                <YAxis domain={["auto", 0]} tick={{ fill: "#9ca3af", fontSize: 11 }} tickLine={false} unit="%" />
                 <Tooltip
                   contentStyle={{
                     backgroundColor: "#18181b",
@@ -292,7 +300,7 @@ export function InteractiveChartsSuite({ data }: { data: DashboardData }) {
                   }}
                 />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Area type="monotone" dataKey="drawdown" name="Drawdown from Peak (%)" stroke="#ef4444" strokeWidth={2} fill="url(#drawdownGrad)" />
+                <Area type="monotone" dataKey="drawdown" name="Drawdown from Peak (%)" stroke="#ef4444" strokeWidth={2.5} fill="url(#drawdownGrad)" />
               </AreaChart>
             </ResponsiveContainer>
           ) : (
@@ -303,10 +311,10 @@ export function InteractiveChartsSuite({ data }: { data: DashboardData }) {
         {activeTab === "sip" && (
           sipGrowthData.length ? (
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={sipGrowthData}>
+              <LineChart data={sipGrowthData} margin={{ top: 10, right: 5, left: -20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.07)" />
-                <XAxis dataKey="date" tick={{ fill: "#9ca3af", fontSize: 11 }} />
-                <YAxis tick={{ fill: "#9ca3af", fontSize: 11 }} />
+                <XAxis dataKey="date" tick={{ fill: "#9ca3af", fontSize: 11 }} tickLine={false} />
+                <YAxis tick={{ fill: "#9ca3af", fontSize: 11 }} tickLine={false} />
                 <Tooltip
                   contentStyle={{
                     backgroundColor: "#18181b",
