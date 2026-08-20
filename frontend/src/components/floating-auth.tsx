@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { AUTH_STORAGE_KEY, OPEN_AUTH_PANEL_EVENT, type AuthPanelMode, notifyAuthSessionChanged } from "@/lib/auth";
 import { cn } from "@/shared/utils";
 
-export function FloatingAuth() {
+export function FloatingAuth({ inline = false }: { inline?: boolean }) {
   const [open, setOpen] = useState(false);
   const [activePanel, setActivePanel] = useState<"signin" | "signup" | null>(null);
   const [name, setName] = useState("");
@@ -287,21 +287,22 @@ export function FloatingAuth() {
         </div>
       )}
 
-      <div className="fixed bottom-4 right-4 z-50 sm:bottom-6 sm:right-6" ref={wrapperRef}>
+      <div className={cn(inline ? "relative inline-block" : "fixed bottom-4 right-4 z-50 sm:bottom-6 sm:right-6")} ref={wrapperRef}>
         <div className="relative">
           <button
             aria-expanded={open}
             aria-haspopup="menu"
             aria-label="Open account menu"
             className={cn(
-              "group flex h-12 w-12 items-center justify-center rounded-full border border-border/60 bg-panel/95 text-text shadow-xl shadow-black/20 backdrop-blur-md transition",
-              "hover:-translate-y-0.5 hover:border-accent/60 hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40",
+              inline
+                ? "flex h-9 w-9 items-center justify-center rounded-xl border border-border/60 bg-panel/80 text-text transition hover:border-accent/60 hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+                : "group flex h-12 w-12 items-center justify-center rounded-full border border-border/60 bg-panel/95 text-text shadow-xl shadow-black/20 backdrop-blur-md transition hover:-translate-y-0.5 hover:border-accent/60 hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40",
               open && "border-accent/70 text-accent"
             )}
             onClick={() => setOpen((prev) => !prev)}
             type="button"
           >
-            <svg aria-hidden="true" className="h-5 w-5" fill="none" viewBox="0 0 24 24">
+            <svg aria-hidden="true" className={inline ? "h-4 w-4" : "h-5 w-5"} fill="none" viewBox="0 0 24 24">
               <circle cx="12" cy="8" r="3.25" stroke="currentColor" strokeWidth="1.8" />
               <path d="M5.5 19.5c.85-3.2 3.4-4.8 6.5-4.8s5.65 1.6 6.5 4.8" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" />
             </svg>
@@ -309,7 +310,8 @@ export function FloatingAuth() {
 
           <div
             className={cn(
-              "absolute bottom-14 right-0 w-44 origin-bottom-right rounded-2xl border border-border/60 bg-panel/95 p-2 shadow-2xl backdrop-blur-md transition",
+              "absolute z-50 w-44 rounded-2xl border border-border/60 bg-panel/95 p-2 shadow-2xl backdrop-blur-md transition",
+              inline ? "top-full right-0 mt-2 origin-top-right" : "bottom-14 right-0 origin-bottom-right",
               open ? "scale-100 opacity-100" : "pointer-events-none scale-95 opacity-0"
             )}
             role="menu"

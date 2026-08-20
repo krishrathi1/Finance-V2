@@ -224,6 +224,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                   <NavLinks />
                   <div className="hidden h-4 w-px bg-border/60 sm:block" />
                   <ModeToggle />
+                  <FloatingAuth inline />
                 </div>
               </div>
 
@@ -236,7 +237,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <main className="page-enter w-full px-2 py-3 sm:px-4 sm:py-4 md:px-5 md:py-5">
               {children}
             </main>
-            <FloatingAuth />
             <CommandPalette />
 
             <footer className="mt-12 border-t border-border/40 bg-panel/20 backdrop-blur-sm">
