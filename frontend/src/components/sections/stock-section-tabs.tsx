@@ -15,7 +15,9 @@ const allSections = [
 
 export function StockSectionTabs() {
   const { user, loading } = useAuth();
-  const sections = !loading && user ? allSections : allSections.slice(0, 1);
+  const hasLocalSession = typeof window !== "undefined" && Boolean(localStorage.getItem("myfinance_auth_user"));
+  const isAuthed = user || hasLocalSession;
+  const sections = isAuthed ? allSections : allSections.slice(0, 1);
 
   const handleTabClick = (e: React.MouseEvent<HTMLAnchorElement>, id: string) => {
     e.preventDefault();

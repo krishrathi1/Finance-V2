@@ -19,8 +19,9 @@ const unlockItems = [
 
 export function StockAuthWall({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
+  const hasLocalSession = typeof window !== "undefined" && Boolean(localStorage.getItem("myfinance_auth_user"));
+  if (user || hasLocalSession) return <>{children}</>;
   if (loading) return <div className="h-56 animate-pulse rounded-2xl border border-border/55 bg-panel/45" />;
-  if (user) return <>{children}</>;
 
   return (
     <section className="relative overflow-hidden rounded-2xl border border-border/55 bg-panel/45 p-5 backdrop-blur-md sm:p-6">

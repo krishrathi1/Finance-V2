@@ -68,8 +68,36 @@ type AuthContextType = {
 const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<User | null>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem(AUTH_STORAGE_KEY);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed?.name) {
+            return {
+              id: 101,
+              name: parsed.name,
+              email: parsed.email || "investor@myfinance.live",
+              tier: "premium",
+              is_admin: false,
+              is_banned: false,
+              verified_email: true,
+              created_at: new Date().toISOString(),
+            };
+          }
+        }
+      } catch {}
+    }
+    return null;
+  });
+  const [loading, setLoading] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem(AUTH_STORAGE_KEY);
+      if (saved) return false;
+    }
+    return true;
+  });
   const [error, setError] = useState<string | null>(null);
 
   const persistSession = useCallback((nextUser: User | null, notify = true) => {
