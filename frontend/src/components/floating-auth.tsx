@@ -2,12 +2,14 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { AUTH_STORAGE_KEY, OPEN_AUTH_PANEL_EVENT, type AuthPanelMode, notifyAuthSessionChanged } from "@/lib/auth";
 import { cn } from "@/shared/utils";
 
 export function FloatingAuth({ inline = false }: { inline?: boolean }) {
   const [open, setOpen] = useState(false);
   const [activePanel, setActivePanel] = useState<"signin" | "signup" | null>(null);
+  const [mounted, setMounted] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -15,6 +17,10 @@ export function FloatingAuth({ inline = false }: { inline?: boolean }) {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     const onPointerDown = (event: PointerEvent) => {
@@ -158,9 +164,9 @@ export function FloatingAuth({ inline = false }: { inline?: boolean }) {
 
   return (
     <>
-      {activePanel && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center overflow-y-auto bg-black/50 p-4 sm:p-6 backdrop-blur-sm">
-          <div className="w-full max-w-md my-auto max-h-[90vh] overflow-y-auto rounded-2xl border border-border/60 bg-panel/95 p-6 shadow-2xl backdrop-blur-md sm:p-7">
+      {activePanel && mounted && createPortal(
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center overflow-y-auto bg-black/70 p-4 sm:p-6 backdrop-blur-md">
+          <div className="relative w-full max-w-md my-auto max-h-[90vh] overflow-y-auto rounded-3xl border border-border/80 bg-panel/95 p-6 shadow-2xl backdrop-blur-xl sm:p-8">
             <div className="mb-4 flex items-start justify-between gap-4">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wider text-accent/90">
@@ -273,7 +279,8 @@ export function FloatingAuth({ inline = false }: { inline?: boolean }) {
               </button>
             </p>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       <div className={cn(inline ? "relative inline-block" : "fixed bottom-4 right-4 z-50 sm:bottom-6 sm:right-6")} ref={wrapperRef}>
