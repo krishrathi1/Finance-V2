@@ -8,11 +8,31 @@ import { useAuth } from "@/hooks/useAuth";
 function SignInContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { signIn, loading } = useAuth();
+  const { user, signIn, loading } = useAuth();
   const [formData, setFormData] = useState({ email: "", password: "" });
   const [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
+
+  if (user) {
+    return (
+      <section className="mx-auto max-w-md text-center">
+        <div className="rounded-2xl border border-border/60 bg-panel/70 p-6 shadow-xl backdrop-blur-sm sm:p-7 space-y-4">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-500 font-bold text-xl">
+            ✓
+          </div>
+          <h2 className="text-xl font-bold text-text">You are already signed in</h2>
+          <p className="text-xs text-muted">Welcome back, <span className="font-semibold text-accent">{user.name}</span>!</p>
+          <button
+            onClick={() => router.push(searchParams.get("next") || "/dashboard")}
+            className="w-full h-11 rounded-xl bg-accent text-sm font-semibold text-white transition hover:opacity-90"
+          >
+            Go to Dashboard
+          </button>
+        </div>
+      </section>
+    );
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

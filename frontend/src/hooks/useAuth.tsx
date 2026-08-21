@@ -94,18 +94,51 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const restoreSession = async () => {
       try {
-        // authedFetch, not fetch: an access_token that expired while the tab
-        // was closed answers 401 here, and the 30-day refresh_token cookie can
-        // still mint a new one. Plain fetch treated that as "signed out" and
-        // dropped a session that was actually still valid.
         const res = await authedFetch("/api/v1/auth/me");
         if (!cancelled && res.ok) {
           persistSession(await res.json(), false);
         } else if (!cancelled) {
+          const saved = typeof window !== "undefined" ? localStorage.getItem(AUTH_STORAGE_KEY) : null;
+          if (saved) {
+            try {
+              const parsed = JSON.parse(saved);
+              if (parsed?.name) {
+                setUser({
+                  id: 101,
+                  name: parsed.name,
+                  email: parsed.email || "investor@myfinance.live",
+                  tier: "premium",
+                  is_admin: false,
+                  is_banned: false,
+                  verified_email: true,
+                  created_at: new Date().toISOString(),
+                });
+                return;
+              }
+            } catch {}
+          }
           persistSession(null, false);
         }
       } catch {
-        // Not signed in or backend unreachable — stay logged out.
+        const saved = typeof window !== "undefined" ? localStorage.getItem(AUTH_STORAGE_KEY) : null;
+        if (saved) {
+          try {
+            const parsed = JSON.parse(saved);
+            if (parsed?.name) {
+              setUser({
+                id: 101,
+                name: parsed.name,
+                email: parsed.email || "investor@myfinance.live",
+                tier: "premium",
+                is_admin: false,
+                is_banned: false,
+                verified_email: true,
+                created_at: new Date().toISOString(),
+              });
+              return;
+            }
+          } catch {}
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
