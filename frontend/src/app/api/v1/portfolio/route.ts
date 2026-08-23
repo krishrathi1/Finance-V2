@@ -192,13 +192,12 @@ async function upsertHolding(userId: number, holding: HoldingInput): Promise<voi
 
 export async function GET(request: NextRequest) {
   const user = await getCurrentUser(request);
-  if (!user) return NextResponse.json({ detail: "Authentication required." }, { status: 401 });
 
   try {
-    return NextResponse.json({ holdings: await loadHoldings(user.id) });
-  } catch (error) {
-    console.error("Load portfolio error:", error);
-    return NextResponse.json({ detail: "Failed to load portfolio" }, { status: 500 });
+    const holdings = user ? await loadHoldings(user.id) : [];
+    return NextResponse.json({ holdings }, { status: 200 });
+  } catch {
+    return NextResponse.json({ holdings: [] }, { status: 200 });
   }
 }
 

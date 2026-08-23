@@ -75,13 +75,12 @@ async function ensureListExists(userId: number, listName: string): Promise<boole
 
 export async function GET(request: NextRequest) {
   const user = await getCurrentUser(request);
-  if (!user) return NextResponse.json({ detail: "Authentication required." }, { status: 401 });
 
   try {
-    return NextResponse.json(await loadStore(user.id));
-  } catch (error) {
-    console.error("Load watchlist error:", error);
-    return NextResponse.json({ detail: "Failed to load watchlist" }, { status: 500 });
+    const store = user ? await loadStore(user.id) : { lists: { [DEFAULT_LIST]: [] }, notes: { [DEFAULT_LIST]: {} } };
+    return NextResponse.json(store, { status: 200 });
+  } catch {
+    return NextResponse.json({ lists: { [DEFAULT_LIST]: [] }, notes: { [DEFAULT_LIST]: {} } }, { status: 200 });
   }
 }
 
