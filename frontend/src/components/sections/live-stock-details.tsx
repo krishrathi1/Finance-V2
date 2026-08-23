@@ -14,6 +14,7 @@ import { DocumentsSection } from "@/components/sections/documents-section";
 import { EarningsTldr } from "@/components/sections/earnings-tldr";
 import { KeyRatiosSection } from "@/components/sections/key-ratios-section";
 import { MetricsGridLive } from "@/components/sections/metrics-grid-live";
+import { PopularStocksSeoMesh } from "@/components/sections/popular-stocks-seo-mesh";
 import { ResearchReportCard } from "@/components/sections/research-report-card";
 import { SimpleReturnsCalculator } from "@/components/sections/simple-returns-calculator";
 import { ReturnsPanel } from "@/components/sections/returns-panel";
@@ -381,6 +382,7 @@ export function LiveStockDetails({ initialData, symbol, exchange }: { initialDat
         </section>
 
         <NewsSectionLive symbol={symbol} fallbackNews={data.news} />
+        <PopularStocksSeoMesh currentSymbol={symbol} />
       </StockAuthWall>
 
       {showReportModal && (

@@ -117,6 +117,22 @@ export const POPULAR_STOCK_SYMBOLS = [
   "ABFRL",
   "PAGEIND",
   "SUPREMEIND",
+  "SUZLON",
+  "IREDA",
+  "RVNL",
+  "JIOFIN",
+  "MAZDOCK",
+  "COCHINSHIP",
+  "NHPC",
+  "SJVN",
+  "SOLARINDS",
+  "TATAELXSI",
+  "DIXON",
+  "KALYANKJIL",
+  "POLYCAB",
+  "CDSL",
+  "BSE",
+  "MCX",
 ] as const;
 
 type PageMetadataInput = {
@@ -137,6 +153,17 @@ export function buildPageMetadata(input: PageMetadataInput): Metadata {
     title: input.title,
     description: input.description,
     keywords: input.keywords,
+    robots: {
+      index: true,
+      follow: true,
+      googleBot: {
+        index: true,
+        follow: true,
+        "max-video-preview": -1,
+        "max-image-preview": "large",
+        "max-snippet": -1,
+      },
+    },
     alternates: {
       canonical: url,
     },
@@ -179,6 +206,45 @@ export function buildBreadcrumbJsonLd(
       name: item.name,
       item: absoluteUrl(item.path),
     })),
+  };
+}
+
+export function buildWebSiteJsonLd() {
+  return {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    "@id": `${SITE_URL}/#website`,
+    "url": SITE_URL,
+    "name": SITE_NAME,
+    "description": SITE_DESCRIPTION,
+    "publisher": {
+      "@type": "Organization",
+      "name": SITE_NAME,
+      "url": SITE_URL,
+    },
+    "potentialAction": {
+      "@type": "SearchAction",
+      "target": {
+        "@type": "EntryPoint",
+        "urlTemplate": `${SITE_URL}/stocks/{search_term_string}`,
+      },
+      "query-input": "required name=search_term_string",
+    },
+  };
+}
+
+export function buildOrganizationJsonLd() {
+  return {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    "@id": `${SITE_URL}/#organization`,
+    "name": SITE_NAME,
+    "url": SITE_URL,
+    "logo": `${SITE_URL}/icon.png`,
+    "sameAs": [
+      "https://twitter.com/mystockvision",
+      "https://github.com/krishrathi1/Finance-V2",
+    ],
   };
 }
 
