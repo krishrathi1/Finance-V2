@@ -181,3 +181,60 @@ export function buildBreadcrumbJsonLd(
     })),
   };
 }
+
+export function buildStockFaqJsonLd(symbol: string, companyName: string, cmp?: number | string | null, pe?: number | string | null) {
+  const priceText = cmp ? `₹${cmp}` : "live price";
+  const peText = pe ? `P/E ratio of ${pe}` : "valuation multiples";
+
+  return {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": `What is the live share price of ${companyName} (${symbol})?`,
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": `The live share price of ${companyName} (${symbol}) on NSE/BSE is currently ${priceText}. View live 50-day and 200-day moving average charts, AI Smart Score, and real-time updates on MyStockVision.`
+        }
+      },
+      {
+        "@type": "Question",
+        "name": `What is ${companyName} (${symbol}) Smart Score and valuation?`,
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": `${companyName} (${symbol}) is evaluated using MyStockVision's multi-factor AI Smart Score engine with a ${peText}, assessing valuation, quarterly profit growth, solvency, and balance sheet quality.`
+        }
+      },
+      {
+        "@type": "Question",
+        "name": `Where can I see ${companyName} (${symbol}) corporate actions and dividend history?`,
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": `Complete corporate action history for ${companyName} (${symbol})—including interim/final dividends, bonus issues, stock splits, rights issues, and institutional bulk/block deals—is tracked live on MyStockVision.`
+        }
+      }
+    ]
+  };
+}
+
+export function buildFinancialProductJsonLd(symbol: string, companyName: string, cmp?: number | string | null, exchange = "NSE") {
+  return {
+    "@context": "https://schema.org",
+    "@type": "FinancialProduct",
+    "name": `${companyName} (${symbol})`,
+    "description": `Live stock research, AI Smart Score, and financial analysis for ${companyName} (${symbol}) on ${exchange}.`,
+    "category": "Equity / Stock",
+    "provider": {
+      "@type": "Organization",
+      "name": SITE_NAME,
+      "url": SITE_URL
+    },
+    "offers": {
+      "@type": "Offer",
+      "price": cmp || "0.00",
+      "priceCurrency": "INR",
+      "availability": "https://schema.org/InStock"
+    }
+  };
+}

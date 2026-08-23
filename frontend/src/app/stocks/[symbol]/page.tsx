@@ -15,7 +15,7 @@ import { StockSectionTabs } from "@/components/sections/stock-section-tabs";
 // `next build`, on a non-default port, or in a container), surfacing as
 // "TypeError: fetch failed" on a page whose data layer was perfectly healthy.
 import { loadDashboardEnvelope } from "@/server/application/dashboard-envelope";
-import { POPULAR_STOCK_SYMBOLS, SITE_NAME, SITE_URL, buildBreadcrumbJsonLd } from "@/shared/seo";
+import { POPULAR_STOCK_SYMBOLS, SITE_NAME, SITE_URL, buildBreadcrumbJsonLd, buildStockFaqJsonLd } from "@/shared/seo";
 import type { DashboardData } from "@/shared/types";
 
 const PriceSidebar = dynamic(() => import("@/components/sections/price-sidebar").then((m) => m.PriceSidebar), { ssr: false });
@@ -45,8 +45,8 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
     const priceObj = (raw?.price as Record<string, unknown>) ?? {};
     const currentPrice = priceObj?.cmp ? `₹${priceObj.cmp}` : "";
 
-    const title = `${companyName} (${symbol}) Share Price, Analysis and Smart Score`;
-    const metaDesc = `${companyName} (${symbol}) live share price${currentPrice ? ` ${currentPrice}` : ""} on ${exchange}. ${description ? `${description} ` : ""}AI Smart Score, risk rating, financials, brokerage reports, and key ratios.`;
+    const title = `${companyName} (${symbol}) Share Price Today ${currentPrice} | AI Smart Score & Financials`;
+    const metaDesc = `Track live ${companyName} (${symbol}) share price today ${currentPrice} on ${exchange}. View AI Smart Score, P/E ratio, 50/200 DMA charts, quarterly results, dividend history, and target price on ${SITE_NAME}.`;
 
     return {
       title,
@@ -349,6 +349,7 @@ export default async function StockDetailsPage({ params, searchParams }: Props) 
         { name: "Home", path: "/" },
         { name: symbol, path: canonicalPath },
       ]),
+      buildStockFaqJsonLd(symbol, data.companyName, data.price?.cmp, (data as any).technicals?.peRatio || (data as any).price?.pe),
       {
         "@type": "FinancialProduct",
         name: data.companyName,
