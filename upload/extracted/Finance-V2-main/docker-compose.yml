@@ -1,0 +1,39 @@
+services:
+  mysql:
+    image: mysql:8
+    container_name: ffa-mysql
+    environment:
+      MYSQL_DATABASE: financial_forensics
+      MYSQL_ROOT_PASSWORD: ffa_dev
+    ports:
+      - "127.0.0.1:3308:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-pffa_dev"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: ffa-frontend
+    env_file:
+      - ./frontend/.env.local
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_USER: root
+      MYSQL_PASSWORD: ffa_dev
+      MYSQL_DATABASE: financial_forensics
+      NEXT_PUBLIC_API_BASE: http://dev.mystockvision.com
+      INTERNAL_API_BASE: http://dev.mystockvision.com
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-change-this-to-a-secure-random-key}
+    depends_on:
+      mysql:
+        condition: service_healthy
+    ports:
+      - "3003:3000"
+
+volumes:
+  mysql_data:

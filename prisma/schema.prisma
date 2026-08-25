@@ -1,0 +1,42 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model WatchlistItem {
+  id        String   @id @default(cuid())
+  symbol    String   @unique
+  note      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Holding {
+  id          String    @id @default(cuid())
+  symbol      String
+  companyName String
+  quantity    Float
+  buyPrice    Float
+  buyDate     DateTime?
+  targetPrice Float?
+  notes       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model PriceAlert {
+  id             String    @id @default(cuid())
+  symbol         String
+  targetPrice    Float
+  condition      String // "above" | "below"
+  note           String?
+  armed          Boolean   @default(true)
+  triggeredAt    DateTime?
+  triggeredPrice Float?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+}

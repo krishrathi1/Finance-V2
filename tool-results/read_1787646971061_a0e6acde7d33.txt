@@ -1,0 +1,1159 @@
+     1→/**
+     2→ * Smart Score and Risk Score algorithms.
+     3→ *
+     4→ * Direct, behavior-preserving port of `backend/app/services/scoring.py`
+     5→ * (`compute_smart_score` / `compute_risk_score`). Pure computation — no I/O,
+     6→ * no network. These functions NEVER throw: every metric access is guarded and
+     7→ * falls back to sensible defaults, mirroring the dynamically-typed Python
+     8→ * source bit-for-bit.
+     9→ *
+    10→ * Parity notes (see scratch/port-specs/05-...md "Gotchas"):
+    11→ *  - `round2`/`round4` use BANKER'S rounding (round-half-to-even) to match
+    12→ *    Python `round(x, n)`. JS Math.round is round-half-up — do NOT use it.
+    13→ *  - `median` returns the AVERAGE of the two middle elements for even-length
+    14→ *    lists (Python `statistics.median`).
+    15→ *  - `std` is the SAMPLE std (variance divisor n-1, ddof=1); None if < 2 values.
+    16→ *  - Python `or` truthiness: `a or b` falls through when `a` is 0.0/NaN/None.
+    17→ *    Reproduced via `pyOr` where the source uses `or`, and explicit
+    18→ *    `=== null` checks where the source uses `is not None`.
+    19→ */
+    20→
+    21→import type { DashboardData } from "@/shared/types";
+    22→import type { SmartScoreInput, RiskScoreInput } from "@/shared/contracts";
+    23→
+    24→// ---------------------------------------------------------------------------
+    25→// Shared primitives (mirror scoring.py helpers exactly).
+    26→// ---------------------------------------------------------------------------
+    27→
+    28→/** IST = UTC+05:30, in milliseconds (used for insider-trade date math). */
+    29→const IST_OFFSET_MS = (5 * 60 + 30) * 60 * 1000;
+    30→
+    31→type Num = number | null;
+    32→type Row = Record<string, unknown>;
+    33→
+    34→function clamp(value: number, minV: number, maxV: number): number {
+    35→  return Math.max(minV, Math.min(maxV, value));
+    36→}
+    37→
+    38→/**
+    39→ * Python `_num`: coerce to a finite float or return `default`.
+    40→ * - None/undefined -> default
+    41→ * - non-finite (NaN/Inf) -> default
+    42→ * - parse failures (e.g. "") -> default
+    43→ * - booleans -> 1.0 / 0.0 (Python float(True)==1.0)
+    44→ */
+    45→function num(value: unknown, def: Num = null): Num {
+    46→  if (value === null || value === undefined) return def;
+    47→  let numeric: number;
+    48→  if (typeof value === "number") {
+    49→    numeric = value;
+    50→  } else if (typeof value === "boolean") {
+    51→    numeric = value ? 1.0 : 0.0;
+    52→  } else if (typeof value === "string") {
+    53→    const trimmed = value.trim();
+    54→    if (trimmed === "") return def;
+    55→    numeric = Number(trimmed);
+    56→  } else {
+    57→    return def;
+    58→  }
+    59→  if (!Number.isFinite(numeric)) return def;
+    60→  return numeric;
+    61→}
+    62→
+    63→/** Filter to finite floats (Python list-comprehension with isfinite guard). */
+    64→function finiteValues(values: Array<Num | undefined>): number[] {
+    65→  const out: number[] = [];
+    66→  for (const v of values) {
+    67→    if (v === null || v === undefined) continue;
+    68→    const f = Number(v);
+    69→    if (Number.isFinite(f)) out.push(f);
+    70→  }
+    71→  return out;
+    72→}
+    73→
+    74→function arithmeticMean(values: number[]): number {
+    75→  let sum = 0;
+    76→  for (const v of values) sum += v;
+    77→  return sum / values.length;
+    78→}
+    79→
+    80→/** Python `_avg(values, fallback)`. */
+    81→function avg(values: Array<Num | undefined>, fallback: number): number {
+    82→  const valid = finiteValues(values);
+    83→  return valid.length ? arithmeticMean(valid) : fallback;
+    84→}
+    85→
+    86→/**
+    87→ * Python `statistics.median`. Sort ascending; odd count -> middle element;
+    88→ * even count -> AVERAGE of the two middle elements.
+    89→ */
+    90→function statisticsMedian(values: number[]): number {
+    91→  const sorted = [...values].sort((a, b) => a - b);
+    92→  const n = sorted.length;
+    93→  const mid = Math.floor(n / 2);
+    94→  if (n % 2 === 1) return sorted[mid];
+    95→  return (sorted[mid - 1] + sorted[mid]) / 2;
+    96→}
+    97→
+    98→/** Python `_median(values, fallback)`. */
+    99→function median(values: Array<Num | undefined>, fallback: number): number {
+   100→  const valid = finiteValues(values);
+   101→  return valid.length ? statisticsMedian(valid) : fallback;
+   102→}
+   103→
+   104→function normalize(value: Num, low: number, high: number): Num {
+   105→  if (value === null) return null;
+   106→  if (high <= low) return null;
+   107→  return clamp((value - low) / (high - low), 0.0, 1.0);
+   108→}
+   109→
+   110→function inverseNormalize(value: Num, low: number, high: number): Num {
+   111→  const score = normalize(value, low, high);
+   112→  return score === null ? null : 1.0 - score;
+   113→}
+   114→
+   115→function pctChange(current: Num, base: Num): Num {
+   116→  if (current === null || base === null || Math.abs(base) < 1e-9) return null;
+   117→  return ((current - base) / Math.abs(base)) * 100.0;
+   118→}
+   119→
+   120→function dailyReturns(closes: number[]): number[] {
+   121→  if (closes.length < 2) return [];
+   122→  const out: number[] = [];
+   123→  for (let idx = 1; idx < closes.length; idx++) {
+   124→    const prev = closes[idx - 1];
+   125→    const curr = closes[idx];
+   126→    if (prev <= 0) continue;
+   127→    out.push(curr / prev - 1.0);
+   128→  }
+   129→  return out;
+   130→}
+   131→
+   132→/** Sample standard deviation (ddof=1). None if fewer than 2 values. */
+   133→function std(values: number[]): Num {
+   134→  if (values.length < 2) return null;
+   135→  const avgV = arithmeticMean(values);
+   136→  let acc = 0;
+   137→  for (const v of values) acc += (v - avgV) ** 2;
+   138→  const variance = acc / (values.length - 1);
+   139→  return Math.sqrt(variance);
+   140→}
+   141→
+   142→function maxDrawdown(closes: number[]): Num {
+   143→  if (!closes.length) return null;
+   144→  let peak = closes[0];
+   145→  let maxDd = 0.0;
+   146→  for (const price of closes) {
+   147→    if (price > peak) peak = price;
+   148→    if (peak > 0) {
+   149→      const dd = (peak - price) / peak;
+   150→      if (dd > maxDd) maxDd = dd;
+   151→    }
+   152→  }
+   153→  return maxDd;
+   154→}
+   155→
+   156→function sigmoid(value: number): number {
+   157→  if (value < -35) return 0.0;
+   158→  if (value > 35) return 1.0;
+   159→  return 1.0 / (1.0 + Math.exp(-value));
+   160→}
+   161→
+   162→/** Python `_latest_nonempty_rows`: keep only plain-object (dict) elements. */
+   163→function latestNonemptyRows(rows: unknown): Row[] {
+   164→  if (!Array.isArray(rows)) return [];
+   165→  return rows.filter((r): r is Row => isPlainObject(r));
+   166→}
+   167→
+   168→function isPlainObject(v: unknown): v is Row {
+   169→  return typeof v === "object" && v !== null && !Array.isArray(v);
+   170→}
+   171→
+   172→function normKey(k: string): string {
+   173→  return k.toLowerCase().replace(/[^a-z0-9]/g, "");
+   174→}
+   175→
+   176→/**
+   177→ * Python `_statement_value`: substring match on alphanumeric-normalized keys,
+   178→ * returning the first matching cell in insertion (object) order.
+   179→ */
+   180→function statementValue(row: Row, keys: string[]): Num {
+   181→  const normalizedKeys = keys.map(normKey);
+   182→  for (const key of Object.keys(row)) {
+   183→    const keyNorm = normKey(String(key));
+   184→    if (normalizedKeys.some((candidate) => keyNorm.includes(candidate))) {
+   185→      const numeric = num(row[key]);
+   186→      if (numeric !== null) return numeric;
+   187→    }
+   188→  }
+   189→  return null;
+   190→}
+   191→
+   192→/**
+   193→ * Python `_parse_trade_date`: returns epoch milliseconds (interpreting the
+   194→ * parsed date as IST midnight) or null. Only the formats the source supports.
+   195→ */
+   196→const MONTHS_SHORT: Record<string, number> = {
+   197→  jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6,
+   198→  jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12,
+   199→};
+   200→const MONTHS_LONG: Record<string, number> = {
+   201→  january: 1, february: 2, march: 3, april: 4, may: 5, june: 6,
+   202→  july: 7, august: 8, september: 9, october: 10, november: 11, december: 12,
+   203→};
+   204→
+   205→function istMidnightMs(year: number, month: number, day: number): number {
+   206→  // Construct UTC then subtract IST offset to anchor at IST midnight.
+   207→  return Date.UTC(year, month - 1, day) - IST_OFFSET_MS;
+   208→}
+   209→
+   210→function parseTradeDate(rawIn: string): number | null {
+   211→  const raw = (rawIn || "").trim();
+   212→  if (!raw) return null;
+   213→  const datePart = raw.split(" ")[0];
+   214→
+   215→  // %Y-%m-%d
+   216→  let m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(datePart);
+   217→  if (m) return istMidnightMs(+m[1], +m[2], +m[3]);
+   218→
+   219→  // %d-%b-%Y  (e.g. 05-Jan-2024)
+   220→  m = /^(\d{1,2})-([A-Za-z]+)-(\d{4})$/.exec(datePart);
+   221→  if (m) {
+   222→    const mon = MONTHS_SHORT[m[2].toLowerCase()];
+   223→    if (mon) return istMidnightMs(+m[3], mon, +m[1]);
+   224→    // %d-%B-%Y (full month name) — same separator
+   225→    const monLong = MONTHS_LONG[m[2].toLowerCase()];
+   226→    if (monLong) return istMidnightMs(+m[3], monLong, +m[1]);
+   227→    return null;
+   228→  }
+   229→
+   230→  // %d-%m-%Y
+   231→  m = /^(\d{1,2})-(\d{1,2})-(\d{4})$/.exec(datePart);
+   232→  if (m) return istMidnightMs(+m[3], +m[2], +m[1]);
+   233→
+   234→  // %d/%m/%Y
+   235→  m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(datePart);
+   236→  if (m) return istMidnightMs(+m[3], +m[2], +m[1]);
+   237→
+   238→  return null;
+   239→}
+   240→
+   241→/**
+   242→ * Banker's rounding (round-half-to-even) to `digits` decimal places, matching
+   243→ * Python's built-in `round(x, n)` bit-for-bit.
+   244→ *
+   245→ * CPython rounds the TRUE value of the double, not a scaled multiple — e.g.
+   246→ * `round(2.675, 2) == 2.67` because 2.675 is stored as 2.67499.... A naive
+   247→ * `value * 10**n` approach gets this wrong (2.675*100 === 267.5 in IEEE-754).
+   248→ * So we derive the rounding decision from the exact decimal expansion of the
+   249→ * double (via `toFixed`, which is correctly rounded to many places, capturing
+   250→ * the true binary value's direction), then apply half-to-even on it.
+   251→ *
+   252→ * NaN/Inf pass through (Python round would raise, but our inputs are finite).
+   253→ */
+   254→function roundHalfEven(value: number, digits: number): number {
+   255→  if (!Number.isFinite(value)) return value;
+   256→  if (value === 0) return 0;
+   257→  const neg = value < 0;
+   258→  const v = Math.abs(value);
+   259→
+   260→  // Decimal expansion of the exact double value, far past the target precision.
+   261→  const expanded = v.toFixed(Math.min(100, digits + 30));
+   262→  const dot = expanded.indexOf(".");
+   263→  const intPart = dot === -1 ? expanded : expanded.slice(0, dot);
+   264→  const fracPart = dot === -1 ? "" : expanded.slice(dot + 1);
+   265→  const keep = fracPart.slice(0, digits);
+   266→  const rest = fracPart.slice(digits);
+   267→
+   268→  let base = Number(digits > 0 ? `${intPart}.${keep}` : intPart);
+   269→  const incr = Math.pow(10, -digits);
+   270→
+   271→  if (rest.length > 0) {
+   272→    const firstRest = rest[0];
+   273→    if (firstRest > "5") {
+   274→      base = Number((base + incr).toFixed(digits));
+   275→    } else if (firstRest === "5") {
+   276→      const after = rest.slice(1).replace(/0+$/, "");
+   277→      if (after.length > 0) {
+   278→        base = Number((base + incr).toFixed(digits));
+   279→      } else {
+   280→        // Exact half -> round to even on the last kept digit.
+   281→        const lastDigit =
+   282→          digits > 0
+   283→            ? Number(keep[keep.length - 1] || "0")
+   284→            : Number(intPart[intPart.length - 1]);
+   285→        if (lastDigit % 2 === 1) base = Number((base + incr).toFixed(digits));
+   286→      }
+   287→    }
+   288→    // firstRest < "5" -> keep `base` as-is.
+   289→  }
+   290→
+   291→  base = Number(base.toFixed(digits));
+   292→  return neg ? -base : base;
+   293→}
+   294→
+   295→const round2 = (v: number): number => roundHalfEven(v, 2);
+   296→const round4 = (v: number): number => roundHalfEven(v, 4);
+   297→
+   298→/**
+   299→ * Python truthiness for the `or` chains used in scoring.py. Returns the first
+   300→ * "truthy" value, else the last. In scoring.py the operands are `float|None`,
+   301→ * where 0.0 and NaN are falsy and None is falsy.
+   302→ */
+   303→function pyOr(...vals: Num[]): Num {
+   304→  for (let i = 0; i < vals.length; i++) {
+   305→    const v = vals[i];
+   306→    if (i === vals.length - 1) return v; // last value is the fallback
+   307→    if (v !== null && v !== 0 && !Number.isNaN(v)) return v;
+   308→  }
+   309→  return null;
+   310→}
+   311→
+   312→// ---------------------------------------------------------------------------
+   313→// Feature extraction blocks.
+   314→// ---------------------------------------------------------------------------
+   315→
+   316→interface GrowthFeatures {
+   317→  revenueGrowth: Num;
+   318→  profitGrowth: Num;
+   319→  epsGrowth: Num;
+   320→  freeCashFlowGrowth: Num;
+   321→}
+   322→
+   323→function extractGrowthFeatures(financials: Row): GrowthFeatures {
+   324→  const quarterly = latestNonemptyRows(financials["quarterly"]);
+   325→  const yearly = latestNonemptyRows(financials["yearly"]);
+   326→  const qdCons = latestNonemptyRows(financials["quarterlyDetailedConsolidated"]);
+   327→  const qdStandalone = latestNonemptyRows(financials["quarterlyDetailedStandalone"]);
+   328→  const qd = qdCons.length ? qdCons : qdStandalone;
+   329→
+   330→  let revenueGrowth: Num = null;
+   331→  let profitGrowth: Num = null;
+   332→  if (quarterly.length >= 5) {
+   333→    revenueGrowth = pctChange(num(quarterly[quarterly.length - 1]["revenue"]), num(quarterly[quarterly.length - 5]["revenue"]));
+   334→    profitGrowth = pctChange(num(quarterly[quarterly.length - 1]["profit"]), num(quarterly[quarterly.length - 5]["profit"]));
+   335→  } else if (yearly.length >= 2) {
+   336→    revenueGrowth = pctChange(num(yearly[yearly.length - 1]["revenue"]), num(yearly[yearly.length - 2]["revenue"]));
+   337→    profitGrowth = pctChange(num(yearly[yearly.length - 1]["profit"]), num(yearly[yearly.length - 2]["profit"]));
+   338→  }
+   339→
+   340→  let epsGrowth: Num = null;
+   341→  if (qd.length >= 5) {
+   342→    const latestEps = pyOr(num(qd[qd.length - 1]["basicEps"]), num(qd[qd.length - 1]["dilutedEps"]));
+   343→    const prevEps = pyOr(num(qd[qd.length - 5]["basicEps"]), num(qd[qd.length - 5]["dilutedEps"]));
+   344→    epsGrowth = pctChange(latestEps, prevEps);
+   345→  }
+   346→
+   347→  let fcfGrowth: Num = null;
+   348→  if (yearly.length >= 2) {
+   349→    const latestFcf = num(yearly[yearly.length - 1]["cashFlow"]);
+   350→    const previousFcf = num(yearly[yearly.length - 2]["cashFlow"]);
+   351→    fcfGrowth = pctChange(latestFcf, previousFcf);
+   352→  }
+   353→
+   354→  return {
+   355→    revenueGrowth,
+   356→    profitGrowth,
+   357→    epsGrowth,
+   358→    freeCashFlowGrowth: fcfGrowth,
+   359→  };
+   360→}
+   361→
+   362→function computeAltmanZ(metrics: Row, financials: Row): Num {
+   363→  const balanceSheetRows = latestNonemptyRows(financials["balanceSheet"]);
+   364→  const incomeRows = latestNonemptyRows(financials["incomeStatement"]);
+   365→  if (!balanceSheetRows.length || !incomeRows.length) return null;
+   366→
+   367→  const bs = balanceSheetRows[0];
+   368→  const inc = incomeRows[0];
+   369→  const totalAssets = statementValue(bs, ["totalAssets", "assets"]);
+   370→  const totalLiabilities = statementValue(bs, ["totalLiabilities", "liabilities"]);
+   371→  const retainedEarnings = statementValue(bs, ["retainedEarnings"]);
+   372→  const currentAssets = statementValue(bs, ["currentAssets"]);
+   373→  const currentLiabilities = statementValue(bs, ["currentLiabilities"]);
+   374→  const directWorkingCapital = statementValue(bs, ["workingCapital"]);
+   375→  const workingCapital: Num =
+   376→    directWorkingCapital !== null
+   377→      ? directWorkingCapital
+   378→      : currentAssets !== null && currentLiabilities !== null
+   379→        ? currentAssets - currentLiabilities
+   380→        : null;
+   381→  const ebit = statementValue(inc, ["ebit", "operatingIncome"]);
+   382→  const sales = statementValue(inc, ["revenue", "sales"]);
+   383→  const marketValueEquity = num(metrics["marketCap"]);
+   384→
+   385→  if (
+   386→    totalAssets === null ||
+   387→    Math.abs(totalAssets) < 1e-9 ||
+   388→    totalLiabilities === null ||
+   389→    Math.abs(totalLiabilities) < 1e-9 ||
+   390→    marketValueEquity === null ||
+   391→    workingCapital === null ||
+   392→    retainedEarnings === null ||
+   393→    ebit === null ||
+   394→    sales === null
+   395→  ) {
+   396→    return null;
+   397→  }
+   398→
+   399→  const zScore =
+   400→    1.2 * (workingCapital / totalAssets) +
+   401→    1.4 * (retainedEarnings / totalAssets) +
+   402→    3.3 * (ebit / totalAssets) +
+   403→    0.6 * (marketValueEquity / totalLiabilities) +
+   404→    1.0 * (sales / totalAssets);
+   405→  return Number.isFinite(zScore) ? zScore : null;
+   406→}
+   407→
+   408→function insiderSignal(corporateActions: Row | null | undefined): number {
+   409→  const actions = corporateActions || {};
+   410→  const rows = isPlainObject(actions) ? (actions as Row)["insiderTrades"] : [];
+   411→  if (!Array.isArray(rows)) return 0.5;
+   412→  const now = Date.now();
+   413→  const cutoff = now - 180 * 24 * 60 * 60 * 1000;
+   414→  let buys = 0;
+   415→  let sells = 0;
+   416→  for (const row of rows) {
+   417→    if (!isPlainObject(row)) continue;
+   418→    const tradeDate = parseTradeDate(String(row["date"] ?? ""));
+   419→    if (tradeDate !== null && tradeDate < cutoff) continue;
+   420→    const transactionType = row["transactionType"] ?? "";
+   421→    const orderType = row["orderType"] ?? "";
+   422→    const signalText = `${transactionType} ${orderType}`.toLowerCase();
+   423→    if (["buy", "acquire", "purchase"].some((token) => signalText.includes(token))) {
+   424→      buys += 1;
+   425→    } else if (["sell", "dispose", "pledge"].some((token) => signalText.includes(token))) {
+   426→      sells += 1;
+   427→    }
+   428→  }
+   429→  if (buys + sells === 0) return 0.5;
+   430→  const netRatio = (buys - sells) / (buys + sells);
+   431→  return clamp((netRatio + 1.0) / 2.0, 0.0, 1.0);
+   432→}
+   433→
+   434→function institutionalSignal(shareholding: Row | null | undefined): number {
+   435→  if (!isPlainObject(shareholding)) return 0.5;
+   436→  const fii = num(shareholding["fii"]);
+   437→  const dii = num(shareholding["dii"]);
+   438→  const promoters = num(shareholding["promoters"]);
+   439→  const institutional: Num = fii !== null && dii !== null ? fii + dii : null;
+   440→  const components: Num[] = [
+   441→    normalize(institutional, 15.0, 75.0),
+   442→    normalize(promoters, 20.0, 75.0),
+   443→  ];
+   444→  return avg(components, 0.5);
+   445→}
+   446→
+   447→interface PriceFeatures {
+   448→  return1M: Num;
+   449→  return3M: Num;
+   450→  return6M: Num;
+   451→  volatility3M: Num;
+   452→  drawdown1Y: Num;
+   453→}
+   454→
+   455→function extractPriceFeatures(priceHistory: unknown): PriceFeatures {
+   456→  const history = Array.isArray(priceHistory) ? priceHistory : [];
+   457→  const closes: number[] = [];
+   458→  for (const item of history) {
+   459→    if (!isPlainObject(item)) continue;
+   460→    const c = num((item as Row)["close"]);
+   461→    if (c !== null) closes.push(c);
+   462→  }
+   463→  if (closes.length < 10) {
+   464→    return { return1M: null, return3M: null, return6M: null, volatility3M: null, drawdown1Y: null };
+   465→  }
+   466→  const returns = dailyReturns(closes);
+   467→  const last = closes[closes.length - 1];
+   468→  const return1M = closes.length > 22 ? pctChange(last, closes[closes.length - 22]) : null;
+   469→  const return3M = closes.length > 64 ? pctChange(last, closes[closes.length - 64]) : null;
+   470→  const return6M = closes.length > 127 ? pctChange(last, closes[closes.length - 127]) : null;
+   471→  const last63Returns = returns.length >= 63 ? returns.slice(returns.length - 63) : returns;
+   472→  let vol3m = std(last63Returns);
+   473→  if (vol3m !== null) vol3m *= Math.sqrt(252);
+   474→  const window = closes.length >= 252 ? closes.slice(closes.length - 252) : closes;
+   475→  const drawdown1Y = maxDrawdown(window);
+   476→  return {
+   477→    return1M,
+   478→    return3M,
+   479→    return6M,
+   480→    volatility3M: vol3m,
+   481→    drawdown1Y,
+   482→  };
+   483→}
+   484→
+   485→const ACTUAL_KEYS = [
+   486→  "eps_actual",
+   487→  "eps",
+   488→  "reportedEPS",
+   489→  "reported_eps",
+   490→  "epsActual",
+   491→  "basicEps",
+   492→  "dilutedEps",
+   493→];
+   494→const ESTIMATE_KEYS = [
+   495→  "eps_estimate",
+   496→  "estimatedEPS",
+   497→  "estimated_eps",
+   498→  "epsEstimate",
+   499→  "consensus_eps",
+   500→];
+   501→
+   502→function computeEarningsSurprise(quarterlyDetailed: unknown): number {
+   503→  if (!Array.isArray(quarterlyDetailed) || quarterlyDetailed.length < 2) return 0.0;
+   504→
+   505→  const surprises: number[] = [];
+   506→  const slice = quarterlyDetailed.slice(Math.max(0, quarterlyDetailed.length - 4));
+   507→  for (const row of slice) {
+   508→    if (!isPlainObject(row)) continue;
+   509→
+   510→    let actual: Num = null;
+   511→    for (const key of ACTUAL_KEYS) {
+   512→      actual = num((row as Row)[key]);
+   513→      if (actual !== null) break;
+   514→    }
+   515→
+   516→    let estimate: Num = null;
+   517→    for (const key of ESTIMATE_KEYS) {
+   518→      estimate = num((row as Row)[key]);
+   519→      if (estimate !== null) break;
+   520→    }
+   521→
+   522→    if (actual === null || estimate === null || Math.abs(estimate) < 0.01) continue;
+   523→
+   524→    const surprise = clamp((actual - estimate) / Math.abs(estimate), -1.0, 1.0);
+   525→    surprises.push(surprise);
+   526→  }
+   527→
+   528→  if (!surprises.length) return 0.0;
+   529→  return clamp(arithmeticMean(surprises) * 0.5, -0.5, 0.5);
+   530→}
+   531→
+   532→function computeVolumePriceDivergence(closes: number[], volumes: number[], windowIn = 20): number {
+   533→  if (!closes.length || !volumes.length) return 0.0;
+   534→
+   535→  let window = windowIn;
+   536→  const n = Math.min(closes.length, volumes.length);
+   537→  if (n < 4) return 0.0;
+   538→  if (n < window) window = n;
+   539→  if (window % 2 === 1) window -= 1;
+   540→  if (window < 4) return 0.0;
+   541→
+   542→  const closesW = closes.slice(closes.length - window);
+   543→  const volumesW = volumes.slice(volumes.length - window);
+   544→  const half = Math.floor(window / 2);
+   545→  if (half <= 0) return 0.0;
+   546→
+   547→  const priceStart = closesW[0];
+   548→  const priceEnd = closesW[closesW.length - 1];
+   549→  if (priceStart <= 0) return 0.0;
+   550→  const priceChange = (priceEnd - priceStart) / priceStart;
+   551→
+   552→  const priorVol = volumesW.slice(0, half);
+   553→  const recentVol = volumesW.slice(half);
+   554→  if (!priorVol.length || !recentVol.length) return 0.0;
+   555→
+   556→  const avgPrior = arithmeticMean(priorVol);
+   557→  const avgRecent = arithmeticMean(recentVol);
+   558→  if (avgPrior <= 0) return 0.0;
+   559→
+   560→  const volChange = (avgRecent - avgPrior) / avgPrior;
+   561→  return clamp(priceChange - volChange, -1.0, 1.0);
+   562→}
+   563→
+   564→function historicalEarningsSurprise(quarterlyDetailed: unknown[], tradingDaysFromEnd: number): number {
+   565→  if (!Array.isArray(quarterlyDetailed) || !quarterlyDetailed.length) return 0.0;
+   566→  const quartersBack = Math.max(0, Math.floor(tradingDaysFromEnd / 63));
+   567→  const cutoff = Math.max(0, quarterlyDetailed.length - quartersBack);
+   568→  const visibleRows = cutoff > 0 ? quarterlyDetailed.slice(0, cutoff) : [];
+   569→  return computeEarningsSurprise(visibleRows);
+   570→}
+   571→
+   572→/** In-house logistic regression — deterministic (zero init, LR 0.15, 140 epochs). */
+   573→function fitLogisticProbability(
+   574→  features: number[][],
+   575→  labels: number[],
+   576→  latestRow: number[],
+   577→): [number, number] {
+   578→  // Guard the invariant the caller relies on (features/labels built together
+   579→  // from the same sample array): an empty or mismatched pair would index
+   580→  // out of bounds below instead of failing loudly.
+   581→  if (features.length === 0 || features.length !== labels.length) {
+   582→    return [0.5, 0.0];
+   583→  }
+   584→  const numFeatures = features[0].length;
+   585→  const mins: number[] = new Array(numFeatures).fill(0);
+   586→  const maxs: number[] = new Array(numFeatures).fill(0);
+   587→  for (let i = 0; i < numFeatures; i++) {
+   588→    let mn = Infinity;
+   589→    let mx = -Infinity;
+   590→    for (const row of features) {
+   591→      const v = row[i];
+   592→      if (v < mn) mn = v;
+   593→      if (v > mx) mx = v;
+   594→    }
+   595→    mins[i] = mn;
+   596→    maxs[i] = mx;
+   597→  }
+   598→
+   599→  const scaleRow = (row: number[]): number[] => {
+   600→    const scaled: number[] = new Array(row.length);
+   601→    for (let idx = 0; idx < row.length; idx++) {
+   602→      const spread = maxs[idx] - mins[idx];
+   603→      if (spread <= 1e-12) scaled[idx] = 0.5;
+   604→      else scaled[idx] = (row[idx] - mins[idx]) / spread;
+   605→    }
+   606→    return scaled;
+   607→  };
+   608→
+   609→  const xRows = features.map((row) => scaleRow(row));
+   610→  const weights = new Array(numFeatures + 1).fill(0.0);
+   611→  const learningRate = 0.15;
+   612→
+   613→  for (let epoch = 0; epoch < 140; epoch++) {
+   614→    const grad = new Array(weights.length).fill(0.0);
+   615→    for (let r = 0; r < xRows.length; r++) {
+   616→      const row = xRows[r];
+   617→      const label = labels[r];
+   618→      let z = weights[0];
+   619→      for (let j = 0; j < row.length; j++) z += weights[j + 1] * row[j];
+   620→      const pred = sigmoid(z);
+   621→      const err = pred - label;
+   622→      grad[0] += err;
+   623→      for (let j = 0; j < row.length; j++) grad[j + 1] += err * row[j];
+   624→    }
+   625→    const invN = 1.0 / xRows.length;
+   626→    for (let i = 0; i < weights.length; i++) {
+   627→      weights[i] -= learningRate * grad[i] * invN;
+   628→    }
+   629→  }
+   630→
+   631→  let correct = 0;
+   632→  for (let r = 0; r < xRows.length; r++) {
+   633→    const row = xRows[r];
+   634→    const label = labels[r];
+   635→    let z = weights[0];
+   636→    for (let j = 0; j < row.length; j++) z += weights[j + 1] * row[j];
+   637→    const pred = sigmoid(z);
+   638→    if ((pred >= 0.5 && label === 1) || (pred < 0.5 && label === 0)) correct += 1;
+   639→  }
+   640→  const accuracy = correct / labels.length;
+   641→
+   642→  const latestScaled = scaleRow(latestRow);
+   643→  let zLatest = weights[0];
+   644→  for (let j = 0; j < latestScaled.length; j++) zLatest += weights[j + 1] * latestScaled[j];
+   645→  return [sigmoid(zLatest), accuracy];
+   646→}
+   647→
+   648→const NEGATION_TOKENS = new Set(["no", "not", "avoids", "cleared", "denies", "dismisses", "rejects", "without", "free"]);
+   649→const HIGH_RISK_WORDS = new Set(["fraud", "default", "bankruptcy", "scam", "downgrade", "probe", "collapse"]);
+   650→const MEDIUM_RISK_WORDS = new Set(["decline", "debt", "penalty", "delay", "loss", "miss", "cut", "weak"]);
+   651→
+   652→/** Strip the same leading/trailing punctuation Python str.strip(chars) removes. */
+   653→const STRIP_CHARS = new Set([".", ",", ";", ":", "!", "?", "(", ")", "[", "]", "{", "}", '"', "'"]);
+   654→function stripPunct(word: string): string {
+   655→  let start = 0;
+   656→  let end = word.length;
+   657→  while (start < end && STRIP_CHARS.has(word[start])) start++;
+   658→  while (end > start && STRIP_CHARS.has(word[end - 1])) end--;
+   659→  return word.slice(start, end);
+   660→}
+   661→
+   662→function articleRiskWeight(text: string): number {
+   663→  const rawWords = String(text ?? "").toLowerCase().split(/\s+/);
+   664→  const words: string[] = [];
+   665→  for (const w of rawWords) {
+   666→    const stripped = stripPunct(w);
+   667→    if (stripped) words.push(stripped);
+   668→  }
+   669→  for (let idx = 0; idx < words.length; idx++) {
+   670→    const word = words[idx];
+   671→    const context = new Set(words.slice(Math.max(0, idx - 4), idx));
+   672→    if (HIGH_RISK_WORDS.has(word)) {
+   673→      if (intersects(context, NEGATION_TOKENS)) return 0.35;
+   674→      return 0.85;
+   675→    }
+   676→    if (MEDIUM_RISK_WORDS.has(word)) {
+   677→      if (intersects(context, NEGATION_TOKENS)) return 0.25;
+   678→      return 0.65;
+   679→    }
+   680→  }
+   681→  return 0.35;
+   682→}
+   683→
+   684→function intersects(a: Set<string>, b: Set<string>): boolean {
+   685→  for (const x of a) if (b.has(x)) return true;
+   686→  return false;
+   687→}
+   688→
+   689→interface HorizonResult {
+   690→  label: string;
+   691→  days: number;
+   692→  weight: number;
+   693→  samples: number;
+   694→  hitRate: number;
+   695→  upProbability: number;
+   696→}
+   697→
+   698→type MlDetails = {
+   699→  samples: number;
+   700→  horizonDays: number;
+   701→  hitRate: number | null;
+   702→  upProbability?: number;
+   703→  availableHorizons?: number[];
+   704→  horizons?: Record<string, { samples: number; hitRate: number; upProbability: number }>;
+   705→  features?: { earningsSurprise: number; volumePriceDivergence: number };
+   706→};
+   707→
+   708→function walkForwardMlAdjustment(
+   709→  priceHistory: unknown,
+   710→  financialHealthScore: number,
+   711→  valuationScore: number,
+   712→  quarterlyDetailed: Row[] | null | undefined,
+   713→): [number, number, MlDetails] {
+   714→  const history = Array.isArray(priceHistory) ? priceHistory : [];
+   715→  const closes: number[] = [];
+   716→  const volumes: number[] = [];
+   717→  for (const item of history) {
+   718→    if (!isPlainObject(item)) continue;
+   719→    const close = num((item as Row)["close"]);
+   720→    if (close === null) continue;
+   721→    const volume =
+   722→      pyOr(
+   723→        num((item as Row)["volume"]),
+   724→        num((item as Row)["vol"]),
+   725→        num((item as Row)["traded_quantity"]),
+   726→        num((item as Row)["tradedQuantity"]),
+   727→        0.0,
+   728→      ) ?? 0.0;
+   729→    closes.push(close);
+   730→    volumes.push(volume);
+   731→  }
+   732→
+   733→  if (closes.length < 220) {
+   734→    return [0.0, 0.0, { samples: 0, horizonDays: 63, hitRate: null }];
+   735→  }
+   736→
+   737→  const latestEpsSurprise = computeEarningsSurprise(quarterlyDetailed);
+   738→  const latestVpd = computeVolumePriceDivergence(closes, volumes);
+   739→  const latestRow: number[] = [
+   740→    closes[closes.length - 1] / closes[closes.length - 22] - 1.0,
+   741→    closes[closes.length - 1] / closes[closes.length - 64] - 1.0,
+   742→    closes[closes.length - 1] / closes[closes.length - 127] - 1.0,
+   743→    std(dailyReturns(closes.slice(closes.length - 64))) ?? 0.0,
+   744→    maxDrawdown(closes.slice(closes.length - 127)) ?? 0.0,
+   745→    latestEpsSurprise,
+   746→    latestVpd,
+   747→  ];
+   748→
+   749→  const horizonSpecs: Array<[number, string, number]> = [
+   750→    [21, "short", 0.25],
+   751→    [63, "base", 0.4],
+   752→    [126, "long", 0.35],
+   753→  ];
+   754→  const horizonResults: HorizonResult[] = [];
+   755→
+   756→  for (const [horizon, label, weight] of horizonSpecs) {
+   757→    const samples: Array<[number[], number]> = [];
+   758→    for (let idx = 130; idx < closes.length - horizon; idx++) {
+   759→      const pNow = closes[idx];
+   760→      const p1m = closes[idx - 21];
+   761→      const p3m = closes[idx - 63];
+   762→      const p6m = closes[idx - 126];
+   763→      const future = closes[idx + horizon];
+   764→      if (Math.min(pNow, p1m, p3m, p6m) <= 0) continue;
+   765→
+   766→      const mom1m = pNow / p1m - 1.0;
+   767→      const mom3m = pNow / p3m - 1.0;
+   768→      const mom6m = pNow / p6m - 1.0;
+   769→      const windowReturns = dailyReturns(closes.slice(idx - 63, idx + 1));
+   770→      const vol = std(windowReturns) ?? 0.0;
+   771→      const drawdown = maxDrawdown(closes.slice(idx - 126, idx + 1)) ?? 0.0;
+   772→      const sampleEpsSurprise = historicalEarningsSurprise(
+   773→        quarterlyDetailed ?? [],
+   774→        closes.length - 1 - idx,
+   775→      );
+   776→      const sampleVpd = computeVolumePriceDivergence(closes.slice(0, idx + 1), volumes.slice(0, idx + 1));
+   777→      const labelValue = future / pNow - 1.0 > 0 ? 1 : 0;
+   778→      samples.push([[mom1m, mom3m, mom6m, vol, drawdown, sampleEpsSurprise, sampleVpd], labelValue]);
+   779→    }
+   780→
+   781→    if (samples.length < 60) continue;
+   782→
+   783→    const features = samples.map((row) => row[0]);
+   784→    const labels = samples.map((row) => row[1]);
+   785→    const [pUp, accuracy] = fitLogisticProbability(features, labels, latestRow);
+   786→    horizonResults.push({
+   787→      label,
+   788→      days: horizon,
+   789→      weight,
+   790→      samples: samples.length,
+   791→      hitRate: accuracy,
+   792→      upProbability: pUp,
+   793→    });
+   794→  }
+   795→
+   796→  if (!horizonResults.length) {
+   797→    return [0.0, 0.0, { samples: 0, horizonDays: 63, hitRate: null }];
+   798→  }
+   799→
+   800→  const totalWeight = horizonResults.reduce((acc, item) => acc + item.weight, 0);
+   801→  const blendedProbability =
+   802→    totalWeight > 0
+   803→      ? horizonResults.reduce((acc, item) => acc + item.upProbability * item.weight, 0) / totalWeight
+   804→      : 0.5;
+   805→  const blendedHitRate =
+   806→    totalWeight > 0
+   807→      ? horizonResults.reduce((acc, item) => acc + item.hitRate * item.weight, 0) / totalWeight
+   808→      : 0.5;
+   809→  const totalSamples = horizonResults.reduce((acc, item) => acc + Math.trunc(item.samples), 0);
+   810→  const coverage = horizonResults.length / horizonSpecs.length;
+   811→  const confidence = clamp(
+   812→    Math.abs(blendedHitRate - 0.5) * 2.0 * coverage * Math.min(1.0, totalSamples / 320.0),
+   813→    0.0,
+   814→    1.0,
+   815→  );
+   816→
+   817→  const fundamentalsBias = (financialHealthScore - 0.5) * 0.08 + (valuationScore - 0.5) * 0.06;
+   818→  const rawAdjustment = (blendedProbability - 0.5) * 0.2 + fundamentalsBias;
+   819→
+   820→  const horizons: Record<string, { samples: number; hitRate: number; upProbability: number }> = {};
+   821→  for (const item of horizonResults) {
+   822→    horizons[`${Math.trunc(item.days)}d`] = {
+   823→      samples: Math.trunc(item.samples),
+   824→      hitRate: round4(item.hitRate),
+   825→      upProbability: round4(item.upProbability),
+   826→    };
+   827→  }
+   828→
+   829→  const details: MlDetails = {
+   830→    samples: totalSamples,
+   831→    horizonDays: 63,
+   832→    hitRate: round4(blendedHitRate),
+   833→    upProbability: round4(blendedProbability),
+   834→    availableHorizons: horizonResults.map((item) => Math.trunc(item.days)),
+   835→    horizons,
+   836→    features: {
+   837→      earningsSurprise: round4(latestEpsSurprise),
+   838→      volumePriceDivergence: round4(latestVpd),
+   839→    },
+   840→  };
+   841→  return [clamp(rawAdjustment, -0.08, 0.08), confidence, details];
+   842→}
+   843→
+   844→// ---------------------------------------------------------------------------
+   845→// Public API.
+   846→// ---------------------------------------------------------------------------
+   847→
+   848→/**
+   849→ * Port of `compute_smart_score`. Pure; never throws. Returns the smartScore
+   850→ * shape including score10 and the ML/validation fields the Python source sets.
+   851→ */
+   852→export function computeSmartScore(input: SmartScoreInput): DashboardData["smartScore"] {
+   853→  try {
+   854→    const metrics: Row = (input?.metrics as Row) ?? {};
+   855→    const technicals: Row = (input?.technicals as unknown as Row) ?? {};
+   856→    const financials: Row = (input?.financials as unknown as Row) ?? {};
+   857→    const priceHistory = input?.priceHistory ?? [];
+   858→    // returnsSummary and news are accepted but unused (mirrors Python `_ = ...`).
+   859→
+   860→    const growthFeatures = extractGrowthFeatures(financials);
+   861→    const priceFeatures = extractPriceFeatures(priceHistory);
+   862→    const qdCons = latestNonemptyRows(financials["quarterlyDetailedConsolidated"]);
+   863→    const qdStandalone = latestNonemptyRows(financials["quarterlyDetailedStandalone"]);
+   864→    const quarterlyDetailed = qdCons.length ? qdCons : qdStandalone;
+   865→
+   866→    const roe = num(metrics["roe"]);
+   867→    const roa = num(metrics["roa"]);
+   868→    const roce = num(metrics["roce"]);
+   869→    const profitMargin = num(metrics["profitMargin"]);
+   870→    const peRatio = num(metrics["peRatio"]);
+   871→    const pbRatio = num(metrics["pbRatio"]);
+   872→    const evToSales = num(metrics["evToSales"]);
+   873→    const pegRatio = num(metrics["pegRatio"]);
+   874→    const dividendYield = num(metrics["dividendYield"]);
+   875→    const debtToEquity = num(metrics["debtToEquity"]);
+   876→    const currentRatio = num(metrics["currentRatio"]);
+   877→    const rsi14 = num(technicals["rsi14"]);
+   878→    const macd = num(technicals["macd"]);
+   879→    const ema20 = num(technicals["ema20"]);
+   880→    const ema50 = num(technicals["ema50"]);
+   881→    const trend = String(technicals["trend"] || "Neutral").toLowerCase();
+   882→
+   883→    const altmanZ = computeAltmanZ(metrics, financials);
+   884→    let interestCoverage = num(metrics["interestCoverage"]);
+   885→    if (interestCoverage === null) {
+   886→      const incomeRows = latestNonemptyRows(financials["incomeStatement"]);
+   887→      if (incomeRows.length) {
+   888→        const ebit = statementValue(incomeRows[0], ["ebit", "operatingIncome"]);
+   889→        const interest = statementValue(incomeRows[0], ["interestExpense", "interestCost"]);
+   890→        if (ebit !== null && interest !== null && Math.abs(interest) > 1e-9) {
+   891→          interestCoverage = ebit / Math.abs(interest);
+   892→        }
+   893→      }
+   894→    }
+   895→
+   896→    const profitability = median(
+   897→      [
+   898→        normalize(roe, 5.0, 25.0),
+   899→        normalize(roa, 1.0, 10.0),
+   900→        normalize(roce, 8.0, 30.0),
+   901→        normalize(profitMargin, 5.0, 25.0),
+   902→      ],
+   903→      0.5,
+   904→    );
+   905→
+   906→    const growth = median(
+   907→      [
+   908→        normalize(growthFeatures.revenueGrowth, 0.0, 25.0),
+   909→        normalize(growthFeatures.profitGrowth, 0.0, 25.0),
+   910→        normalize(growthFeatures.epsGrowth, 0.0, 20.0),
+   911→        normalize(growthFeatures.freeCashFlowGrowth, 0.0, 20.0),
+   912→      ],
+   913→      0.5,
+   914→    );
+   915→
+   916→    const valuation = median(
+   917→      [
+   918→        inverseNormalize(peRatio !== null && peRatio > 0 ? peRatio : null, 8.0, 45.0),
+   919→        inverseNormalize(pbRatio !== null && pbRatio > 0 ? pbRatio : null, 1.0, 8.0),
+   920→        inverseNormalize(pegRatio, 0.5, 3.0),
+   921→        inverseNormalize(evToSales, 1.0, 12.0),
+   922→        normalize(dividendYield, 0.0, 4.0),
+   923→      ],
+   924→      0.5,
+   925→    );
+   926→
+   927→    let rsiScore: Num = null;
+   928→    if (rsi14 !== null) rsiScore = clamp(1.0 - Math.abs(rsi14 - 55.0) / 45.0, 0.0, 1.0);
+   929→    let macdScore: Num = null;
+   930→    if (macd !== null) macdScore = sigmoid(macd / 2.5);
+   931→    const trendScore = trend === "bullish" ? 0.7 : trend === "bearish" ? 0.35 : 0.5;
+   932→    let emaScore: Num = null;
+   933→    if (ema20 !== null && ema50 !== null) emaScore = ema20 >= ema50 ? 1.0 : 0.25;
+   934→
+   935→    const momentum = median(
+   936→      [
+   937→        rsiScore,
+   938→        macdScore,
+   939→        emaScore,
+   940→        trendScore,
+   941→        normalize(priceFeatures.return3M, -15.0, 35.0),
+   942→        normalize(priceFeatures.return6M, -20.0, 50.0),
+   943→      ],
+   944→      0.5,
+   945→    );
+   946→
+   947→    const financialHealth = median(
+   948→      [
+   949→        inverseNormalize(debtToEquity, 0.0, 2.5),
+   950→        normalize(currentRatio, 1.0, 3.0),
+   951→        normalize(interestCoverage, 1.5, 8.0),
+   952→        normalize(altmanZ, 1.8, 4.0),
+   953→        insiderSignal(input?.corporateActions as unknown as Row),
+   954→        institutionalSignal(input?.shareholding as unknown as Row),
+   955→      ],
+   956→      0.5,
+   957→    );
+   958→
+   959→    const baseScore01 =
+   960→      0.25 * profitability +
+   961→      0.2 * growth +
+   962→      0.2 * valuation +
+   963→      0.2 * momentum +
+   964→      0.15 * financialHealth;
+   965→
+   966→    const [mlAdjustment, mlConfidence, validation] = walkForwardMlAdjustment(
+   967→      priceHistory,
+   968→      financialHealth,
+   969→      valuation,
+   970→      quarterlyDetailed,
+   971→    );
+   972→    const finalScore01 = clamp(baseScore01 + mlAdjustment * mlConfidence, 0.0, 1.0);
+   973→    const fundamentalCoverage = [
+   974→      roe, roa, roce, profitMargin,
+   975→      growthFeatures.revenueGrowth, growthFeatures.profitGrowth,
+   976→      peRatio, pbRatio, pegRatio, evToSales,
+   977→      debtToEquity, currentRatio, interestCoverage, altmanZ,
+   978→    ].filter((value) => value !== null).length;
+   979→    const isRated = fundamentalCoverage >= 3;
+   980→    const score5 = isRated ? round2(finalScore01 * 5.0) : 0;
+   981→
+   982→    const dimensions: Record<string, number> = {
+   983→      profitability: round2(profitability * 5.0),
+   984→      growth: round2(growth * 5.0),
+   985→      valuation: round2(valuation * 5.0),
+   986→      momentum: round2(momentum * 5.0),
+   987→      financialHealth: round2(financialHealth * 5.0),
+   988→    };
+   989→
+   990→    return {
+   991→      score: score5,
+   992→      maxScore: 5,
+   993→      dimensions,
+   994→      label: !isRated ? "Unrated" : score5 >= 4 ? "Strong" : score5 >= 2.5 ? "Moderate" : "Weak",
+   995→      explanation:
+   996→        "Factor score uses normalized profitability, growth, valuation, momentum, and balance-sheet health. " +
+   997→        "A bounded multi-horizon walk-forward ML signal blends price trend persistence with earnings surprise " +
+   998→        "and volume confirmation before applying a small score adjustment.",
+   999→      score10: isRated ? round2(finalScore01 * 10.0) : 0,
+  1000→      mlAdjustment: round2(mlAdjustment * mlConfidence * 5.0),
+  1001→      mlConfidence: round2(mlConfidence),
+  1002→      validation: validation as DashboardData["smartScore"]["validation"],
+  1003→      modelVersion: "factor-v3",
+  1004→    };
+  1005→  } catch {
+  1006→    // GOLDEN RULE: never throw. Return a neutral skeleton on any failure.
+  1007→    return {
+  1008→      score: 0,
+  1009→      maxScore: 5,
+  1010→      dimensions: {
+  1011→        profitability: 0,
+  1012→        growth: 0,
+  1013→        valuation: 0,
+  1014→        momentum: 0,
+  1015→        financialHealth: 0,
+  1016→      },
+  1017→      label: "Weak",
+  1018→      explanation:
+  1019→        "Factor score uses normalized profitability, growth, valuation, momentum, and balance-sheet health. " +
+  1020→        "A bounded multi-horizon walk-forward ML signal blends price trend persistence with earnings surprise " +
+  1021→        "and volume confirmation before applying a small score adjustment.",
+  1022→      score10: 0,
+  1023→      mlAdjustment: 0,
+  1024→      mlConfidence: 0,
+  1025→      validation: { samples: 0, horizonDays: 63, hitRate: null },
+  1026→      modelVersion: "factor-v3",
+  1027→    };
+  1028→  }
+  1029→}
+  1030→
+  1031→/**
+  1032→ * Port of `compute_risk_score`. Pure; never throws. No score10/ML/validation
+  1033→ * fields (those belong to smartScore only).
+  1034→ */
+  1035→export function computeRiskScore(input: RiskScoreInput): DashboardData["riskScore"] {
+  1036→  try {
+  1037→    const newsItems = Array.isArray(input?.news) ? input.news : [];
+  1038→    const metrics: Row = (input?.metrics as Row) ?? {};
+  1039→    const technicals: Row = (input?.technicals as unknown as Row) ?? {};
+  1040→    const financials: Row = (input?.financials as unknown as Row) ?? {};
+  1041→    const priceHistory = input?.priceHistory ?? [];
+  1042→    const brokerageResearch = input?.brokerageResearch as unknown;
+  1043→
+  1044→    const sentiments: number[] = [];
+  1045→    const narrativeRiskScores: number[] = [];
+  1046→
+  1047→    for (const article of newsItems) {
+  1048→      const articleRow: Row = isPlainObject(article) ? (article as unknown as Row) : {};
+  1049→      const sentiment = num(articleRow["sentimentScore"], 0.5);
+  1050→      sentiments.push(clamp(sentiment !== null ? sentiment : 0.5, 0.0, 1.0));
+  1051→      const text = (String(articleRow["title"] ?? "") + " " + String(articleRow["summary"] ?? "")).toLowerCase();
+  1052→      if (["lawsuit", "forensic", "insolvency", "raid", "restatement"].some((token) => text.includes(token))) {
+  1053→        narrativeRiskScores.push(0.85);
+  1054→      } else if (["fall", "pledge", "regulatory", "volatility", "outflow"].some((token) => text.includes(token))) {
+  1055→        narrativeRiskScores.push(0.65);
+  1056→      } else {
+  1057→        narrativeRiskScores.push(articleRiskWeight(text));
+  1058→      }
+  1059→    }
+  1060→
+  1061→    if (isPlainObject(brokerageResearch)) {
+  1062→      const summaryRaw = (brokerageResearch as Row)["summary"];
+  1063→      const summary: Row = isPlainObject(summaryRaw) ? summaryRaw : {};
+  1064→      const total = num(summary["total"]);
+  1065→      const buys = num(summary["buy"]);
+  1066→      const sells = num(summary["sell"]);
+  1067→      const holds = num(summary["hold"]);
+  1068→      // Python: `total not in {None, 0}` — excludes both null and 0.
+  1069→      if (total !== null && total !== 0 && buys !== null && sells !== null) {
+  1070→        const structuredSentiment = clamp(0.5 + ((buys - sells) / total) * 0.35, 0.0, 1.0);
+  1071→        sentiments.push(structuredSentiment);
+  1072→        if (holds !== null && holds / total > 0.55) {
+  1073→          narrativeRiskScores.push(0.5);
+  1074→        }
+  1075→      }
+  1076→    }
+  1077→
+  1078→    const sentimentRisk = clamp(1.0 - avg(sentiments, 0.5), 0.0, 1.0);
+  1079→    const narrativeRisk = clamp(avg(narrativeRiskScores, 0.45), 0.0, 1.0);
+  1080→
+  1081→    const debtToEquity = num(metrics["debtToEquity"]);
+  1082→    const currentRatio = num(metrics["currentRatio"]);
+  1083→    const roa = num(metrics["roa"]);
+  1084→    const altmanZ = computeAltmanZ(metrics, financials);
+  1085→    const interestCoverage = num(metrics["interestCoverage"]);
+  1086→
+  1087→    const neutralIfMissing = (value: Num): number => value === null ? 0.5 : value;
+  1088→    const financialRisk = avg(
+  1089→      [
+  1090→        normalize(debtToEquity, 0.4, 2.5),
+  1091→        1.0 - neutralIfMissing(normalize(currentRatio, 1.0, 3.0)),
+  1092→        1.0 - neutralIfMissing(normalize(roa, 1.0, 10.0)),
+  1093→        1.0 - neutralIfMissing(normalize(interestCoverage, 1.5, 8.0)),
+  1094→        1.0 - neutralIfMissing(normalize(altmanZ, 1.8, 4.0)),
+  1095→      ],
+  1096→      0.5,
+  1097→    );
+  1098→
+  1099→    const priceFeatures = extractPriceFeatures(priceHistory);
+  1100→    const rsi14 = num(technicals["rsi14"]);
+  1101→    const macd = num(technicals["macd"]);
+  1102→    const trend = String(technicals["trend"] || "Neutral").toLowerCase();
+  1103→    const technicalRisk = avg(
+  1104→      [
+  1105→        normalize(Math.abs((pyOr(rsi14, 50.0) as number) - 50.0), 0.0, 35.0),
+  1106→        normalize(priceFeatures.volatility3M, 0.15, 0.55),
+  1107→        normalize(priceFeatures.drawdown1Y, 0.08, 0.45),
+  1108→        trend === "bullish" ? 0.35 : trend === "bearish" ? 0.7 : 0.5,
+  1109→        macd !== null && macd > 0 ? 0.35 : macd !== null && macd < 0 ? 0.65 : 0.5,
+  1110→      ],
+  1111→      0.5,
+  1112→    );
+  1113→
+  1114→    const weightedRisk =
+  1115→      0.25 * sentimentRisk + 0.25 * financialRisk + 0.3 * narrativeRisk + 0.2 * technicalRisk;
+  1116→    const riskCoverage =
+  1117→      sentiments.length +
+  1118→      narrativeRiskScores.length +
+  1119→      [debtToEquity, currentRatio, roa, altmanZ, interestCoverage, rsi14, macd]
+  1120→        .filter((value) => value !== null).length +
+  1121→      (priceHistory.length >= 2 ? 1 : 0);
+  1122→    const isRated = riskCoverage >= 2;
+  1123→    const riskScore = isRated ? round2(clamp(weightedRisk, 0.0, 1.0) * 5.0) : 0;
+  1124→
+  1125→    return {
+  1126→      score: riskScore,
+  1127→      maxScore: 5,
+  1128→      components: {
+  1129→        sentiment: round2(sentimentRisk * 5.0),
+  1130→        financialRisk: round2(financialRisk * 5.0),
+  1131→        narrativeRisk: round2(narrativeRisk * 5.0),
+  1132→        technicalRisk: round2(technicalRisk * 5.0),
+  1133→      },
+  1134→      label: !isRated ? "Unrated" : riskScore < 2 ? "Low" : riskScore < 3.5 ? "Medium" : "High",
+  1135→      explanation:
+  1136→        "Risk score blends sentiment risk, financial stress, narrative red flags, and technical instability " +
+  1137→        "using weighted normalized factors.",
+  1138→      modelVersion: "risk-v2",
+  1139→    };
+  1140→  } catch {
+  1141→    // GOLDEN RULE: never throw. Return a neutral skeleton on any failure.
+  1142→    return {
+  1143→      score: 0,
+  1144→      maxScore: 5,
+  1145→      components: {
+  1146→        sentiment: 0,
+  1147→        financialRisk: 0,
+  1148→        narrativeRisk: 0,
+  1149→        technicalRisk: 0,
+  1150→      },
+  1151→      label: "Low",
+  1152→      explanation:
+  1153→        "Risk score blends sentiment risk, financial stress, narrative red flags, and technical instability " +
+  1154→        "using weighted normalized factors.",
+  1155→      modelVersion: "risk-v2",
+  1156→    };
+  1157→  }
+  1158→}
+  1159→

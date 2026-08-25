@@ -1,0 +1,67 @@
+# Self-contained deployment: app + database, one command.
+#
+# This is the file to hand over with the image. It does NOT build anything —
+# it runs a pre-built image, so the recipient needs neither the source tree
+# nor a toolchain, only Docker and the two files beside this one:
+#
+#   docker-compose.share.yml   (this file)
+#   .env                       (copied from .env.share.example and filled in)
+#
+#   docker load -i mystockvision.tar
+#   docker compose -f docker-compose.share.yml up -d
+#
+# Every secret arrives from .env at run time. Nothing sensitive is inside the
+# image, which is what makes the image itself safe to pass around.
+
+services:
+  mysql:
+    image: mysql:8
+    container_name: msv-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-financial_forensics}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD in .env}
+    volumes:
+      # Named volume, so `docker compose down` does not take the data with it.
+      # Removing the data is then an explicit `down -v`, never an accident.
+      - msv_mysql_data:/var/lib/mysql
+    # No host port published: the app reaches MySQL over the internal compose
+    # network. Exposing 3306 to the internet is how these get compromised.
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  app:
+    image: ${APP_IMAGE:-mystockvision:latest}
+    container_name: msv-app
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # Set here rather than in .env because they describe how the containers
+      # find each other, not user configuration. "mysql" is the service name
+      # above, resolved by Docker's internal DNS.
+      MYSQL_HOST: mysql
+      MYSQL_USER: root
+      MYSQL_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-financial_forensics}
+      # Server-side fetches loop back into this same container. Keeping it on
+      # 127.0.0.1 means server rendering never depends on the public domain
+      # resolving, so the app still works before DNS or TLS is set up.
+      INTERNAL_API_BASE: http://127.0.0.1:3000
+    depends_on:
+      mysql:
+        # Waits for the healthcheck, not merely for the container to start —
+        # otherwise the schema bootstrap races an unready database.
+        condition: service_healthy
+    ports:
+      # Publish on all interfaces so it is reachable immediately after a plain
+      # `up -d`. Put a reverse proxy in front for TLS and change this to
+      # "127.0.0.1:3000:3000" once you do — see DEPLOY.md.
+      - "${APP_PORT:-3000}:3000"
+
+volumes:
+  msv_mysql_data:

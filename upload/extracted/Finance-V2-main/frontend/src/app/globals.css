@@ -1,0 +1,941 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─────────────────────────────────────────────────────────────────────────
+   DESIGN TOKENS
+───────────────────────────────────────────────────────────────────────── */
+
+:root {
+  --font-manrope: "Segoe UI", Arial, sans-serif;
+  --font-space: "Trebuchet MS", "Segoe UI", Arial, sans-serif;
+  --bg: 225 40% 97%;
+  --panel: 225 35% 100%;
+  --border: 226 24% 83%;
+  --text: 226 36% 16%;
+  --muted: 227 15% 44%;
+  --accent: 26 90% 58%;
+  --success: 146 65% 42%;
+  --danger: 4 74% 56%;
+  --control-height: 2.5rem;
+  --panel-padding: 1rem;
+  --panel-padding-lg: 1.25rem;
+  --panel-gap: 1rem;
+  --ease-smooth: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-ui: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-route: cubic-bezier(0.16, 1, 0.3, 1);
+  --duration-fast: 120ms;
+  --duration-ui: 220ms;
+  --duration-slow: 360ms;
+  --glow-accent: rgba(245, 143, 51, 0.15);
+  --glow-success: rgba(34, 197, 94, 0.12);
+  --glow-danger: rgba(239, 68, 68, 0.12);
+  color-scheme: light;
+}
+
+.dark {
+  --bg: 228 38% 7%;
+  --panel: 226 36% 11%;
+  --border: 224 30% 19%;
+  --text: 220 35% 95%;
+  --muted: 219 16% 68%;
+  --accent: 29 86% 61%;
+  --success: 146 72% 56%;
+  --danger: 4 81% 61%;
+  --glow-accent: rgba(245, 163, 71, 0.22);
+  --glow-success: rgba(34, 197, 94, 0.18);
+  --glow-danger: rgba(239, 68, 68, 0.18);
+  color-scheme: dark;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   BASE
+───────────────────────────────────────────────────────────────────────── */
+
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 5rem;
+  text-rendering: optimizeLegibility;
+  /* Always reserve the scrollbar gutter. The page shell is centred
+     (`mx-auto max-w-[1640px]`), so a tall page showing a scrollbar and a short
+     one not showing it centre against different widths — every navigation
+     between the two shifted the whole layout sideways by the scrollbar width.
+     Reserving it unconditionally makes that shift impossible. */
+  scrollbar-gutter: stable;
+}
+
+/* Smooth scrolling is for in-page anchors, not for changing route.
+   Next scrolls to the top on navigation, and with `scroll-behavior: smooth`
+   the browser *animates* that scroll — so leaving a page scrolled halfway
+   down visibly slid the new page upward while it was still rendering.
+   SmoothExperience already marks the navigation window on <html>, so scoping
+   to it restores an instant jump exactly when it's needed. */
+html[data-route-transition="active"] {
+  scroll-behavior: auto;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+}
+
+/* Global scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--border)) transparent;
+}
+*::-webkit-scrollbar { width: 5px; height: 5px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+  background: hsl(var(--border));
+  border-radius: 9999px;
+}
+*::-webkit-scrollbar-thumb:hover { background: hsl(var(--muted) / 0.6); }
+
+body {
+  @apply bg-bg text-text antialiased;
+  font-variant-numeric: tabular-nums lining-nums;
+  background-image:
+    radial-gradient(ellipse 80% 50% at 0% 0%, rgba(255, 166, 72, 0.09) 0, transparent 50%),
+    radial-gradient(ellipse 60% 40% at 100% 0%, rgba(60, 173, 255, 0.07) 0, transparent 45%),
+    radial-gradient(ellipse 50% 60% at 50% 100%, rgba(139, 92, 246, 0.05) 0, transparent 50%);
+  animation: page-fade-in 200ms var(--ease-smooth);
+  transition: background-color var(--duration-slow) var(--ease-ui), color var(--duration-ui) var(--ease-ui);
+}
+
+.dark body {
+  background-image:
+    radial-gradient(ellipse 70% 45% at 0% 0%, rgba(255, 166, 72, 0.11) 0, transparent 35%),
+    radial-gradient(ellipse 55% 40% at 100% 0%, rgba(60, 173, 255, 0.09) 0, transparent 30%),
+    radial-gradient(ellipse 60% 55% at 50% 100%, rgba(139, 92, 246, 0.07) 0, transparent 40%),
+    linear-gradient(180deg, hsl(228 38% 7%) 0%, hsl(230 40% 5%) 100%);
+}
+
+/* Subtle dot-grid texture (dark only) */
+.dark body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background-image: radial-gradient(circle, hsl(var(--border) / 0.5) 1px, transparent 1px);
+  background-size: 28px 28px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+body > * { position: relative; z-index: 1; }
+
+::selection {
+  background: hsl(var(--accent) / 0.22);
+  color: hsl(var(--text));
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   GLASSMORPHISM
+───────────────────────────────────────────────────────────────────────── */
+
+.glass {
+  backdrop-filter: saturate(180%) blur(16px);
+  -webkit-backdrop-filter: saturate(180%) blur(16px);
+}
+
+.glass-premium {
+  background: hsl(var(--panel) / 0.65);
+  backdrop-filter: saturate(200%) blur(20px);
+  -webkit-backdrop-filter: saturate(200%) blur(20px);
+  border: 1px solid hsl(var(--border) / 0.55);
+  box-shadow:
+    0 1px 0 hsl(var(--panel) / 0.9) inset,
+    0 -1px 0 hsl(0 0% 0% / 0.08) inset,
+    0 8px 32px hsl(0 0% 0% / 0.06);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   ANIMATED GRADIENT BORDER
+───────────────────────────────────────────────────────────────────────── */
+
+.gradient-border {
+  position: relative;
+  background: hsl(var(--panel) / 0.7);
+  overflow: hidden;
+}
+
+.gradient-border::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(
+    135deg,
+    hsl(var(--accent) / 0.6),
+    hsl(var(--success) / 0.35),
+    hsl(var(--accent) / 0.25),
+    rgba(139, 92, 246, 0.35),
+    hsl(var(--accent) / 0.6)
+  );
+  background-size: 300% 300%;
+  animation: gradient-shift 8s ease infinite;
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+.motion-aware[data-motion-active="false"]::before,
+.motion-aware[data-motion-active="false"] .hero-orb {
+  animation-play-state: paused;
+}
+
+@keyframes gradient-shift {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   GLOW CARD
+───────────────────────────────────────────────────────────────────────── */
+
+.glow-card {
+  transition: all 220ms var(--ease-smooth);
+  position: relative;
+}
+
+.glow-card::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  opacity: 0;
+  transition: opacity 300ms var(--ease-smooth);
+  background: linear-gradient(135deg, var(--glow-accent), transparent, var(--glow-success));
+  z-index: -1;
+  filter: blur(14px);
+}
+
+.glow-card:hover::after { opacity: 1; }
+
+.glow-card:hover {
+  transform: translateY(-3px);
+  box-shadow:
+    0 16px 40px rgba(19, 27, 54, 0.1),
+    0 0 0 1px hsl(var(--accent) / 0.18);
+  border-color: hsl(var(--accent) / 0.35);
+}
+
+.dark .glow-card:hover {
+  box-shadow:
+    0 16px 40px rgba(0, 0, 0, 0.4),
+    0 0 0 1px hsl(var(--accent) / 0.22);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   FEATURE CARD
+───────────────────────────────────────────────────────────────────────── */
+
+.feature-card {
+  position: relative;
+  overflow: hidden;
+  transition: all 240ms var(--ease-smooth);
+}
+
+.feature-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  opacity: 0;
+  transition: opacity 300ms var(--ease-smooth);
+  background: radial-gradient(ellipse at top left, var(--glow-accent), transparent 60%);
+  pointer-events: none;
+}
+
+.feature-card:hover::after { opacity: 1; }
+
+.feature-card:hover {
+  transform: translateY(-5px) scale(1.01);
+  box-shadow:
+    0 24px 48px rgba(0, 0, 0, 0.18),
+    0 0 0 1px hsl(var(--accent) / 0.25),
+    0 0 32px hsl(var(--accent) / 0.08);
+  border-color: hsl(var(--accent) / 0.4);
+}
+
+.feature-card:hover .feature-card-icon {
+  transform: translateY(-1px) scale(1.04);
+  box-shadow:
+    0 18px 30px rgba(0, 0, 0, 0.22),
+    0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.hero-spotlight {
+  box-shadow:
+    0 18px 44px rgba(7, 10, 22, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.page-hero-shell {
+  background:
+    linear-gradient(135deg, hsl(var(--panel) / 0.82), hsl(var(--panel) / 0.62)),
+    hsl(var(--panel));
+}
+
+.page-hero-aside {
+  box-shadow:
+    0 18px 44px rgba(7, 10, 22, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.page-hero-stat {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 8px 20px rgba(8, 12, 24, 0.06);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   SHINE BUTTON
+───────────────────────────────────────────────────────────────────────── */
+
+.shine-btn {
+  position: relative;
+  overflow: hidden;
+}
+
+.shine-btn::after {
+  content: "";
+  position: absolute;
+  top: -50%;
+  left: -120%;
+  width: 50%;
+  height: 200%;
+  background: linear-gradient(
+    105deg,
+    transparent 40%,
+    rgba(255, 255, 255, 0.22) 50%,
+    transparent 60%
+  );
+  transform: skewX(-12deg);
+  transition: none;
+}
+
+.shine-btn:hover::after {
+  left: 160%;
+  transition: left 700ms ease;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   SHIMMER LOADING
+───────────────────────────────────────────────────────────────────────── */
+
+.shimmer {
+  position: relative;
+  overflow: hidden;
+  background: hsl(var(--panel) / 0.6);
+}
+
+.shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    hsl(var(--accent) / 0.06) 40%,
+    hsl(var(--accent) / 0.1) 50%,
+    hsl(var(--accent) / 0.06) 60%,
+    transparent 100%
+  );
+  animation: shimmer-slide 1.8s ease-in-out infinite;
+}
+
+@keyframes shimmer-slide {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   PULSE DOT
+───────────────────────────────────────────────────────────────────────── */
+
+.pulse-dot {
+  position: relative;
+}
+
+.pulse-dot::after {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  background: inherit;
+  opacity: 0.4;
+  animation: pulse-ring 2.2s ease-out infinite;
+}
+
+@keyframes pulse-ring {
+  0% { transform: scale(1); opacity: 0.4; }
+  100% { transform: scale(2.4); opacity: 0; }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   FLOATING ORB DECORATIONS
+───────────────────────────────────────────────────────────────────────── */
+
+.hero-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.5;
+  animation: float-orb 14s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.hero-orb-1 {
+  width: 320px;
+  height: 320px;
+  background: hsl(var(--accent) / 0.28);
+  top: -80px;
+  right: -60px;
+  animation-delay: 0s;
+}
+
+.hero-orb-2 {
+  width: 260px;
+  height: 260px;
+  background: hsl(var(--success) / 0.22);
+  bottom: -50px;
+  left: -40px;
+  animation-delay: -5s;
+}
+
+.hero-orb-3 {
+  width: 220px;
+  height: 220px;
+  background: rgba(139, 92, 246, 0.18);
+  top: 35%;
+  left: 55%;
+  animation-delay: -9s;
+}
+
+@keyframes float-orb {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(18px, -22px) scale(1.06); }
+  66% { transform: translate(-12px, 12px) scale(0.95); }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   SCROLL PROGRESS BAR
+───────────────────────────────────────────────────────────────────────── */
+
+.scroll-progress {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: linear-gradient(90deg, hsl(var(--accent)), hsl(var(--success)), hsl(var(--accent)));
+  background-size: 200% 100%;
+  animation: gradient-shift 4s ease infinite;
+  z-index: 200;
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 80ms linear;
+  will-change: transform;
+  box-shadow: 0 0 8px hsl(var(--accent) / 0.5);
+}
+
+.route-progress {
+  position: fixed;
+  inset: 0 0 auto 0;
+  z-index: 210;
+  height: 3px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--duration-fast) var(--ease-ui);
+}
+
+.route-progress[data-active="true"] {
+  opacity: 1;
+}
+
+.route-progress__bar {
+  height: 100%;
+  width: 100%;
+  transform-origin: left;
+  background: linear-gradient(90deg, hsl(var(--accent)), hsl(var(--success)), hsl(var(--accent)));
+  box-shadow: 0 0 18px hsl(var(--accent) / 0.42);
+  animation: route-progress-fill 520ms var(--ease-route) both;
+}
+
+.route-progress__glow {
+  height: 22px;
+  width: 42%;
+  transform: translateY(-8px);
+  background: radial-gradient(ellipse at center, hsl(var(--accent) / 0.22), transparent 68%);
+  filter: blur(14px);
+  animation: route-glow-slide 520ms var(--ease-route) both;
+}
+
+/* One animation on <main>, never two.
+   `.page-enter` (page-content-enter) and this rule both animate `transform`
+   on the same element during a navigation. Two transform animations on one
+   element don't blend — the cascade picks a winner mid-flight while the
+   children are separately sliding via `.stagger-fade`, which is what read as
+   jitter. During a route change this is the only animation on <main>; on a
+   cold load, where the attribute is absent, `.page-enter` still runs. */
+html[data-route-transition="active"] main.page-enter {
+  animation: route-soft-settle 360ms var(--ease-route);
+  will-change: opacity, transform, filter;
+}
+
+/* Fade children in place on a route change instead of sliding them.
+   The staggered translate is a nice first-load flourish, but replaying a
+   14px lift on up to 12 children — with delays running to ~300ms — on every
+   navigation stacks movement on top of <main>'s own animation. Opacity alone
+   keeps the entrance without anything shifting position. */
+html[data-route-transition="active"] .stagger-fade > * {
+  animation-name: stagger-fade-in-place;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   STAT CARD
+───────────────────────────────────────────────────────────────────────── */
+
+.stat-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.stat-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, hsl(var(--accent)), hsl(var(--success)));
+  opacity: 0;
+  transition: opacity 200ms var(--ease-smooth);
+}
+
+.stat-card:hover::before { opacity: 1; }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   MOOD GAUGE
+───────────────────────────────────────────────────────────────────────── */
+
+.mood-gauge-bg {
+  background: conic-gradient(
+    from 180deg,
+    hsl(var(--danger)) 0deg,
+    hsl(var(--accent)) 90deg,
+    hsl(var(--success)) 180deg
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   INTERACTIVE TRANSITIONS
+───────────────────────────────────────────────────────────────────────── */
+
+a,
+button,
+input,
+select,
+textarea,
+[role="button"],
+[role="tab"],
+summary {
+  transition-property: background-color, border-color, color, opacity, box-shadow, transform;
+  transition-duration: var(--duration-ui);
+  transition-timing-function: var(--ease-ui);
+}
+
+input,
+select,
+textarea {
+  transition-property: border-color, box-shadow, background-color, color;
+  transition-duration: var(--duration-fast);
+  transition-timing-function: var(--ease-ui);
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  box-shadow: 0 0 0 3px hsl(var(--accent) / 0.15);
+}
+
+:where(a, button, [role="button"], [role="tab"], summary):focus-visible {
+  outline: 2px solid hsl(var(--accent) / 0.55);
+  outline-offset: 3px;
+}
+
+:where(button, [role="button"]):active {
+  transform: translateY(1px) scale(0.99);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   SEARCH BAR
+───────────────────────────────────────────────────────────────────────── */
+
+.stock-search-shell { isolation: isolate; }
+
+.search-bar {
+  transition-property: border-color, box-shadow, background-color, transform;
+  transition-duration: 130ms;
+  transition-timing-function: var(--ease-smooth);
+}
+
+.search-bar:focus-within {
+  border-color: hsl(var(--accent) / 0.5);
+  box-shadow:
+    0 10px 28px rgba(19, 27, 54, 0.08),
+    0 0 0 1px hsl(var(--accent) / 0.18),
+    0 0 20px hsl(var(--accent) / 0.08);
+}
+
+.search-input:focus { box-shadow: none; }
+.search-dropdown { transform-origin: top center; }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   CARD SURFACES
+───────────────────────────────────────────────────────────────────────── */
+
+.card-surface {
+  transition-property: transform, box-shadow, border-color, background-color;
+  transition-duration: var(--duration-ui);
+  transition-timing-function: var(--ease-ui);
+  will-change: auto;
+}
+
+.premium-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.premium-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08), transparent 32%),
+    radial-gradient(circle at top right, hsl(var(--accent) / 0.12), transparent 34%);
+  opacity: 0.72;
+  pointer-events: none;
+}
+
+.premium-card::after {
+  content: "";
+  position: absolute;
+  inset: auto 14% -42% 14%;
+  height: 56%;
+  border-radius: 9999px;
+  background: radial-gradient(circle, hsl(var(--accent) / 0.18), transparent 68%);
+  opacity: 0;
+  filter: blur(30px);
+  transition: opacity 180ms var(--ease-smooth);
+  pointer-events: none;
+}
+
+.card-surface:hover {
+  transform: translateY(-2px) scale(1.003);
+  will-change: transform;
+  box-shadow:
+    0 20px 38px rgba(19, 27, 54, 0.09),
+    0 6px 14px rgba(19, 27, 54, 0.05),
+    0 0 0 1px hsl(var(--accent) / 0.12);
+  border-color: hsl(var(--accent) / 0.24);
+}
+
+.card-surface:hover::after {
+  opacity: 1;
+}
+
+.dark .card-surface:hover {
+  box-shadow:
+    0 22px 42px rgba(0, 0, 0, 0.38),
+    0 10px 22px rgba(0, 0, 0, 0.22),
+    0 0 0 1px hsl(var(--accent) / 0.18);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   NAV ACTIVE STATE
+───────────────────────────────────────────────────────────────────────── */
+
+.nav-active {
+  background: linear-gradient(135deg, hsl(var(--accent) / 0.16), hsl(var(--accent) / 0.08));
+  border: 1px solid hsl(var(--accent) / 0.28);
+  box-shadow:
+    0 0 14px hsl(var(--accent) / 0.18),
+    inset 0 1px 0 hsl(var(--accent) / 0.12);
+  color: hsl(var(--accent));
+}
+
+.dark .nav-active {
+  background: linear-gradient(135deg, hsl(var(--accent) / 0.2), hsl(var(--accent) / 0.1));
+  box-shadow:
+    0 0 18px hsl(var(--accent) / 0.28),
+    inset 0 1px 0 hsl(var(--accent) / 0.15);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   DENSITY SYSTEM
+───────────────────────────────────────────────────────────────────────── */
+
+.density-copy {
+  transition: font-size 140ms var(--ease-smooth), line-height 140ms var(--ease-smooth);
+}
+
+.density-shell { gap: var(--panel-gap); }
+.density-panel { padding: var(--panel-padding); }
+.density-panel-lg { padding: var(--panel-padding-lg); }
+.density-kicker { font-size: 0.75rem; }
+.density-value { font-size: 1.125rem; }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   ENTRANCE ANIMATIONS
+───────────────────────────────────────────────────────────────────────── */
+
+.smooth-panel-enter { animation: smooth-panel-enter 130ms var(--ease-smooth); }
+.header-enter { animation: header-enter 180ms var(--ease-smooth); }
+.page-enter { animation: page-content-enter 180ms var(--ease-smooth); }
+
+.stagger-fade > * {
+  opacity: 0;
+  transform: translateY(10px);
+  animation: stagger-fade-in 220ms var(--ease-smooth) forwards;
+}
+
+/* Once the entrance has played, stop treating this as an entrance.
+   `opacity: 0` above is a *permanent* base state on every direct child, not a
+   one-shot, and these pages are full of sections that render `null` until
+   their data arrives. Each one that resolves late therefore did two things:
+   it faded itself in from invisible, and — by shifting every later sibling's
+   `:nth-child()` match — changed those siblings' `animation-delay`. Changing
+   an animation property restarts the animation, so the entire page below the
+   new section replayed its fade from opacity 0. With sections resolving on
+   every poll and refetch, that is the page-wide blink.
+
+   `data-entered` is stamped on by StaggerSettle once the longest delay
+   (295ms) plus the animation (220ms) has elapsed. After that, anything that
+   appears simply appears. */
+.stagger-fade[data-entered] > * {
+  opacity: 1;
+  transform: none;
+  animation: none;
+}
+
+.stagger-fade > *:nth-child(1)  { animation-delay: 20ms; }
+.stagger-fade > *:nth-child(2)  { animation-delay: 45ms; }
+.stagger-fade > *:nth-child(3)  { animation-delay: 70ms; }
+.stagger-fade > *:nth-child(4)  { animation-delay: 95ms; }
+.stagger-fade > *:nth-child(5)  { animation-delay: 120ms; }
+.stagger-fade > *:nth-child(6)  { animation-delay: 145ms; }
+.stagger-fade > *:nth-child(7)  { animation-delay: 170ms; }
+.stagger-fade > *:nth-child(8)  { animation-delay: 195ms; }
+.stagger-fade > *:nth-child(9)  { animation-delay: 220ms; }
+.stagger-fade > *:nth-child(10) { animation-delay: 245ms; }
+.stagger-fade > *:nth-child(11) { animation-delay: 270ms; }
+.stagger-fade > *:nth-child(12) { animation-delay: 295ms; }
+
+.news-grid-stagger > * {
+  opacity: 0;
+  transform: translateY(8px);
+  animation: stagger-fade-in 230ms var(--ease-smooth) forwards;
+}
+.news-grid-stagger > *:nth-child(1) { animation-delay: 20ms; }
+.news-grid-stagger > *:nth-child(2) { animation-delay: 45ms; }
+.news-grid-stagger > *:nth-child(3) { animation-delay: 70ms; }
+.news-grid-stagger > *:nth-child(4) { animation-delay: 95ms; }
+.news-grid-stagger > *:nth-child(5) { animation-delay: 120ms; }
+.news-grid-stagger > *:nth-child(6) { animation-delay: 145ms; }
+.news-grid-stagger > *:nth-child(7) { animation-delay: 170ms; }
+.news-grid-stagger > *:nth-child(8) { animation-delay: 195ms; }
+.news-grid-stagger > *:nth-child(9) { animation-delay: 220ms; }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   NEWS CARDS
+───────────────────────────────────────────────────────────────────────── */
+
+.news-card {
+  transition-property: transform, box-shadow, border-color, background-color;
+  transition-duration: 160ms;
+  transition-timing-function: var(--ease-smooth);
+}
+
+.news-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 16px 32px rgba(19, 27, 54, 0.09);
+  border-color: hsl(var(--accent) / 0.35);
+}
+
+.dark .news-card:hover {
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.35);
+}
+
+.news-image-fallback {
+  background:
+    linear-gradient(135deg, rgba(245, 143, 51, 0.12), rgba(28, 167, 120, 0.08)),
+    hsl(var(--panel));
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   MARKET TICKER
+───────────────────────────────────────────────────────────────────────── */
+
+.ticker-shell {
+  overflow: hidden;
+  position: relative;
+}
+
+.ticker-shell::before,
+.ticker-shell::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 48px;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.ticker-shell::before {
+  left: 0;
+  background: linear-gradient(to right, hsl(var(--bg) / 0.95), transparent);
+}
+
+.ticker-shell::after {
+  right: 0;
+  background: linear-gradient(to left, hsl(var(--bg) / 0.95), transparent);
+}
+
+.ticker-track {
+  display: inline-flex;
+  min-width: max-content;
+  white-space: nowrap;
+  animation: ticker-scroll 24s linear infinite;
+  will-change: transform;
+}
+
+.ticker-shell:hover .ticker-track { animation-play-state: paused; }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   COMPONENT SCROLLBARS
+───────────────────────────────────────────────────────────────────────── */
+
+.brokerage-scroll,
+.search-scroll,
+.company-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--border)) transparent;
+}
+
+.brokerage-scroll::-webkit-scrollbar,
+.search-scroll::-webkit-scrollbar,
+.company-scroll::-webkit-scrollbar { width: 5px; }
+
+.brokerage-scroll::-webkit-scrollbar-track,
+.search-scroll::-webkit-scrollbar-track,
+.company-scroll::-webkit-scrollbar-track { background: transparent; }
+
+.brokerage-scroll::-webkit-scrollbar-thumb,
+.search-scroll::-webkit-scrollbar-thumb,
+.company-scroll::-webkit-scrollbar-thumb {
+  background: hsl(var(--border));
+  border-radius: 9999px;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   KEYFRAMES
+───────────────────────────────────────────────────────────────────────── */
+
+@keyframes ticker-scroll {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+@keyframes smooth-panel-enter {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes page-fade-in {
+  from { opacity: 0.01; }
+  to   { opacity: 1; }
+}
+
+@keyframes header-enter {
+  from { opacity: 0; transform: translateY(-10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes page-content-enter {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes stagger-fade-in {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Same entrance, no vertical travel — used during route changes so content
+   doesn't shift while <main> is already animating. */
+@keyframes stagger-fade-in-place {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes route-progress-fill {
+  0% { transform: scaleX(0.08); }
+  55% { transform: scaleX(0.72); }
+  100% { transform: scaleX(1); }
+}
+
+@keyframes route-glow-slide {
+  0% { opacity: 0; transform: translate(-10%, -8px); }
+  35% { opacity: 1; }
+  100% { opacity: 0; transform: translate(145%, -8px); }
+}
+
+@keyframes route-soft-settle {
+  from {
+    opacity: 0.88;
+    transform: translateY(4px);
+    filter: saturate(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: saturate(1);
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   MOBILE
+───────────────────────────────────────────────────────────────────────── */
+
+@media (max-width: 639px) {
+  .ticker-track { animation-duration: 38s; }
+  .overflow-auto { -webkit-overflow-scrolling: touch; }
+  html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+  .hero-orb { display: none; }
+  .dark body::before { opacity: 0.5; }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   REDUCED MOTION
+───────────────────────────────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .route-progress { display: none; }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
