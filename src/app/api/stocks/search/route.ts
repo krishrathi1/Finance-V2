@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { UNIVERSE } from "@/server/market/universe";
+import { DIRECTORY, resolveStock } from "@/server/market/universe";
 
 export const dynamic = "force-dynamic";
 
@@ -9,18 +9,31 @@ export async function GET(req: NextRequest) {
     if (q.length < 1) {
       return NextResponse.json({ success: true, data: [], updatedAt: new Date().toISOString() });
     }
-    const results = UNIVERSE.filter(
-      (s) => s.s.toLowerCase().includes(q) || s.n.toLowerCase().includes(q)
+
+    // Search across the full NSE + BSE directory (curated + extended entries).
+    // Rank: symbol/name starts-with first, then larger market caps.
+    const matches = DIRECTORY.filter(
+      (e) => e.s.toLowerCase().includes(q) || e.n.toLowerCase().includes(q)
     )
+      .map((e) => {
+        const seed = resolveStock(e.s);
+        return {
+          symbol: e.s,
+          name: e.n,
+          sector: e.sec,
+          exchange: e.ex,
+          mc: seed?.mc ?? 0,
+          starts: e.s.toLowerCase().startsWith(q) || e.n.toLowerCase().startsWith(q),
+        };
+      })
       .sort((a, b) => {
-        const aStarts = a.s.toLowerCase().startsWith(q);
-        const bStarts = b.s.toLowerCase().startsWith(q);
-        if (aStarts !== bStarts) return aStarts ? -1 : 1;
+        if (a.starts !== b.starts) return a.starts ? -1 : 1;
         return b.mc - a.mc;
       })
       .slice(0, 12)
-      .map((s) => ({ symbol: s.s, name: s.n, sector: s.sec, exchange: "NSE" }));
-    return NextResponse.json({ success: true, data: results, updatedAt: new Date().toISOString() });
+      .map(({ mc: _mc, starts: _starts, ...rest }) => rest);
+
+    return NextResponse.json({ success: true, data: matches, updatedAt: new Date().toISOString() });
   } catch (err) {
     console.error("[api/stocks/search]", err);
     return NextResponse.json({ success: false, error: "Search failed" }, { status: 500 });

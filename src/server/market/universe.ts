@@ -1,5 +1,12 @@
 // Curated universe of ~150 NSE-listed companies with realistic approximate
 // fundamentals. The engine walks prices deterministically around these anchors.
+//
+// Extended A–Z coverage: stocks from the NSE+BSE directory (directory.ts)
+// outside this curated set resolve through resolveStock() to deterministic
+// synthesized seeds (synth.ts) — every listed company is browsable.
+
+import { RAW_DIRECTORY_BY_SYMBOL, DirectoryEntry } from "./directory";
+import { synthesizeSeed } from "./synth";
 
 export interface StockSeed {
   s: string; // symbol
@@ -22,6 +29,7 @@ export interface StockSeed {
   v: number; // volatility factor
   d: number; // drift bias (annual, e.g. 0.12 = +12%)
   n50?: boolean; // NIFTY 50 member
+  ex?: "NSE" | "BSE"; // primary exchange tag (defaults to NSE)
 }
 
 export const UNIVERSE: StockSeed[] = [
@@ -227,7 +235,50 @@ export const UNIVERSE_BY_SYMBOL: Record<string, StockSeed> = Object.fromEntries(
 
 export const SECTORS = [...new Set(UNIVERSE.map((s) => s.sec))].sort();
 
+/**
+ * Full A–Z directory: curated universe (tagged NSE) + hand-curated NSE/BSE
+ * directory entries, deduped by symbol (curated wins). Sorted A–Z by symbol.
+ */
+export const DIRECTORY: DirectoryEntry[] = (() => {
+  const seen = new Set<string>();
+  const merged: DirectoryEntry[] = UNIVERSE.map((s) => ({
+    s: s.s,
+    n: s.n,
+    sec: s.sec,
+    ex: "NSE" as const,
+  }));
+  for (const s of merged) seen.add(s.s);
+  for (const e of Object.values(RAW_DIRECTORY_BY_SYMBOL)) {
+    if (!seen.has(e.s)) {
+      merged.push(e);
+      seen.add(e.s);
+    }
+  }
+  return merged.sort((a, b) => a.s.localeCompare(b.s));
+})();
+
+export const DIRECTORY_COUNTS = {
+  NSE: DIRECTORY.filter((e) => e.ex === "NSE").length,
+  BSE: DIRECTORY.filter((e) => e.ex === "BSE").length,
+  total: DIRECTORY.length,
+};
+
+/**
+ * Resolve any known symbol to a StockSeed: curated seeds win, directory
+ * entries get deterministic synthesized fundamentals. Returns undefined for
+ * unknown symbols.
+ */
+export function resolveStock(symbol: string): StockSeed | undefined {
+  const upper = symbol?.toUpperCase();
+  if (!upper) return undefined;
+  const curated = UNIVERSE_BY_SYMBOL[upper];
+  if (curated) return curated;
+  const entry = RAW_DIRECTORY_BY_SYMBOL[upper];
+  if (entry) return synthesizeSeed(entry);
+  return undefined;
+}
+
 export function findStock(symbol: string): StockSeed | undefined {
   const upper = symbol?.toUpperCase();
-  return UNIVERSE_BY_SYMBOL[upper] ?? UNIVERSE.find((s) => s.n.toUpperCase() === upper);
+  return resolveStock(upper) ?? UNIVERSE.find((s) => s.n.toUpperCase() === upper);
 }

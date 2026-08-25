@@ -72,6 +72,30 @@ export interface SearchResult {
   exchange: string;
 }
 
+/** One row in the Stocks A–Z directory (NSE + BSE). */
+export interface DirectoryRow {
+  symbol: string;
+  name: string;
+  sector: string;
+  exchange: "NSE" | "BSE";
+  price: number;
+  change: number;
+  changePercent: number;
+  marketCapCr: number;
+}
+
+/** Payload of GET /api/stocks/directory. */
+export interface DirectoryData {
+  rows: DirectoryRow[];
+  /** total rows matching the current filters (pre-pagination). */
+  total: number;
+  /** rows per first-letter ("A"…"Z", "#") for the current exchange/sector/q filters. */
+  letterCounts: Record<string, number>;
+  exchangeCounts: { NSE: number; BSE: number; total: number };
+  /** distinct sectors available for the current exchange filter. */
+  sectors: string[];
+}
+
 export interface PricePoint {
   date: string;
   close: number;
@@ -328,6 +352,7 @@ export interface PriceAlert {
 export type ViewKey =
   | "home"
   | "stock"
+  | "directory"
   | "screener"
   | "watchlist"
   | "portfolio"

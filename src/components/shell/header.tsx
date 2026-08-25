@@ -9,6 +9,7 @@ import {
   GitCompareArrows,
   Heart,
   Home,
+  Library,
   Menu,
   Moon,
   SlidersHorizontal,
@@ -23,6 +24,7 @@ import { cn } from "@/lib/utils";
 
 const NAV_ITEMS: { view: ViewKey; label: string; icon: React.ElementType }[] = [
   { view: "home", label: "Home", icon: Home },
+  { view: "directory", label: "Stocks A–Z", icon: Library },
   { view: "screener", label: "Screener", icon: SlidersHorizontal },
   { view: "watchlist", label: "Watchlist", icon: Heart },
   { view: "portfolio", label: "Portfolio", icon: Wallet },
@@ -117,7 +119,7 @@ export function Header() {
         </button>
 
         {/* Desktop nav */}
-        <nav className="hidden gap-1 lg:flex" aria-label="Primary">
+        <nav className="hidden gap-1 xl:flex" aria-label="Primary">
           {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
             const active = view === item.view;
@@ -147,7 +149,7 @@ export function Header() {
           <ThemeToggle />
 
           {/* Mobile hamburger */}
-          <div className="lg:hidden">
+          <div className="xl:hidden">
             <button
               type="button"
               onClick={() => setMenuOpen((v) => !v)}

@@ -7,6 +7,7 @@ import { MarketTicker } from "@/components/shell/market-ticker";
 import { Footer } from "@/components/shell/footer";
 import { HomeView } from "@/components/home/home-view";
 import { StockView } from "@/components/stock/stock-view";
+import { DirectoryView } from "@/components/directory/directory-view";
 import { ScreenerView } from "@/components/screener/screener-view";
 import { CompareView } from "@/components/compare/compare-view";
 import { IpoView } from "@/components/ipo/ipo-view";
@@ -30,6 +31,7 @@ export default function Page() {
       <main className="mx-auto w-full max-w-[1640px] flex-1 px-3 py-6 sm:px-4 sm:py-8">
         {view === "home" && <HomeView />}
         {view === "stock" && <StockView />}
+        {view === "directory" && <DirectoryView />}
         {view === "screener" && <ScreenerView />}
         {view === "compare" && <CompareView />}
         {view === "ipo" && <IpoView />}

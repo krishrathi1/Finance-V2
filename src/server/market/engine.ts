@@ -5,7 +5,7 @@
 // price (so valuations stay plausible), and tick intraday while the market
 // is open.
 
-import { UNIVERSE, UNIVERSE_BY_SYMBOL, StockSeed } from "./universe";
+import { UNIVERSE, UNIVERSE_BY_SYMBOL, StockSeed, resolveStock } from "./universe";
 import {
   hashString,
   mulberry32,
@@ -64,7 +64,7 @@ function marketFactor(dayIndex: number): number {
 const seriesCache = new Map<string, { dayKey: string; series: PricePoint[] }>();
 
 export function getSeries(symbol: string): PricePoint[] {
-  const seed = UNIVERSE_BY_SYMBOL[symbol];
+  const seed = resolveStock(symbol);
   if (!seed) return [];
   const todayKey = istDateKey();
   const cached = seriesCache.get(symbol);
@@ -126,6 +126,11 @@ export function getSeries(symbol: string): PricePoint[] {
     cursor.setDate(cursor.getDate() + 1);
   }
 
+  if (seriesCache.size > 450) {
+    // bound memory while browsing the full A–Z directory: drop oldest entries
+    const firstKey = seriesCache.keys().next().value;
+    if (firstKey !== undefined) seriesCache.delete(firstKey);
+  }
   seriesCache.set(symbol, { dayKey: todayKey, series });
   return series;
 }
@@ -157,7 +162,7 @@ export interface LiveQuote {
 const quoteCache = new Map<string, { bucket: string; quote: LiveQuote }>();
 
 export function getLiveQuote(symbol: string): LiveQuote | null {
-  const seed = UNIVERSE_BY_SYMBOL[symbol];
+  const seed = resolveStock(symbol);
   const series = getSeries(symbol);
   if (!seed || series.length === 0) return null;
 

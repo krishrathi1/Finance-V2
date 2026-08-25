@@ -8,6 +8,7 @@ import { MarketStatusBadge } from "@/components/shared/market-status";
 import { BrandMark } from "./header";
 
 const TOOL_LINKS: { label: string; view: ViewKey }[] = [
+  { label: "Stocks A–Z (NSE + BSE)", view: "directory" },
   { label: "Stock Screener", view: "screener" },
   { label: "Watchlist", view: "watchlist" },
   { label: "Portfolio Doctor", view: "portfolio" },

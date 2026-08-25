@@ -1,7 +1,7 @@
 // Deterministic market news generator — realistic Indian market headlines
 // seeded per day, rotating companies, sectors and outcomes.
 
-import { UNIVERSE, UNIVERSE_BY_SYMBOL, StockSeed } from "./universe";
+import { UNIVERSE, UNIVERSE_BY_SYMBOL, StockSeed, resolveStock } from "./universe";
 import { mulberry32, hashString, istDateKey, istNow } from "./rng";
 import { getLiveQuote } from "./engine";
 
@@ -149,7 +149,7 @@ export function getMarketNews(count = 18): NewsItem[] {
 }
 
 export function computeNewsForStock(symbol: string): NewsItem[] {
-  const seed = UNIVERSE_BY_SYMBOL[symbol];
+  const seed = resolveStock(symbol);
   if (!seed) return [];
   const dayKey = istDateKey();
   const rand = mulberry32(hashString(`stocknews-${symbol}-${dayKey}`));

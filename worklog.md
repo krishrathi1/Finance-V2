@@ -171,3 +171,42 @@ Work Log:
 
 Stage Summary:
 - App complete and browser-verified end-to-end. All 8 views + AI features + persistence working.
+
+---
+Task ID: 7-b
+Agent: UI Agent F (directory)
+Task: Stocks A–Z NSE+BSE directory browser view (letter rail, exchange/sector/search filters, paginated card grid, 30s silent price refresh)
+
+Work Log:
+- Created EXACTLY ONE file: src/components/directory/directory-view.tsx ("use client", exports DirectoryView, no props). No other file touched.
+- Fetch layer: apiGet<DirectoryData>("/api/stocks/directory?letter&exchange&sector&q&limit=60&offset=…"); when committed query is non-empty it sends letter=ALL (backend ignores letter during search). Single stable useCallback fetchPage(mode) with mode "replace" | "append" | "silent", request-id ref discards stale responses, inFlight ref keeps silent polls from invalidating an in-flight user load (no stranded spinners).
+- Polling pattern (per contract): usePolling(fn, 30000) captures mount-time fn → latest fetcher kept in fetcherRef (render-time assignment); firstPollRef makes the mount call a full load (skeleton) and interval calls silent price refreshes that merge prices in-place over current rows (pagination cursor untouched; also self-heals a failed first load). ALL filter fetches fire directly in event handlers (letter/exchange/sector/search-debounce/load-more/clear/retry) — the only useEffect is a debounce-timer cleanup, so react-hooks/set-state-in-effect stays clean.
+- Filters: exchange segmented toggle (All/NSE/BSE, aria-pressed, brand active), 250ms-debounced search input (Search icon, cancels pending debounce on letter click/clear), sector shadcn Select fed by response sectors with "all" sentinel (matches screener pattern) and reset to "" on exchange change. filter state mirrored into filtersRef (render-time) + updated synchronously in handlers so immediate fetches read fresh values.
+- Letter rail: A–Z + "#" 44px squares in wrapping flex, per-letter count as tiny absolute badge (99+ cap) from letterCounts, count-0 letters disabled (opacity-40), active = brand bg (deactivated while search is active), click resets offset + exits search mode.
+- Results: sub-header (`Search "q" · N matches` vs `Letter "L" · N companies` + "Showing X of Y"), responsive grid cols 1/2/3/4 gap-3, row cards are <button> → openStock(symbol) with symbol + exchange chip (NSE brand-tint / BSE emerald — no blue/indigo), truncated name, uppercase sector, fmtInr price + ChangePill xs, fmtCr market cap, hover border-brand/40 + -translate-y-0.5. Load-more brand outline button appends pages (offset += 60, dedupe by symbol) with Loader2 spinner; shimmer skeleton grid while first paint; error card w/ Retry; SearchX dashed empty state w/ context-aware message + Clear filters. Last successful meta (rail counts/exchangeCounts/sectors) is never blanked during loads.
+- Icons: lucide only — LibraryBig (spec said Library2 but lucide-react 0.525 dropped numbered aliases; LibraryBig is its direct rename), Search, SearchX, Loader2, ChevronDown, RotateCcw, AlertTriangle.
+- Verified: `bunx tsc --noEmit` → 0 errors project-wide (grep directory-view: empty); `bun run lint` + targeted `bunx eslint src/components/directory/directory-view.tsx` → 0 errors/warnings. API route not smoke-tested (lead building it in parallel) — compile-verified against the contract only.
+
+Stage Summary:
+- Exports: DirectoryView (src/components/directory/directory-view.tsx)
+- Integration for lead: render when useApp().view === "directory" — e.g. `view === "directory" && <DirectoryView />` in page.tsx switcher; no props needed, self-contained states (skeleton/error/empty handled internally). Consumes only apiGet, useApp().openStock, usePolling, fmtInr/fmtCr + DirectoryData/DirectoryRow types (already in types.ts) and shared SectionHeading/ChangePill. Query params sent: letter (A–Z|#|ALL), exchange (ALL|NSE|BSE), sector, q, limit=60, offset. Note: during active search letter is sent as "ALL" and the UI switches to a "search results" header instead of the letter grouping header.
+
+---
+Task ID: 7-a
+Agent: lead (main)
+Task: Stocks A–Z directory backend — full NSE + BSE dataset, deterministic seed resolver, directory API, search extension
+
+Work Log:
+- Read the uploaded Finance-V2 zip (extracted at upload/extracted/Finance-V2-main) — its universe.ts holds only ~100 curated NSE symbols; no BSE coverage anywhere. Interpreted the user request ("all the stocks in the nav bar from a to z for all nse and bse") as a complete A–Z NSE+BSE directory surfaced from the navbar.
+- src/server/market/directory.ts (NEW) — hand-curated dataset of 326 additional real listed companies (257 NSE + 69 BSE-tagged), every letter A–Z covered (X: XPROINDIA, Q: QUESS/QUICKHEAL, #: 3MINDIA/5PAISA/63MOONS). Sector labels reuse the 11 canonical universe sectors.
+- src/server/market/synth.ts (NEW) — synthesizeSeed(entry): deterministic fundamentals (mcap log-uniform ₹120–45,000 Cr, PE/PB/ROE/ROCE/D-E/holdings/dy/growth/vol/drift, sector-mapped industry) seeded by hashString(symbol), cached.
+- universe.ts — StockSeed gains `ex?: "NSE" | "BSE"`; DIRECTORY export = curated 173 (tagged NSE) + RAW_DIRECTORY deduped by symbol (curated wins) → 523 unique companies; DIRECTORY_COUNTS; resolveStock(symbol) = curated ?? synthesized directory seed; findStock() now resolves directory symbols too (watchlist/portfolio/alerts/AI routes automatically accept them).
+- engine.ts — getSeries/getLiveQuote resolve via resolveStock (any directory stock gets full 5Y deterministic OHLCV + live quote); seriesCache bounded at 450 entries (oldest evicted).
+- news.ts — computeNewsForStock resolves directory stocks. dashboard.ts — exchange badge = seed.ex ?? "NSE" (BSE stocks display "BSE EQUITY").
+- NEW /api/stocks/directory — letter (A–Z/#), exchange (ALL/NSE/BSE), sector, q (bypasses letter), limit/offset pagination; returns rows w/ live quote price/change/mcap + letterCounts + exchangeCounts + sectors. ~10–350ms.
+- /api/stocks/search — now searches the full 523-company directory (startsWith + mcap ranking, exchange tag in results).
+- Shell wiring: header.tsx nav gains "Stocks A–Z" (Library icon; desktop pills moved to xl breakpoint to fit 8 items), mobile menu included; page.tsx renders DirectoryView; footer Research Tools gains "Stocks A–Z (NSE + BSE)".
+
+Stage Summary:
+- 523 companies browsable A–Z across NSE (454) + BSE (69); every row clickable into a full dashboard (quote/chart/scores/forensics/financials/news/AI) via deterministic synthesis.
+- Verified: tsc clean, eslint clean, all API routes 200 (directory, search, [symbol], chart, watchlist POST/DELETE with BSE symbol), zero console/page errors in agent-browser E2E.

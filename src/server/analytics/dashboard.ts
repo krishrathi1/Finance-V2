@@ -25,7 +25,7 @@ export interface StockDashboard {
   companyName: string;
   sector: string;
   industry: string;
-  exchange: "NSE";
+  exchange: "NSE" | "BSE";
   quote: LiveQuote;
   profile: {
     incorporationYear: number;
@@ -124,7 +124,7 @@ export function loadDashboard(symbol: string): StockDashboard | null {
     companyName: seed.n,
     sector: seed.sec,
     industry: seed.ind,
-    exchange: "NSE",
+    exchange: seed.ex ?? "NSE",
     quote,
     profile: {
       incorporationYear: 1950 + Math.floor(rand() * 60),

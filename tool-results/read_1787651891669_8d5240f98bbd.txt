@@ -1,0 +1,1021 @@
+     1→"use client";
+     2→
+     3→import { useCallback, useEffect, useRef, useState } from "react";
+     4→import { motion } from "framer-motion";
+     5→import {
+     6→  ArrowRight,
+     7→  BarChart3,
+     8→  GitCompareArrows,
+     9→  Heart,
+    10→  Newspaper,
+    11→  ShieldCheck,
+    12→  SlidersHorizontal,
+    13→  Sparkles,
+    14→  TrendingDown,
+    15→  TrendingUp,
+    16→  Wallet,
+    17→} from "lucide-react";
+    18→import { Badge } from "@/components/ui/badge";
+    19→import { apiGet } from "@/lib/api";
+    20→import { useApp, usePolling } from "@/lib/store";
+    21→import {
+    22→  fmtInr,
+    23→  fmtPct,
+    24→  timeAgo,
+    25→  type IndexQuote,
+    26→  type MarketOverview,
+    27→  type NewsItem,
+    28→  type ViewKey,
+    29→} from "@/lib/types";
+    30→import { ChangePill } from "@/components/shared/change-pill";
+    31→import { SectionHeading } from "@/components/shared/section-heading";
+    32→import { StockSearch } from "@/components/shared/stock-search";
+    33→import { cn } from "@/lib/utils";
+    34→
+    35→// ── local payload types ──────────────────────────────────────────────────
+    36→
+    37→type MoverRow = MarketOverview["movers"]["gainers"][number];
+    38→type MoodState = MarketOverview["mood"];
+    39→
+    40→interface HeatmapRow {
+    41→  symbol: string;
+    42→  name: string;
+    43→  price: number;
+    44→  changePercent: number;
+    45→  marketCapCr: number;
+    46→}
+    47→
+    48→interface HeatmapPayload {
+    49→  index: IndexQuote | null;
+    50→  rows: HeatmapRow[];
+    51→  indexName?: string;
+    52→  updatedAt?: string;
+    53→}
+    54→
+    55→// ── static content ───────────────────────────────────────────────────────
+    56→
+    57→const HERO_TAGS = [
+    58→  "Smart Score",
+    59→  "Forensic M-Score",
+    60→  "Portfolio Doctor",
+    61→  "Live Heatmap",
+    62→  "AI Reports",
+    63→  "Earnings TL;DR",
+    64→];
+    65→
+    66→const SPOTLIGHT_PILLARS = [
+    67→  {
+    68→    icon: BarChart3,
+    69→    title: "Research Stack",
+    70→    desc: "Fundamentals, technicals, news and AI context in one workflow.",
+    71→  },
+    72→  {
+    73→    icon: ShieldCheck,
+    74→    title: "Decision Support",
+    75→    desc: "Risk scoring, forensic flags and scenario tools.",
+    76→  },
+    77→  {
+    78→    icon: Newspaper,
+    79→    title: "Live Surface",
+    80→    desc: "Breadth, movers and breaking news without context switching.",
+    81→  },
+    82→];
+    83→
+    84→const FEATURE_CARDS: {
+    85→  view: ViewKey;
+    86→  icon: React.ElementType;
+    87→  title: string;
+    88→  desc: string;
+    89→  badge: string;
+    90→  gradient: string;
+    91→  surface: string;
+    92→  points: string[];
+    93→}[] = [
+    94→  {
+    95→    view: "screener",
+    96→    icon: SlidersHorizontal,
+    97→    title: "Stock Screener",
+    98→    desc: "Scan the full NSE universe by fundamentals, risk and momentum.",
+    99→    badge: "50+ filters",
+   100→    gradient: "from-violet-500 via-fuchsia-500 to-orange-400",
+   101→    surface: "from-violet-500/10 via-fuchsia-500/10 to-orange-400/10",
+   102→    points: ["Multi-factor scans", "Fast shortlist building"],
+   103→  },
+   104→  {
+   105→    view: "watchlist",
+   106→    icon: Heart,
+   107→    title: "Watchlist",
+   108→    desc: "Track the stocks you care about with live prices and notes.",
+   109→    badge: "Live tracking",
+   110→    gradient: "from-rose-500 via-pink-500 to-orange-400",
+   111→    surface: "from-rose-500/10 via-pink-500/10 to-orange-400/10",
+   112→    points: ["Instant alerts", "Priority monitoring"],
+   113→  },
+   114→  {
+   115→    view: "compare",
+   116→    icon: GitCompareArrows,
+   117→    title: "Compare Stocks",
+   118→    desc: "Head-to-head fundamentals, risk scores and AI context.",
+   119→    badge: "AI context",
+   120→    gradient: "from-cyan-500 via-teal-400 to-emerald-400",
+   121→    surface: "from-cyan-500/10 via-teal-400/10 to-emerald-400/10",
+   122→    points: ["Side-by-side metrics", "Faster decisions"],
+   123→  },
+   124→  {
+   125→    view: "portfolio",
+   126→    icon: Wallet,
+   127→    title: "Portfolio Doctor",
+   128→    desc: "Health-check your holdings with live P&L and risk signals.",
+   129→    badge: "Risk signals",
+   130→    gradient: "from-amber-500 via-orange-500 to-red-400",
+   131→    surface: "from-amber-500/10 via-orange-500/10 to-red-400/10",
+   132→    points: ["P&L visibility", "Portfolio health check"],
+   133→  },
+   134→];
+   135→
+   136→const INDEX_TABS: { value: string; label: string }[] = [
+   137→  { value: "NIFTY50", label: "NIFTY 50" },
+   138→  { value: "SENSEX", label: "SENSEX" },
+   139→  { value: "NIFTYBANK", label: "BANK" },
+   140→  { value: "NIFTYIT", label: "IT" },
+   141→  { value: "NIFTYFMCG", label: "FMCG" },
+   142→  { value: "NIFTYPSE", label: "PSU" },
+   143→];
+   144→
+   145→const HEAT_LEGEND: { label: string; swatch: string }[] = [
+   146→  { label: ">+5%", swatch: "bg-success" },
+   147→  { label: "+2–5%", swatch: "bg-success/85" },
+   148→  { label: "+0.4–2%", swatch: "bg-success/65" },
+   149→  { label: "±0.4%", swatch: "border border-border/60 bg-panel" },
+   150→  { label: "-0.4–2%", swatch: "bg-danger/60" },
+   151→  { label: "-2–5%", swatch: "bg-danger/80" },
+   152→  { label: "<-5%", swatch: "bg-danger" },
+   153→];
+   154→
+   155→const NEWS_STYLES = [
+   156→  "from-orange-500/30 via-amber-500/20",
+   157→  "from-emerald-500/30 via-teal-500/20",
+   158→  "from-rose-500/30 via-pink-500/20",
+   159→  "from-violet-500/30 via-fuchsia-500/20",
+   160→  "from-lime-500/30 via-emerald-500/20",
+   161→  "from-amber-500/30 via-orange-400/20",
+   162→];
+   163→
+   164→function newsStyle(category: string): string {
+   165→  const hash = category.split("").reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
+   166→  return NEWS_STYLES[hash % NEWS_STYLES.length];
+   167→}
+   168→
+   169→function sentimentDot(sentiment: number): string {
+   170→  if (sentiment > 0.65) return "bg-success";
+   171→  if (sentiment < 0.4) return "bg-danger";
+   172→  return "bg-warn";
+   173→}
+   174→
+   175→function heatTileClass(pct: number): string {
+   176→  if (pct > 5) return "bg-success";
+   177→  if (pct > 2) return "bg-success/85";
+   178→  if (pct > 0.4) return "bg-success/65";
+   179→  if (pct > -0.4) return "border border-border/60 bg-panel";
+   180→  if (pct > -2) return "bg-danger/60";
+   181→  if (pct > -5) return "bg-danger/80";
+   182→  return "bg-danger";
+   183→}
+   184→
+   185→// ── main view ────────────────────────────────────────────────────────────
+   186→
+   187→export function HomeView() {
+   188→  const [overview, setOverview] = useState<MarketOverview | null>(null);
+   189→  const [news, setNews] = useState<NewsItem[]>([]);
+   190→
+   191→  const loadOverview = useCallback(async () => {
+   192→    try {
+   193→      setOverview(await apiGet<MarketOverview>("/api/market/overview"));
+   194→    } catch {
+   195→      // keep last snapshot
+   196→    }
+   197→  }, []);
+   198→
+   199→  const loadNews = useCallback(async () => {
+   200→    try {
+   201→      setNews(await apiGet<NewsItem[]>("/api/market/news"));
+   202→    } catch {
+   203→      // keep last snapshot
+   204→    }
+   205→  }, []);
+   206→
+   207→  usePolling(loadOverview, 30000);
+   208→  usePolling(loadNews, 120000);
+   209→
+   210→  if (!overview) {
+   211→    return <HomeSkeleton />;
+   212→  }
+   213→
+   214→  const newestNews = news.length
+   215→    ? news.reduce((a, b) => (new Date(a.publishedAt) > new Date(b.publishedAt) ? a : b))
+   216→    : null;
+   217→
+   218→  return (
+   219→    <div className="stagger-fade space-y-8 sm:space-y-10">
+   220→      <HeroSection overview={overview} />
+   221→
+   222→      {/* b) Market stats bar */}
+   223→      <section aria-label="Index snapshot">
+   224→        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+   225→          {overview.indices.map((idx) => (
+   226→            <article
+   227→              key={idx.symbol}
+   228→              className="stat-card rounded-2xl border border-border/50 bg-panel/60 p-4 backdrop-blur-sm"
+   229→            >
+   230→              <p className="truncate text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+   231→                {idx.name}
+   232→              </p>
+   233→              <p className="mt-1 font-display text-lg font-bold tabular-nums text-text">
+   234→                {idx.price.toLocaleString("en-IN")}
+   235→              </p>
+   236→              <div className="mt-1">
+   237→                <ChangePill value={idx.changePercent} size="xs" withValue={idx.change} />
+   238→              </div>
+   239→            </article>
+   240→          ))}
+   241→          <article className="stat-card rounded-2xl border border-border/50 bg-panel/60 p-4 backdrop-blur-sm">
+   242→            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+   243→              Market Breadth
+   244→            </p>
+   245→            <p className="mt-1.5 text-sm font-semibold tabular-nums">
+   246→              <span className="text-success">{overview.stats.advancing} ▲</span>
+   247→              <span className="text-muted-foreground"> / </span>
+   248→              <span className="text-danger">{overview.stats.declining} ▼</span>
+   249→            </p>
+   250→            <p className="mt-1 text-xs tabular-nums text-muted-foreground">
+   251→              Avg {fmtPct(overview.stats.averageChange)}
+   252→            </p>
+   253→          </article>
+   254→        </div>
+   255→      </section>
+   256→
+   257→      {/* c) Feature cards */}
+   258→      <section aria-label="Research shortcuts">
+   259→        <SectionHeading kicker="Quick Access" title="Research Shortcuts" />
+   260→        <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(240px,1fr))]">
+   261→          {FEATURE_CARDS.map((card) => (
+   262→            <FeatureCard key={card.view} card={card} />
+   263→          ))}
+   264→        </div>
+   265→      </section>
+   266→
+   267→      {/* d) Mood + movers */}
+   268→      <section className="grid gap-4 lg:grid-cols-[320px_1fr]" aria-label="Market mood and top movers">
+   269→        <MarketMoodCard mood={overview.mood} updatedAt={overview.updatedAt} />
+   270→        <TopMoversCard movers={overview.movers} />
+   271→      </section>
+   272→
+   273→      {/* e) Heatmap */}
+   274→      <HeatmapSection />
+   275→
+   276→      {/* f) News */}
+   277→      <section aria-label="Market news">
+   278→        <SectionHeading
+   279→          kicker="Market News"
+   280→          title="Breaking Market Context"
+   281→          right={
+   282→            newestNews ? (
+   283→              <span className="shrink-0 text-[10px] text-muted-foreground">
+   284→                Updated {timeAgo(newestNews.publishedAt)}
+   285→              </span>
+   286→            ) : undefined
+   287→          }
+   288→        />
+   289→        {news.length === 0 ? (
+   290→          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+   291→            {Array.from({ length: 6 }).map((_, i) => (
+   292→              <div
+   293→                key={i}
+   294→                className="h-56 rounded-[24px] border border-border/50 bg-panel/60 shimmer"
+   295→                aria-hidden="true"
+   296→              />
+   297→            ))}
+   298→          </div>
+   299→        ) : (
+   300→          <div className="news-grid-stagger grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+   301→            {news.slice(0, 6).map((item) => (
+   302→              <NewsCard key={item.id} item={item} />
+   303→            ))}
+   304→          </div>
+   305→        )}
+   306→      </section>
+   307→
+   308→      {/* g) Closing / SEO */}
+   309→      <ClosingSection />
+   310→    </div>
+   311→  );
+   312→}
+   313→
+   314→// ── a) hero ──────────────────────────────────────────────────────────────
+   315→
+   316→function HeroSection({ overview }: { overview: MarketOverview }) {
+   317→  const setView = useApp((s) => s.setView);
+   318→
+   319→  const moodClass =
+   320→    overview.mood.level === "Extreme Greed" || overview.mood.level === "Greed"
+   321→      ? "text-success"
+   322→      : "text-warn";
+   323→
+   324→  return (
+   325→    <section className="gradient-border relative z-30 overflow-visible rounded-[28px] px-5 py-6 sm:px-8 sm:py-10 lg:px-10">
+   326→      {/* backdrop orbs */}
+   327→      <div className="absolute inset-0 overflow-hidden rounded-[inherit]" aria-hidden="true">
+   328→        <div className="hero-orb hero-orb-1" />
+   329→        <div className="hero-orb hero-orb-2" />
+   330→        <div className="hero-orb hero-orb-3" />
+   331→      </div>
+   332→      <div
+   333→        className="absolute inset-x-[18%] top-0 h-px bg-gradient-to-r from-transparent via-white/45 to-transparent"
+   334→        aria-hidden="true"
+   335→      />
+   336→
+   337→      <div className="relative grid gap-8 lg:grid-cols-[minmax(0,1.35fr)_minmax(300px,420px)] lg:items-end">
+   338→        {/* Left column */}
+   339→        <motion.div
+   340→          initial={{ opacity: 0, y: 18 }}
+   341→          animate={{ opacity: 1, y: 0 }}
+   342→          transition={{ duration: 0.5, ease: "easeOut" }}
+   343→        >
+   344→          <span className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-bg/60 px-3 py-1.5 backdrop-blur">
+   345→            <span className="pulse-dot h-2 w-2 rounded-full bg-success" aria-hidden="true" />
+   346→            <span className="text-[10px] font-semibold uppercase tracking-[0.28em] text-brand">
+   347→              Live Indian Equity Intelligence
+   348→            </span>
+   349→          </span>
+   350→
+   351→          <h1 className="mt-5 font-display text-[clamp(2.2rem,5.5vw,4.8rem)] font-bold leading-[0.98] tracking-[-0.04em] text-text">
+   352→            Institutional-grade
+   353→            <span className="block bg-gradient-to-r from-brand via-amber-400 to-orange-400 bg-clip-text text-transparent">
+   354→              stock research
+   355→            </span>
+   356→            <span className="block text-text/90">for Indian markets.</span>
+   357→          </h1>
+   358→
+   359→          <p className="mt-5 max-w-2xl text-sm leading-7 text-muted-foreground sm:text-base">
+   360→            Screen, compare, validate and monitor NSE and BSE ideas with live market context, forensic
+   361→            accounting flags, and AI-assisted research built for daily use.
+   362→          </p>
+   363→
+   364→          <StockSearch className="mt-6 max-w-3xl" />
+   365→
+   366→          <div className="mt-6 flex flex-wrap gap-2">
+   367→            {HERO_TAGS.map((tag) => (
+   368→              <Badge
+   369→                key={tag}
+   370→                variant="secondary"
+   371→                className="border-border/55 bg-bg/65 text-muted-foreground"
+   372→              >
+   373→                {tag}
+   374→              </Badge>
+   375→            ))}
+   376→          </div>
+   377→
+   378→          <div className="mt-7 grid gap-3 sm:grid-cols-3">
+   379→            <div className="stat-card rounded-2xl border border-border/50 bg-panel/60 p-4 backdrop-blur-sm">
+   380→              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+   381→                Coverage
+   382→              </p>
+   383→              <p className="mt-1.5 font-display text-lg font-bold text-brand">
+   384→                {overview.stats.universeCount} NSE stocks
+   385→              </p>
+   386→            </div>
+   387→            <div className="stat-card rounded-2xl border border-border/50 bg-panel/60 p-4 backdrop-blur-sm">
+   388→              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+   389→                Research Modes
+   390→              </p>
+   391→              <p className="mt-1.5 font-display text-lg font-bold text-success">8+</p>
+   392→            </div>
+   393→            <div className="stat-card rounded-2xl border border-border/50 bg-panel/60 p-4 backdrop-blur-sm">
+   394→              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+   395→                Market
+   396→              </p>
+   397→              <p className={cn("mt-1.5 font-display text-lg font-bold", moodClass)}>
+   398→                {overview.mood.level}
+   399→              </p>
+   400→            </div>
+   401→          </div>
+   402→        </motion.div>
+   403→
+   404→        {/* Right spotlight panel */}
+   405→        <motion.aside
+   406→          initial={{ opacity: 0, y: 24 }}
+   407→          animate={{ opacity: 1, y: 0 }}
+   408→          transition={{ duration: 0.5, delay: 0.12, ease: "easeOut" }}
+   409→          className="rounded-[26px] border border-border/55 bg-panel/60 p-4 backdrop-blur-xl sm:p-5"
+   410→        >
+   411→          <div className="flex items-start justify-between gap-3">
+   412→            <div>
+   413→              <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+   414→                Command Center
+   415→              </p>
+   416→              <h2 className="mt-1 font-display text-xl font-bold text-text">
+   417→                Move from signal to conviction.
+   418→              </h2>
+   419→            </div>
+   420→            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-brand/30 bg-brand/10">
+   421→              <Sparkles className="h-4 w-4 text-brand" aria-hidden="true" />
+   422→            </span>
+   423→          </div>
+   424→
+   425→          <div className="mt-4 space-y-2.5">
+   426→            {SPOTLIGHT_PILLARS.map((pillar) => {
+   427→              const Icon = pillar.icon;
+   428→              return (
+   429→                <div
+   430→                  key={pillar.title}
+   431→                  className="rounded-2xl border border-border/45 bg-bg/50 px-4 py-3.5 transition hover:border-brand/30"
+   432→                >
+   433→                  <div className="flex items-start gap-3">
+   434→                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-white/10 to-transparent text-brand">
+   435→                      <Icon className="h-5 w-5" aria-hidden="true" />
+   436→                    </span>
+   437→                    <div className="min-w-0">
+   438→                      <p className="text-sm font-semibold text-text">{pillar.title}</p>
+   439→                      <p className="mt-0.5 text-xs leading-5 text-muted-foreground">{pillar.desc}</p>
+   440→                    </div>
+   441→                  </div>
+   442→                </div>
+   443→              );
+   444→            })}
+   445→          </div>
+   446→
+   447→          <div className="mt-4 flex flex-wrap gap-2.5">
+   448→            <button
+   449→              type="button"
+   450→              onClick={() => setView("screener")}
+   451→              className="shine-btn inline-flex min-h-9 items-center gap-1.5 rounded-full bg-brand px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-brand/25 transition hover:opacity-95 active:scale-95"
+   452→            >
+   453→              Open Screener
+   454→              <ArrowRight className="h-4 w-4" aria-hidden="true" />
+   455→            </button>
+   456→            <button
+   457→              type="button"
+   458→              onClick={() => setView("portfolio")}
+   459→              className="inline-flex min-h-9 items-center gap-1.5 rounded-full border border-border/60 bg-bg/50 px-4 py-2 text-sm font-semibold text-text transition hover:border-brand/40"
+   460→            >
+   461→              Portfolio View
+   462→            </button>
+   463→          </div>
+   464→        </motion.aside>
+   465→      </div>
+   466→    </section>
+   467→  );
+   468→}
+   469→
+   470→// ── c) feature card ──────────────────────────────────────────────────────
+   471→
+   472→function FeatureCard({
+   473→  card,
+   474→}: {
+   475→  card: (typeof FEATURE_CARDS)[number];
+   476→}) {
+   477→  const setView = useApp((s) => s.setView);
+   478→  const Icon = card.icon;
+   479→
+   480→  return (
+   481→    <button
+   482→      type="button"
+   483→      onClick={() => setView(card.view)}
+   484→      className="feature-card group relative isolate w-full cursor-pointer overflow-hidden rounded-[24px] border border-border/60 bg-panel/70 p-5 text-left backdrop-blur-sm"
+   485→    >
+   486→      <span
+   487→        className={cn("absolute inset-0 -z-10 bg-gradient-to-br", card.surface)}
+   488→        aria-hidden="true"
+   489→      />
+   490→      <span className="absolute right-4 top-4 rounded-full border border-border/60 bg-bg/70 px-2.5 py-1 text-[10px] font-semibold text-muted-foreground">
+   491→        {card.badge}
+   492→      </span>
+   493→
+   494→      <span
+   495→        className={cn(
+   496→          "feature-card-icon flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br text-white shadow-xl",
+   497→          card.gradient
+   498→        )}
+   499→      >
+   500→        <Icon className="h-5 w-5" aria-hidden="true" />
+   501→      </span>
+   502→
+   503→      <h3 className="mt-4 font-display text-lg font-bold text-text transition group-hover:text-brand">
+   504→        {card.title}
+   505→      </h3>
+   506→      <p className="mt-1 text-sm leading-6 text-muted-foreground">{card.desc}</p>
+   507→
+   508→      <ul className="mt-3 space-y-1.5">
+   509→        {card.points.map((point) => (
+   510→          <li key={point} className="flex items-center gap-2 text-xs text-text/80">
+   511→            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-brand" aria-hidden="true" />
+   512→            {point}
+   513→          </li>
+   514→        ))}
+   515→      </ul>
+   516→
+   517→      <div className="mt-5 flex items-center justify-between border-t border-border/40 pt-3">
+   518→        <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+   519→          Open Module
+   520→        </span>
+   521→        <span className="inline-flex items-center gap-1 text-xs font-semibold text-brand">
+   522→          Explore
+   523→          <ArrowRight
+   524→            className="h-3.5 w-3.5 transition-transform group-hover:translate-x-1"
+   525→            aria-hidden="true"
+   526→          />
+   527→        </span>
+   528→      </div>
+   529→    </button>
+   530→  );
+   531→}
+   532→
+   533→// ── d) mood + movers ─────────────────────────────────────────────────────
+   534→
+   535→function MarketMoodCard({ mood, updatedAt }: { mood: MoodState; updatedAt: string }) {
+   536→  const angle = -90 + (mood.value / 100) * 180;
+   537→
+   538→  const levelClass =
+   539→    mood.level === "Extreme Greed" || mood.level === "Greed"
+   540→      ? "border-success/40 bg-success/10 text-success"
+   541→      : mood.level === "Neutral"
+   542→        ? "border-warn/40 bg-warn/10 text-warn"
+   543→        : "border-danger/40 bg-danger/10 text-danger";
+   544→
+   545→  return (
+   546→    <article className="rounded-[28px] border border-border/50 bg-panel/60 p-5 backdrop-blur-sm">
+   547→      <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+   548→        Sentiment
+   549→      </p>
+   550→      <h2 className="mt-0.5 font-display text-base font-bold text-text sm:text-lg">
+   551→        Market Mood Index
+   552→      </h2>
+   553→
+   554→      <svg
+   555→        viewBox="0 0 200 110"
+   556→        className="mt-3 w-full"
+   557→        role="img"
+   558→        aria-label={`Market mood ${mood.value} out of 100 — ${mood.level}`}
+   559→      >
+   560→        <defs>
+   561→          <linearGradient id="moodGrad" x1="0" y1="0" x2="1" y2="0">
+   562→            <stop offset="0%" stopColor="hsl(var(--danger))" />
+   563→            <stop offset="50%" stopColor="#eab308" />
+   564→            <stop offset="100%" stopColor="hsl(var(--success))" />
+   565→          </linearGradient>
+   566→        </defs>
+   567→        <path
+   568→          d="M 20 100 A 80 80 0 0 1 180 100"
+   569→          fill="none"
+   570→          stroke="hsl(var(--border))"
+   571→          strokeWidth="14"
+   572→          strokeLinecap="round"
+   573→          opacity="0.45"
+   574→        />
+   575→        <path
+   576→          d="M 20 100 A 80 80 0 0 1 180 100"
+   577→          fill="none"
+   578→          stroke="url(#moodGrad)"
+   579→          strokeWidth="14"
+   580→          strokeLinecap="round"
+   581→        />
+   582→        <line
+   583→          x1="100"
+   584→          y1="100"
+   585→          x2="100"
+   586→          y2="34"
+   587→          stroke="hsl(var(--text))"
+   588→          strokeWidth="3"
+   589→          strokeLinecap="round"
+   590→          style={{ transform: `rotate(${angle}deg)`, transformOrigin: "100px 100px" }}
+   591→        />
+   592→        <circle cx="100" cy="100" r="5.5" fill="hsl(var(--text))" />
+   593→        <circle cx="100" cy="100" r="2" fill="hsl(var(--panel))" />
+   594→      </svg>
+   595→
+   596→      <div className="mt-2 flex items-center justify-between gap-3">
+   597→        <p className="font-display text-3xl font-bold tabular-nums text-text">
+   598→          {mood.value}
+   599→          <span className="text-base font-semibold text-muted-foreground">/100</span>
+   600→        </p>
+   601→        <span
+   602→          className={cn(
+   603→            "inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-bold",
+   604→            levelClass
+   605→          )}
+   606→        >
+   607→          {mood.level}
+   608→        </span>
+   609→      </div>
+   610→
+   611→      <div className="mt-4 flex flex-wrap gap-1.5">
+   612→        <MoodChip label={`Breadth ${mood.advancing}/${mood.declining}`} />
+   613→        <MoodChip label={`Score ${mood.breadthScore}`} />
+   614→        <MoodChip label={`Momentum ${mood.momentumScore}`} />
+   615→        <MoodChip label={timeAgo(updatedAt)} />
+   616→      </div>
+   617→    </article>
+   618→  );
+   619→}
+   620→
+   621→function MoodChip({ label }: { label: string }) {
+   622→  return (
+   623→    <span className="rounded-full border border-border/50 bg-bg/50 px-2.5 py-1 text-[10px] font-medium tabular-nums text-muted-foreground">
+   624→      {label}
+   625→    </span>
+   626→  );
+   627→}
+   628→
+   629→function TopMoversCard({ movers }: { movers: MarketOverview["movers"] }) {
+   630→  const openStock = useApp((s) => s.openStock);
+   631→
+   632→  return (
+   633→    <article className="rounded-[28px] border border-border/50 bg-panel/60 p-5 backdrop-blur-sm">
+   634→      <div className="flex items-center justify-between gap-3">
+   635→        <div>
+   636→          <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+   637→            Live Action
+   638→          </p>
+   639→          <h2 className="mt-0.5 font-display text-base font-bold text-text sm:text-lg">
+   640→            Top Movers
+   641→          </h2>
+   642→        </div>
+   643→        <span className="shrink-0 text-[10px] text-muted-foreground">Refreshed every 30s</span>
+   644→      </div>
+   645→
+   646→      <div className="mt-4 grid gap-4 sm:grid-cols-2 sm:gap-5">
+   647→        <MoverList
+   648→          title="Top Gainers"
+   649→          icon={TrendingUp}
+   650→          iconClass="text-success"
+   651→          rows={movers.gainers}
+   652→          onOpen={openStock}
+   653→        />
+   654→        <MoverList
+   655→          title="Top Losers"
+   656→          icon={TrendingDown}
+   657→          iconClass="text-danger"
+   658→          rows={movers.losers}
+   659→          onOpen={openStock}
+   660→        />
+   661→      </div>
+   662→    </article>
+   663→  );
+   664→}
+   665→
+   666→function MoverList({
+   667→  title,
+   668→  icon: Icon,
+   669→  iconClass,
+   670→  rows,
+   671→  onOpen,
+   672→}: {
+   673→  title: string;
+   674→  icon: React.ElementType;
+   675→  iconClass: string;
+   676→  rows: MoverRow[];
+   677→  onOpen: (symbol: string) => void;
+   678→}) {
+   679→  return (
+   680→    <div>
+   681→      <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+   682→        <Icon className={cn("h-4 w-4", iconClass)} aria-hidden="true" />
+   683→        {title}
+   684→      </h3>
+   685→      <ul className="mt-2 space-y-1">
+   686→        {rows.map((row, i) => (
+   687→          <li key={row.symbol}>
+   688→            <button
+   689→              type="button"
+   690→              onClick={() => onOpen(row.symbol)}
+   691→              aria-label={`Open ${row.name} (${row.symbol})`}
+   692→              className="flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2.5 transition hover:bg-brand/8"
+   693→            >
+   694→              <span className="flex min-w-0 items-center gap-2.5">
+   695→                <span className="w-4 shrink-0 text-[10px] tabular-nums text-muted-foreground">
+   696→                  {i + 1}
+   697→                </span>
+   698→                <span className="min-w-0">
+   699→                  <span className="block text-sm font-semibold text-text">{row.symbol}</span>
+   700→                  <span className="block truncate text-xs text-muted-foreground">{row.name}</span>
+   701→                </span>
+   702→              </span>
+   703→              <span className="flex shrink-0 items-center gap-2">
+   704→                <span className="text-xs tabular-nums text-muted-foreground">
+   705→                  {fmtInr(row.price)}
+   706→                </span>
+   707→                <ChangePill value={row.changePercent} size="xs" />
+   708→              </span>
+   709→            </button>
+   710→          </li>
+   711→        ))}
+   712→      </ul>
+   713→    </div>
+   714→  );
+   715→}
+   716→
+   717→// ── e) heatmap ───────────────────────────────────────────────────────────
+   718→
+   719→function HeatmapSection() {
+   720→  const [indexKey, setIndexKey] = useState("NIFTY50");
+   721→  const [data, setData] = useState<HeatmapPayload | null>(null);
+   722→  const openStock = useApp((s) => s.openStock);
+   723→
+   724→  // Fetcher keyed explicitly so tab clicks can fetch the new index directly
+   725→  // (event handlers) while polling keeps hitting the latest selection via ref.
+   726→  const loadRef = useRef<() => void>(() => {});
+   727→  const selectedRef = useRef(indexKey);
+   728→
+   729→  const loadFor = useCallback(async (key: string) => {
+   730→    try {
+   731→      const res = await apiGet<HeatmapPayload>(`/api/market/heatmap?index=${key}`);
+   732→      if (selectedRef.current === key) setData(res);
+   733→    } catch {
+   734→      // keep last snapshot
+   735→    }
+   736→  }, []);
+   737→
+   738→  const load = useCallback(() => loadFor(indexKey), [indexKey, loadFor]);
+   739→
+   740→  useEffect(() => {
+   741→    loadRef.current = load;
+   742→    selectedRef.current = indexKey;
+   743→  }, [load, indexKey]);
+   744→
+   745→  usePolling(() => {
+   746→    loadRef.current();
+   747→  }, 30000);
+   748→
+   749→  const selectIndex = (next: string) => {
+   750→    setIndexKey(next);
+   751→    selectedRef.current = next;
+   752→    loadFor(next);
+   753→  };
+   754→
+   755→  return (
+   756→    <section aria-label="Index heatmap">
+   757→      <SectionHeading
+   758→        icon={BarChart3}
+   759→        kicker="Index Heatmap"
+   760→        title="Live Sector Heatmap"
+   761→        right={
+   762→          <div className="flex flex-wrap justify-end gap-1.5">
+   763→            {INDEX_TABS.map((tab) => (
+   764→              <button
+   765→                key={tab.value}
+   766→                type="button"
+   767→                onClick={() => selectIndex(tab.value)}
+   768→                aria-pressed={indexKey === tab.value}
+   769→                className={cn(
+   770→                  "min-h-9 rounded-full border px-3 py-1.5 text-[11px] font-semibold transition",
+   771→                  indexKey === tab.value
+   772→                    ? "border-brand/40 bg-brand/15 text-brand"
+   773→                    : "border-border/60 bg-panel/60 text-muted-foreground hover:border-brand/30 hover:text-text"
+   774→                )}
+   775→              >
+   776→                {tab.label}
+   777→              </button>
+   778→            ))}
+   779→          </div>
+   780→        }
+   781→      />
+   782→
+   783→      <div className="rounded-[28px] border border-border/50 bg-panel/50 p-4 backdrop-blur-sm sm:p-5">
+   784→        {/* legend + index quote */}
+   785→        <div className="flex flex-wrap items-center justify-between gap-2">
+   786→          <div className="flex flex-wrap items-center gap-2.5" aria-label="Heatmap color legend">
+   787→            {HEAT_LEGEND.map((step) => (
+   788→              <span key={step.label} className="flex items-center gap-1">
+   789→                <span className={cn("h-2.5 w-2.5 rounded-[3px]", step.swatch)} aria-hidden="true" />
+   790→                <span className="text-[10px] tabular-nums text-muted-foreground">{step.label}</span>
+   791→              </span>
+   792→            ))}
+   793→          </div>
+   794→          {data?.index && (
+   795→            <span className="flex items-center gap-2">
+   796→              <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+   797→                {data.indexName ?? data.index.name}
+   798→              </span>
+   799→              <span className="font-display text-sm font-bold tabular-nums text-text">
+   800→                {data.index.price.toLocaleString("en-IN")}
+   801→              </span>
+   802→              <ChangePill value={data.index.changePercent} size="xs" />
+   803→            </span>
+   804→          )}
+   805→        </div>
+   806→
+   807→        {/* tiles */}
+   808→        {!data ? (
+   809→          <div className="mt-4 grid gap-1.5 [grid-template-columns:repeat(auto-fill,minmax(96px,1fr))]">
+   810→            {Array.from({ length: 16 }).map((_, i) => (
+   811→              <div
+   812→                key={i}
+   813→                className="h-[62px] rounded-xl shimmer"
+   814→                aria-hidden="true"
+   815→              />
+   816→            ))}
+   817→          </div>
+   818→        ) : (
+   819→          <div className="mt-4 grid gap-1.5 [grid-template-columns:repeat(auto-fill,minmax(96px,1fr))]">
+   820→            {data.rows.map((row) => {
+   821→              const neutral = row.changePercent >= -0.4 && row.changePercent <= 0.4;
+   822→              return (
+   823→                <button
+   824→                  key={row.symbol}
+   825→                  type="button"
+   826→                  onClick={() => openStock(row.symbol)}
+   827→                  aria-label={`${row.name} ${fmtPct(row.changePercent)}`}
+   828→                  className={cn(
+   829→                    "rounded-xl p-2.5 text-left transition hover:scale-[1.03] hover:ring-2 hover:ring-white/40",
+   830→                    heatTileClass(row.changePercent),
+   831→                    neutral ? "text-text" : "text-white"
+   832→                  )}
+   833→                >
+   834→                  <span className="block truncate text-[11px] font-bold">{row.symbol}</span>
+   835→                  <span className="block text-[11px] font-semibold tabular-nums">
+   836→                    {fmtPct(row.changePercent)}
+   837→                  </span>
+   838→                  <span
+   839→                    className={cn(
+   840→                      "block truncate text-[10px] tabular-nums",
+   841→                      neutral ? "text-muted-foreground" : "text-white/80"
+   842→                    )}
+   843→                  >
+   844→                    {fmtInr(row.price, 0)}
+   845→                  </span>
+   846→                </button>
+   847→              );
+   848→            })}
+   849→          </div>
+   850→        )}
+   851→      </div>
+   852→    </section>
+   853→  );
+   854→}
+   855→
+   856→// ── f) news ──────────────────────────────────────────────────────────────
+   857→
+   858→function NewsCard({ item }: { item: NewsItem }) {
+   859→  const openStock = useApp((s) => s.openStock);
+   860→
+   861→  return (
+   862→    <article className="group overflow-hidden rounded-[24px] border border-border/50 bg-panel/60 backdrop-blur-sm transition hover:border-brand/30">
+   863→      <div className={cn("relative h-32 bg-gradient-to-br", newsStyle(item.category))}>
+   864→        <span
+   865→          className="absolute inset-0 flex items-center justify-center font-display text-3xl font-bold text-white/40"
+   866→          aria-hidden="true"
+   867→        >
+   868→          {item.category.charAt(0).toUpperCase()}
+   869→        </span>
+   870→        <span
+   871→          className={cn("absolute right-3 top-3 h-2 w-2 rounded-full", sentimentDot(item.sentiment))}
+   872→          role="img"
+   873→          aria-label={
+   874→            item.sentiment > 0.65
+   875→              ? "Positive sentiment"
+   876→              : item.sentiment < 0.4
+   877→                ? "Negative sentiment"
+   878→                : "Neutral sentiment"
+   879→          }
+   880→        />
+   881→      </div>
+   882→
+   883→      <div className="p-4">
+   884→        <div className="flex flex-wrap items-center gap-2">
+   885→          <span className="rounded-full border border-border/60 bg-bg/60 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
+   886→            {item.category}
+   887→          </span>
+   888→          <span className="text-[10px] font-semibold uppercase tracking-wider text-brand">
+   889→            {item.source}
+   890→          </span>
+   891→        </div>
+   892→
+   893→        <h3 className="mt-2 line-clamp-2 text-sm font-semibold leading-5 text-text transition group-hover:text-brand">
+   894→          {item.title}
+   895→        </h3>
+   896→        <p className="mt-1.5 line-clamp-2 text-xs leading-5 text-muted-foreground">{item.summary}</p>
+   897→
+   898→        <div className="mt-3 flex items-center justify-between gap-2">
+   899→          <span className="text-[10px] text-muted-foreground">{timeAgo(item.publishedAt)}</span>
+   900→          {item.symbols.length > 0 && (
+   901→            <button
+   902→              type="button"
+   903→              onClick={() => openStock(item.symbols[0])}
+   904→              aria-label={`Open ${item.symbols[0]} research view`}
+   905→              className="rounded-md border border-border/60 bg-bg/60 px-1.5 py-0.5 text-[10px] font-bold text-muted-foreground transition hover:border-brand/40 hover:text-brand"
+   906→            >
+   907→              {item.symbols[0]}
+   908→            </button>
+   909→          )}
+   910→        </div>
+   911→      </div>
+   912→    </article>
+   913→  );
+   914→}
+   915→
+   916→// ── g) closing / SEO ─────────────────────────────────────────────────────
+   917→
+   918→const WORKFLOWS: { title: string; desc: string; view: ViewKey }[] = [
+   919→  {
+   920→    title: "Find undervalued or high-dividend stocks",
+   921→    desc: "Filter the NSE universe by valuation, yield and quality in seconds.",
+   922→    view: "screener",
+   923→  },
+   924→  {
+   925→    title: "Compare two stocks side by side",
+   926→    desc: "Metrics, risk scores and AI context in a single view.",
+   927→    view: "compare",
+   928→  },
+   929→  {
+   930→    title: "Review your holdings and portfolio risk",
+   931→    desc: "Track P&L, concentration and health signals as the market moves.",
+   932→    view: "portfolio",
+   933→  },
+   934→  {
+   935→    title: "Track upcoming and recent IPOs",
+   936→    desc: "GMP, subscription status and listing gains in one place.",
+   937→    view: "ipo",
+   938→  },
+   939→];
+   940→
+   941→function ClosingSection() {
+   942→  const setView = useApp((s) => s.setView);
+   943→
+   944→  return (
+   945→    <section className="grid gap-4 lg:grid-cols-2" aria-label="About MyStockVision">
+   946→      <article className="rounded-[28px] border border-border/45 bg-panel/40 p-6 backdrop-blur-sm sm:p-8">
+   947→        <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-brand">
+   948→          Why MyStockVision
+   949→        </p>
+   950→        <h2 className="mt-2 font-display text-2xl font-bold text-text">
+   951→          Research Indian stocks faster with one finance workflow.
+   952→        </h2>
+   953→        <p className="mt-4 text-sm leading-7 text-muted-foreground">
+   954→          Every stock brings price action, quality, valuation and AI context into the same workflow —
+   955→          so you research an idea once, with everything you need on one page instead of six browser
+   956→          tabs.
+   957→        </p>
+   958→        <p className="mt-3 text-sm leading-7 text-muted-foreground">
+   959→          Move between modules without friction: screen the universe, save ideas to your watchlist,
+   960→          compare head-to-head, stress-test your portfolio, track IPOs and arm price alerts — all
+   961→          against live NSE and BSE market data.
+   962→        </p>
+   963→      </article>
+   964→
+   965→      <article className="rounded-[28px] border border-border/45 bg-panel/40 p-6 backdrop-blur-sm sm:p-8">
+   966→        <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-brand">
+   967→          Guided Paths
+   968→        </p>
+   969→        <h2 className="mt-2 font-display text-2xl font-bold text-text">Popular Workflows</h2>
+   970→        <div className="mt-5 space-y-2.5">
+   971→          {WORKFLOWS.map((flow) => (
+   972→            <button
+   973→              key={flow.view}
+   974→              type="button"
+   975→              onClick={() => setView(flow.view)}
+   976→              className="flex min-h-9 w-full items-center justify-between gap-3 rounded-2xl border border-border/45 bg-bg/50 px-4 py-3 text-left transition hover:border-brand/30"
+   977→            >
+   978→              <span className="min-w-0">
+   979→                <span className="block text-sm font-semibold text-text">{flow.title}</span>
+   980→                <span className="mt-0.5 block text-xs leading-5 text-muted-foreground">
+   981→                  {flow.desc}
+   982→                </span>
+   983→              </span>
+   984→              <ArrowRight className="h-4 w-4 shrink-0 text-brand" aria-hidden="true" />
+   985→            </button>
+   986→          ))}
+   987→        </div>
+   988→      </article>
+   989→    </section>
+   990→  );
+   991→}
+   992→
+   993→// ── loading skeleton ─────────────────────────────────────────────────────
+   994→
+   995→function HomeSkeleton() {
+   996→  return (
+   997→    <div className="stagger-fade space-y-8 sm:space-y-10" aria-busy="true" aria-label="Loading market data">
+   998→      <section className="rounded-[28px] border border-border/50 bg-panel/40 px-5 py-6 sm:px-8 sm:py-10 lg:px-10">
+   999→        <div className="shimmer h-7 w-64 rounded-full" />
+  1000→        <div className="mt-6 shimmer h-12 w-4/5 rounded-xl sm:h-16" />
+  1001→        <div className="mt-3 shimmer h-12 w-3/5 rounded-xl sm:h-16" />
+  1002→        <div className="mt-6 shimmer h-11 max-w-3xl rounded-2xl" />
+  1003→        <div className="mt-7 grid gap-3 sm:grid-cols-3">
+  1004→          <div className="shimmer h-20 rounded-2xl" />
+  1005→          <div className="shimmer h-20 rounded-2xl" />
+  1006→          <div className="shimmer h-20 rounded-2xl" />
+  1007→        </div>
+  1008→      </section>
+  1009→      <section className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+  1010→        {Array.from({ length: 7 }).map((_, i) => (
+  1011→          <div key={i} className="shimmer h-24 rounded-2xl" />
+  1012→        ))}
+  1013→      </section>
+  1014→      <section className="grid gap-4 lg:grid-cols-[320px_1fr]">
+  1015→        <div className="shimmer h-80 rounded-[28px]" />
+  1016→        <div className="shimmer h-80 rounded-[28px]" />
+  1017→      </section>
+  1018→    </div>
+  1019→  );
+  1020→}
+  1021→
