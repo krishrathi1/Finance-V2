@@ -340,7 +340,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section className="grid gap-4 lg:grid-cols-[300px_1fr] xl:grid-cols-[320px_1fr]">
+      <section className="grid gap-4 lg:grid-cols-[320px_1fr]">
         <MarketMoodIndex />
         <TopMovers />
       </section>

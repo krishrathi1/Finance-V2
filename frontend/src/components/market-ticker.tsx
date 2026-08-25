@@ -56,11 +56,12 @@ export function MarketTicker() {
     }
   };
 
-  useVisibilityPolling((initial) => void load(!initial), 30_000);
+  useVisibilityPolling((initial) => void load(!initial), 15_000);
 
   const tape = useMemo(() => {
-    // Only render a bounded slice; duplicate it for a seamless scrolling loop.
-    const visible = rows.slice(0, TICKER_LIMIT);
+    // Sort A-Z and take a bounded slice; duplicate for seamless scrolling loop.
+    const sorted = [...rows].sort((a, b) => a.symbol.localeCompare(b.symbol));
+    const visible = sorted.slice(0, TICKER_LIMIT);
     return visible.length ? [...visible, ...visible] : [];
   }, [rows]);
 
@@ -106,13 +107,7 @@ export function MarketTicker() {
               <span className="font-semibold text-text/95">
                 Rs {item.cmp.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
-              {item.high !== undefined && item.low !== undefined && (
-                <span className="inline-flex items-center gap-1.5 text-[10px] text-muted/80 font-medium bg-bg/40 border border-border/40 px-1.5 py-0.5 rounded shadow-sm">
-                  <span className="text-success/90">H: <span className="font-semibold text-text/85">{item.high.toLocaleString("en-IN", { maximumFractionDigits: 2 })}</span></span>
-                  <span className="text-border/40">|</span>
-                  <span className="text-danger/90">L: <span className="font-semibold text-text/85">{item.low.toLocaleString("en-IN", { maximumFractionDigits: 2 })}</span></span>
-                </span>
-              )}
+
               <span className={`${color} font-bold text-xs sm:text-sm whitespace-nowrap`}>
                 {formatSigned(item.change)} ({formatSigned(item.changePercent)}%)
               </span>

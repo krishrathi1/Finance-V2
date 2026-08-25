@@ -65,25 +65,33 @@ export function MarketMoodIndex() {
   const moodValue = typeof mood?.value === "number" ? mood.value : null;
   const liveMood = mood;
   const level = useMemo(() => (moodValue === null ? "Neutral" : getMoodLevel(moodValue)), [moodValue]);
-  const color = useMemo(() => getMoodColor(moodValue ?? 50), [moodValue]);
 
-  const needleAngle = -90 + ((moodValue ?? 50) / 100) * 180;
+  const needleAngle = -90 + Math.max(0, Math.min(100, moodValue ?? 50)) * 1.8;
+
+  const isBull = level === "Extreme Greed" || level === "Greed";
+  const isNeutral = level === "Neutral";
+
+  const levelPillClass = isBull
+    ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 ring-1 ring-emerald-500/20"
+    : isNeutral
+      ? "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400 ring-1 ring-amber-500/20"
+      : "border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-400 ring-1 ring-rose-500/20";
+
+  const dotColor = isBull ? "bg-emerald-500" : isNeutral ? "bg-amber-500" : "bg-rose-500";
 
   if (loading && !mood) {
     return (
-      <div className="shimmer h-[200px] rounded-2xl border border-border/70" />
+      <div className="shimmer h-[280px] rounded-[28px] border border-border/50" />
     );
   }
 
   if (moodValue === null || !liveMood) {
     return (
-      <div className="glow-card density-panel-lg rounded-2xl border border-border/70 bg-panel/70">
+      <div className="relative flex flex-col justify-between overflow-hidden rounded-[28px] border border-border/50 bg-panel/60 p-6 backdrop-blur-sm">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="density-copy font-[var(--font-space)] text-sm font-bold uppercase tracking-wider text-muted">
-              Market Mood Index
-            </h3>
-            <p className="density-copy mt-0.5 text-[11px] text-muted">Based on live NSE/BSE breadth & momentum</p>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-muted">Sentiment</p>
+            <h3 className="mt-0.5 font-[var(--font-space)] text-lg font-bold">Market Mood Index</h3>
           </div>
           <MarketStatusBadge />
         </div>
@@ -95,86 +103,121 @@ export function MarketMoodIndex() {
   }
 
   return (
-    <div className="glow-card density-panel-lg rounded-2xl border border-border/70 bg-panel/70">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="density-copy font-[var(--font-space)] text-sm font-bold uppercase tracking-wider text-muted">
-            Market Mood Index
-          </h3>
-          <p className="density-copy mt-0.5 text-[11px] text-muted">Based on live NSE/BSE breadth & momentum</p>
+    <article className="relative flex flex-col justify-between overflow-hidden rounded-[28px] border border-border/50 bg-panel/60 p-6 backdrop-blur-sm shadow-sm transition hover:border-border/80">
+      {/* Header */}
+      <div>
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-muted">Sentiment</p>
+            <h3 className="mt-0.5 font-[var(--font-space)] text-lg font-bold">Market Mood Index</h3>
+          </div>
+          <span className="relative flex h-2 w-2">
+            <span className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-75 ${dotColor}`} />
+            <span className={`relative inline-flex h-2 w-2 rounded-full ${dotColor}`} />
+          </span>
         </div>
-        <MarketStatusBadge />
-      </div>
 
-      <div className="mt-4 flex flex-col items-center">
-        <svg viewBox="0 0 200 120" className="w-full max-w-[240px]">
-          {/* Background arc */}
-          <defs>
-            <linearGradient id="moodGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="#ef4444" />
-              <stop offset="25%" stopColor="#f97316" />
-              <stop offset="50%" stopColor="#eab308" />
-              <stop offset="75%" stopColor="#84cc16" />
-              <stop offset="100%" stopColor="#22c55e" />
-            </linearGradient>
-          </defs>
-          <path
-            d="M 20 100 A 80 80 0 0 1 180 100"
-            fill="none"
-            stroke="url(#moodGrad)"
-            strokeWidth="12"
-            strokeLinecap="round"
-            opacity="0.3"
-          />
-          {/* Active arc */}
-          <path
-            d="M 20 100 A 80 80 0 0 1 180 100"
-            fill="none"
-            stroke="url(#moodGrad)"
-            strokeWidth="12"
-            strokeLinecap="round"
-            strokeDasharray={`${(moodValue / 100) * 251.2} 251.2`}
-          />
-          {/* Needle */}
-          <g transform={`rotate(${needleAngle} 100 100)`}>
-            <line x1="100" y1="100" x2="100" y2="35" stroke={color} strokeWidth="2.5" strokeLinecap="round" />
-            <circle cx="100" cy="100" r="5" fill={color} />
-          </g>
-          {/* Labels */}
-          <text x="18" y="116" fontSize="8" fill="currentColor" opacity="0.4">Fear</text>
-          <text x="156" y="116" fontSize="8" fill="currentColor" opacity="0.4">Greed</text>
-        </svg>
+        {/* Speedometer Gauge */}
+        <div className="relative mt-5 flex flex-col items-center">
+          <svg
+            viewBox="0 0 200 115"
+            className="w-full max-w-[230px]"
+            role="img"
+            aria-label={`Market mood ${moodValue} out of 100 — ${liveMood.level || level}`}
+          >
+            <defs>
+              <linearGradient id="premiumMoodGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stopColor="#ef4444" />
+                <stop offset="25%" stopColor="#f97316" />
+                <stop offset="50%" stopColor="#eab308" />
+                <stop offset="75%" stopColor="#84cc16" />
+                <stop offset="100%" stopColor="#22c55e" />
+              </linearGradient>
+            </defs>
 
-        <div className="mt-2 text-center">
-          <p className="text-3xl font-bold" style={{ color }}>{moodValue}</p>
-          <p className="mt-1 text-sm font-semibold" style={{ color }}>
+            {/* Background Track */}
+            <path
+              d="M 22 100 A 78 78 0 0 1 178 100"
+              fill="none"
+              stroke="currentColor"
+              className="text-muted/20"
+              strokeWidth="14"
+              strokeLinecap="round"
+            />
+
+            {/* Active Gradient Arc */}
+            <path
+              d="M 22 100 A 78 78 0 0 1 178 100"
+              fill="none"
+              stroke="url(#premiumMoodGrad)"
+              strokeWidth="14"
+              strokeLinecap="round"
+            />
+
+            {/* Needle */}
+            <g style={{ transform: `rotate(${needleAngle}deg)`, transformOrigin: "100px 100px", transition: "transform 0.8s cubic-bezier(0.34, 1.56, 0.64, 1)" }}>
+              <line
+                x1="100" y1="100" x2="100" y2="32"
+                stroke="currentColor"
+                className="text-slate-800 dark:text-white"
+                strokeWidth="3.5"
+                strokeLinecap="round"
+              />
+            </g>
+
+            {/* Center Pivot */}
+            <circle cx="100" cy="100" r="7" className="fill-slate-900 dark:fill-white" />
+            <circle cx="100" cy="100" r="3" className="fill-panel" />
+
+            {/* Scale Labels */}
+            <text x="18" y="112" fontSize="8" fontWeight="600" className="fill-muted/60 uppercase">Fear</text>
+            <text x="90" y="75" fontSize="7" fontWeight="600" className="fill-muted/40 uppercase">Neutral</text>
+            <text x="156" y="112" fontSize="8" fontWeight="600" className="fill-muted/60 uppercase">Greed</text>
+          </svg>
+        </div>
+
+        {/* Score & Status Display */}
+        <div className="mt-3 flex items-center justify-between px-1">
+          <div className="flex items-baseline gap-1.5">
+            <span className="font-[var(--font-space)] text-4xl font-extrabold tracking-tight">
+              {moodValue}
+            </span>
+            <span className="text-xs font-semibold uppercase tracking-wider text-muted">
+              / 100
+            </span>
+          </div>
+
+          <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold shadow-sm ${levelPillClass}`}>
+            <span className={`h-1.5 w-1.5 rounded-full ${dotColor}`} />
             {liveMood.level || level}
-          </p>
-        </div>
-
-        <div className="mt-3 flex flex-wrap justify-center gap-2 text-[10px] font-semibold text-muted">
-          <span className="rounded-full border border-border/60 bg-bg/50 px-2 py-1">
-            Adv {liveMood.advancing?.toLocaleString("en-IN") ?? "--"} / Dec {liveMood.declining?.toLocaleString("en-IN") ?? "--"}
           </span>
-          <span className="rounded-full border border-border/60 bg-bg/50 px-2 py-1">
-            {(liveMood.quotedCount || 0).toLocaleString("en-IN")} live quotes
-          </span>
-          {typeof liveMood.averageChange === "number" ? (
-            <span className="rounded-full border border-border/60 bg-bg/50 px-2 py-1">
-              Avg {formatSigned(liveMood.averageChange)}
-            </span>
-          ) : null}
-          {liveMood.updatedAt ? (
-            <span className="rounded-full border border-border/60 bg-bg/50 px-2 py-1">
-              Updated {formatUpdatedAt(liveMood.updatedAt)}
-            </span>
-          ) : null}
         </div>
-        <p className="mt-2 max-w-[260px] text-center text-[10px] text-muted">
-          {failed ? "Using last good snapshot from " : "Source: "}
-          {formatSourceLabel(liveMood.source, liveMood.quoteSource)}
-        </p>
       </div>
-    </div>
+
+      {/* Micro Metrics Chips */}
+      <div className="mt-5 flex flex-wrap items-center gap-1.5 border-t border-border/30 pt-2">
+        <span className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-bg/50 px-2.5 py-1 text-[10px] font-semibold tabular-nums text-muted">
+          Breadth <strong className="text-emerald-600 dark:text-emerald-400">{liveMood.advancing?.toLocaleString("en-IN") ?? "--"} ▲</strong> / <strong className="text-rose-600 dark:text-rose-400">{liveMood.declining?.toLocaleString("en-IN") ?? "--"} ▼</strong>
+        </span>
+        <span className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-bg/50 px-2.5 py-1 text-[10px] font-semibold tabular-nums text-muted">
+          {(liveMood.quotedCount || 0).toLocaleString("en-IN")} quotes
+        </span>
+        {typeof liveMood.averageChange === "number" ? (
+          <span className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-bg/50 px-2.5 py-1 text-[10px] font-semibold tabular-nums text-muted">
+            Avg {formatSigned(liveMood.averageChange)}
+          </span>
+        ) : null}
+        <span className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-bg/50 px-2 py-1 text-[10px] font-medium text-muted/80">
+          Live
+        </span>
+      </div>
+
+      {/* Source */}
+      <p className="mt-2 text-[10px] text-muted">
+        {failed ? "Using last good snapshot from " : "Source: "}
+        {formatSourceLabel(liveMood.source, liveMood.quoteSource)}
+        {liveMood.updatedAt ? ` · Updated ${formatUpdatedAt(liveMood.updatedAt)}` : ""}
+      </p>
+    </article>
   );
 }

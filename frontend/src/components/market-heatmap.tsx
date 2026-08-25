@@ -22,18 +22,18 @@ const LIVE_REFRESH_MS = 30_000;
 const LEGEND = [
   { label: "Above +5%", className: "border-success/50 bg-success text-white" },
   { label: "+2 to +5%", className: "border-success/40 bg-success/85 text-white" },
-  { label: "0 to +2%", className: "border-success/30 bg-success/65 text-white" },
-  { label: "0%", className: "border-border/80 bg-panel/90 text-text" },
-  { label: "-2 to 0%", className: "border-danger/20 bg-danger/60 text-white" },
-  { label: "-5 to -2%", className: "border-danger/30 bg-danger/80 text-white" },
+  { label: "+0.4 to +2%", className: "border-success/30 bg-success/65 text-white" },
+  { label: "±0.4%", className: "border-border/80 bg-panel/90 text-text" },
+  { label: "-0.4 to -2%", className: "border-danger/20 bg-danger/60 text-white" },
+  { label: "-2 to -5%", className: "border-danger/30 bg-danger/80 text-white" },
   { label: "Below -5%", className: "border-danger/40 bg-danger text-white" },
 ];
 
 function tileStyle(changePercent: number) {
   if (changePercent > 5) return "border-success/50 bg-success text-white";
   if (changePercent > 2) return "border-success/40 bg-success/85 text-white";
-  if (changePercent > 0) return "border-success/30 bg-success/65 text-white";
-  if (changePercent === 0) return "border-border/80 bg-panel/90 text-text";
+  if (changePercent > 0.4) return "border-success/30 bg-success/65 text-white";
+  if (changePercent > -0.4) return "border-border/80 bg-panel/90 text-text";
   if (changePercent > -2) return "border-danger/20 bg-danger/60 text-white";
   if (changePercent > -5) return "border-danger/30 bg-danger/80 text-white";
   return "border-danger/40 bg-danger text-white";

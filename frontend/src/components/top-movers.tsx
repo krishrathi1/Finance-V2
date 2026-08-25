@@ -36,7 +36,7 @@ export function TopMovers() {
     void fetchTickerTape([], { force: true }).then((data) => {
       setRows(data);
     }).catch(() => {});
-  }, 20_000);
+  }, 15_000);
 
   const { gainers, losers } = useMemo(() => {
     const sorted = [...rows].filter((r) => r.cmp > 0);
@@ -47,82 +47,99 @@ export function TopMovers() {
 
   if (loading) {
     return (
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="shimmer h-[280px] rounded-2xl border border-border/70" />
-        <div className="shimmer h-[280px] rounded-2xl border border-border/70" />
+      <div className="rounded-[28px] border border-border/50 bg-panel/60 p-6 backdrop-blur-sm">
+        <div className="grid gap-6 sm:grid-cols-2">
+          <div className="shimmer h-[260px] rounded-2xl" />
+          <div className="shimmer h-[260px] rounded-2xl" />
+        </div>
       </div>
     );
   }
 
   if (!rows.length) return null;
 
-  const renderList = (
-    items: TickerRow[],
-    title: string,
-    icon: React.ReactNode,
-    isGainer: boolean
-  ) => (
-    <div className="glow-card density-panel-lg rounded-2xl border border-border/70 bg-panel/70">
-      <div className="flex items-center gap-2">
-        <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${isGainer ? "bg-success/15 text-success" : "bg-danger/15 text-danger"}`}>
-          {icon}
+  return (
+    <article className="rounded-[28px] border border-border/50 bg-panel/60 p-6 backdrop-blur-sm shadow-sm">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-muted">
+            Live Action
+          </p>
+          <h3 className="mt-0.5 font-[var(--font-space)] text-lg font-bold">
+            Top Movers
+          </h3>
         </div>
-        <h3 className="density-copy font-[var(--font-space)] text-sm font-bold uppercase tracking-wider text-muted">
-          {title}
-        </h3>
+        <span className="shrink-0 text-[10px] text-muted">Refreshed every 15s</span>
       </div>
-      <div className="mt-3 space-y-1.5">
+
+      <div className="mt-5 grid gap-6 sm:grid-cols-2 sm:gap-8">
+        {renderList(gainers, "TOP GAINERS", <TrendingUp className="h-4 w-4" />, true)}
+        {renderList(losers, "TOP LOSERS", <TrendingDown className="h-4 w-4" />, false)}
+      </div>
+    </article>
+  );
+}
+
+function renderList(
+  items: TickerRow[],
+  title: string,
+  icon: React.ReactNode,
+  isGainer: boolean
+) {
+  return (
+    <div>
+      <h3
+        className={`flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider ${
+          isGainer ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"
+        }`}
+      >
+        {icon}
+        {title}
+      </h3>
+      <ul className="mt-3 space-y-1.5">
         {items.map((item, idx) => {
           const isStock = !item.symbol.includes(" ");
           const symbolPath = encodeURIComponent(item.symbol.replace(/\s+/g, ""));
           const key = `${item.exchange || "NSE"}-${item.symbol}-${idx}`;
           const href = `/stocks/${symbolPath}${item.exchange === "BSE" ? "?exchange=BSE" : ""}`;
+
           const content = (
-            <div className="flex items-center justify-between rounded-xl px-3 py-2.5 transition hover:bg-bg/80 active:scale-[0.98]">
-              <div className="flex items-center gap-3">
-                <span className="flex h-6 w-6 items-center justify-center rounded-md bg-bg text-[11px] font-bold text-muted">
+            <div className="group flex w-full items-center justify-between gap-2.5 rounded-xl px-2.5 py-2 text-left transition hover:bg-bg/60">
+              <div className="flex min-w-0 items-center gap-2.5">
+                <span className="w-3.5 shrink-0 text-[11px] font-medium tabular-nums text-muted">
                   {idx + 1}
                 </span>
-                <div>
-                  <div className="flex items-center gap-1.5">
-                    <p className="density-copy text-sm font-semibold">{item.symbol}</p>
-                    {item.exchange ? (
-                      <span className="rounded border border-border/50 bg-bg/45 px-1 py-0.5 text-[9px] font-bold text-muted">
-                        {item.exchange}
-                      </span>
-                    ) : null}
-                  </div>
-                  <p className="density-copy text-[11px] text-muted">
+                <div className="min-w-0">
+                  <span className="block text-sm font-bold tracking-tight transition group-hover:text-accent">
+                    {item.symbol}
+                  </span>
+                  <span className="block text-[11px] text-muted">
                     Rs {item.cmp.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
-                  </p>
+                  </span>
                 </div>
               </div>
-              <div className="text-right">
-                <p className={`density-value text-sm font-bold ${isGainer ? "text-success" : "text-danger"}`}>
-                  {formatSigned(item.changePercent)}%
-                </p>
-                <p className={`density-copy text-[11px] ${isGainer ? "text-success/70" : "text-danger/70"}`}>
-                  {formatSigned(item.change)}
-                </p>
-              </div>
+              <span
+                className={`inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-xs font-bold tabular-nums ${
+                  isGainer
+                    ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400"
+                    : "bg-rose-50 text-rose-700 dark:bg-rose-950/50 dark:text-rose-400"
+                }`}
+              >
+                <span className="text-[10px]">{isGainer ? "↗" : "↘"}</span>
+                {formatSigned(item.changePercent)}%
+              </span>
             </div>
           );
 
-          if (!isStock) return <div key={key}>{content}</div>;
+          if (!isStock) return <li key={key}>{content}</li>;
           return (
-            <Link key={key} href={href}>
-              {content}
-            </Link>
+            <li key={key}>
+              <Link href={href}>{content}</Link>
+            </li>
           );
         })}
-      </div>
-    </div>
-  );
-
-  return (
-    <div className="grid gap-4 sm:grid-cols-2">
-      {renderList(gainers, "Top Gainers", <TrendingUp className="h-4 w-4" />, true)}
-      {renderList(losers, "Top Losers", <TrendingDown className="h-4 w-4" />, false)}
+      </ul>
     </div>
   );
 }
+
