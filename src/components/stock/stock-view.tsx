@@ -20,14 +20,30 @@ import { ShareholdingSection } from "./shareholding-section";
 import { TechnicalsSection } from "./technicals-section";
 import { StockNewsSection } from "./news-section";
 import { CompetitorsSection } from "./competitors-section";
+import { KeyRatiosSection } from "./key-ratios-section";
+import { QuarterlyResultsSection } from "./quarterly-results-section";
+import { DividendHistorySection } from "./dividend-history-section";
+import { ReturnsAnalysisSection } from "./returns-analysis-section";
+import { RiskProfileSection } from "./risk-profile-section";
+import { PeerValuationSection } from "./peer-valuation-section";
+import { FundamentalSignalsSection } from "./fundamental-signals-section";
+import { BrokerageSummarySection } from "./brokerage-summary-section";
 import { clamp, pctClass } from "./helpers";
 
 const SECTION_TABS = [
   { id: "overview", label: "Overview" },
+  { id: "ratios", label: "Key Ratios" },
   { id: "scores", label: "Scores" },
   { id: "forensics", label: "Forensics" },
   { id: "financials", label: "Financials" },
+  { id: "quarterly", label: "Quarterly" },
+  { id: "dividends", label: "Dividends" },
   { id: "shareholding", label: "Shareholding" },
+  { id: "peers", label: "Peer Valuation" },
+  { id: "returns", label: "Returns" },
+  { id: "risk", label: "Risk" },
+  { id: "signals", label: "Signals" },
+  { id: "brokerage", label: "Brokerage" },
   { id: "technicals", label: "Technicals" },
   { id: "news", label: "News" },
   { id: "ai", label: "AI Research" },
@@ -267,9 +283,10 @@ function StockDetail({ symbol, onBackHome }: { symbol: string; onBackHome: () =>
 
           <section id="overview" aria-label="Overview" className="scroll-mt-40">
             <MetricsGrid d={dash} />
-            <div className="mt-8">
-              <CompetitorsSection d={dash} />
-            </div>
+          </section>
+
+          <section id="ratios" aria-label="Key Ratios" className="scroll-mt-40">
+            <KeyRatiosSection d={dash} />
           </section>
 
           <section id="scores" aria-label="Scores" className="scroll-mt-40">
@@ -284,8 +301,36 @@ function StockDetail({ symbol, onBackHome }: { symbol: string; onBackHome: () =>
             <FinancialsSection d={dash} />
           </section>
 
+          <section id="quarterly" aria-label="Quarterly Results" className="scroll-mt-40">
+            <QuarterlyResultsSection d={dash} />
+          </section>
+
+          <section id="dividends" aria-label="Dividends & Corporate Actions" className="scroll-mt-40">
+            <DividendHistorySection d={dash} />
+          </section>
+
           <section id="shareholding" aria-label="Shareholding" className="scroll-mt-40">
             <ShareholdingSection d={dash} />
+          </section>
+
+          <section id="peers" aria-label="Peer Valuation" className="scroll-mt-40">
+            <PeerValuationSection d={dash} />
+          </section>
+
+          <section id="returns" aria-label="Returns Analysis" className="scroll-mt-40">
+            <ReturnsAnalysisSection d={dash} />
+          </section>
+
+          <section id="risk" aria-label="Risk Profile" className="scroll-mt-40">
+            <RiskProfileSection d={dash} />
+          </section>
+
+          <section id="signals" aria-label="Fundamental Signals" className="scroll-mt-40">
+            <FundamentalSignalsSection d={dash} />
+          </section>
+
+          <section id="brokerage" aria-label="Brokerage Summary" className="scroll-mt-40">
+            <BrokerageSummarySection d={dash} />
           </section>
 
           <section id="technicals" aria-label="Technicals" className="scroll-mt-40">

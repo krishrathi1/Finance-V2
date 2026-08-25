@@ -228,6 +228,121 @@ export interface CompetitorRow {
   changePercent: number;
 }
 
+export interface KeyRatios {
+  valuation: {
+    pe: number | null;
+    pb: number;
+    peg: number;
+    evEbitda: number;
+    evSales: number;
+    dividendYield: number;
+  };
+  profitability: {
+    roe: number;
+    roce: number;
+    roa: number;
+    grossMargin: number;
+    opm: number;
+    npm: number;
+  };
+  leverage: {
+    debtEquity: number;
+    currentRatio: number;
+    quickRatio: number;
+    interestCoverage: number;
+  };
+  efficiency: {
+    assetTurnover: number;
+    inventoryDays: number;
+    receivableDays: number;
+  };
+}
+
+export interface DividendYear {
+  year: string;
+  dps: number;
+  payout: number;
+  yield: number;
+}
+
+export interface CorporateAction {
+  date: string;
+  type: "Bonus" | "Split" | "Buyback" | "Dividend" | "Rights";
+  detail: string;
+}
+
+export interface RiskProfile {
+  beta: number;
+  alpha: number;
+  sharpe: number;
+  sortino: number;
+  maxDrawdown: number;
+  volatilityAnn: number;
+  var95: number;
+  rSquared: number;
+}
+
+export interface PeerValuationRow {
+  symbol: string;
+  name: string;
+  marketCapCr: number;
+  pe: number | null;
+  pb: number;
+  evEbitda: number;
+  roe: number;
+  revenueGrowth: number;
+  profitGrowth: number;
+  price: number;
+  changePercent: number;
+}
+
+export interface PeerMedian {
+  pe: number | null;
+  pb: number;
+  evEbitda: number;
+  roe: number;
+  expensive: "Cheap" | "Fair" | "Expensive";
+}
+
+export interface FundamentalSignal {
+  label: string;
+  pass: boolean;
+  detail: string;
+}
+
+export interface BrokerReport {
+  broker: string;
+  rating: string;
+  target: number;
+  date: string;
+  summary: string;
+}
+
+export interface BrokerageSummary {
+  consensus: "Strong Buy" | "Buy" | "Hold" | "Sell" | "Strong Sell";
+  strongBuy: number;
+  buy: number;
+  hold: number;
+  sell: number;
+  strongSell: number;
+  consensusTarget: number;
+  upsidePct: number;
+  reports: BrokerReport[];
+}
+
+export interface QuarterlyRow {
+  quarter: string;
+  revenue: number;
+  ebitda: number;
+  ebitdaMargin: number;
+  pat: number;
+  patMargin: number;
+  eps: number;
+  yoyGrowth: number;
+  estimate: number;
+  surprisePct: number;
+}
+
 export interface StockDashboard {
   symbol: string;
   companyName: string;
@@ -272,6 +387,15 @@ export interface StockDashboard {
   returns: { label: string; value: number }[];
   aiTarget: number;
   circuit: { upper: number; lower: number };
+  keyRatios: KeyRatios;
+  dividendHistory: DividendYear[];
+  corporateActions: CorporateAction[];
+  riskProfile: RiskProfile;
+  peerValuation: PeerValuationRow[];
+  peerMedian: PeerMedian;
+  fundamentalSignals: FundamentalSignal[];
+  brokerage: BrokerageSummary;
+  quarterlyExtended: QuarterlyRow[];
   updatedAt: string;
 }
 
