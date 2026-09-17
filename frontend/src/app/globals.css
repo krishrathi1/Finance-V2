@@ -702,47 +702,36 @@ textarea:focus {
 .page-enter { animation: page-content-enter 180ms var(--ease-smooth); }
 
 .stagger-fade > * {
-  opacity: 0;
-  transform: translateY(10px);
-  animation: stagger-fade-in 220ms var(--ease-smooth) forwards;
-}
-
-/* Once the entrance has played, stop treating this as an entrance.
-   `opacity: 0` above is a *permanent* base state on every direct child, not a
-   one-shot, and these pages are full of sections that render `null` until
-   their data arrives. Each one that resolves late therefore did two things:
-   it faded itself in from invisible, and — by shifting every later sibling's
-   `:nth-child()` match — changed those siblings' `animation-delay`. Changing
-   an animation property restarts the animation, so the entire page below the
-   new section replayed its fade from opacity 0. With sections resolving on
-   every poll and refetch, that is the page-wide blink.
-
-   `data-entered` is stamped on by StaggerSettle once the longest delay
-   (295ms) plus the animation (220ms) has elapsed. After that, anything that
-   appears simply appears. */
-.stagger-fade[data-entered] > * {
   opacity: 1;
   transform: none;
-  animation: none;
 }
 
-.stagger-fade > *:nth-child(1)  { animation-delay: 20ms; }
-.stagger-fade > *:nth-child(2)  { animation-delay: 45ms; }
-.stagger-fade > *:nth-child(3)  { animation-delay: 70ms; }
-.stagger-fade > *:nth-child(4)  { animation-delay: 95ms; }
-.stagger-fade > *:nth-child(5)  { animation-delay: 120ms; }
-.stagger-fade > *:nth-child(6)  { animation-delay: 145ms; }
-.stagger-fade > *:nth-child(7)  { animation-delay: 170ms; }
-.stagger-fade > *:nth-child(8)  { animation-delay: 195ms; }
-.stagger-fade > *:nth-child(9)  { animation-delay: 220ms; }
-.stagger-fade > *:nth-child(10) { animation-delay: 245ms; }
-.stagger-fade > *:nth-child(11) { animation-delay: 270ms; }
-.stagger-fade > *:nth-child(12) { animation-delay: 295ms; }
+.stagger-fade:not([data-entered]) > * {
+  animation: stagger-fade-in 180ms var(--ease-smooth) both;
+}
+
+.stagger-fade[data-entered] > * {
+  opacity: 1 !important;
+  transform: none !important;
+  animation: none !important;
+}
+
+.stagger-fade:not([data-entered]) > *:nth-child(1)  { animation-delay: 15ms; }
+.stagger-fade:not([data-entered]) > *:nth-child(2)  { animation-delay: 35ms; }
+.stagger-fade:not([data-entered]) > *:nth-child(3)  { animation-delay: 55ms; }
+.stagger-fade:not([data-entered]) > *:nth-child(4)  { animation-delay: 75ms; }
+.stagger-fade:not([data-entered]) > *:nth-child(5)  { animation-delay: 95ms; }
+.stagger-fade:not([data-entered]) > *:nth-child(6)  { animation-delay: 115ms; }
+.stagger-fade:not([data-entered]) > *:nth-child(7)  { animation-delay: 135ms; }
+.stagger-fade:not([data-entered]) > *:nth-child(8)  { animation-delay: 155ms; }
+.stagger-fade:not([data-entered]) > *:nth-child(9)  { animation-delay: 175ms; }
+.stagger-fade:not([data-entered]) > *:nth-child(10) { animation-delay: 195ms; }
+.stagger-fade:not([data-entered]) > *:nth-child(11) { animation-delay: 215ms; }
+.stagger-fade:not([data-entered]) > *:nth-child(12) { animation-delay: 235ms; }
 
 .news-grid-stagger > * {
-  opacity: 0;
-  transform: translateY(8px);
-  animation: stagger-fade-in 230ms var(--ease-smooth) forwards;
+  opacity: 1;
+  transform: none;
 }
 .news-grid-stagger > *:nth-child(1) { animation-delay: 20ms; }
 .news-grid-stagger > *:nth-child(2) { animation-delay: 45ms; }

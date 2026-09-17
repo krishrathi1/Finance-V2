@@ -52,8 +52,11 @@ export function SmoothExperience() {
         ? event.target.closest<HTMLAnchorElement>("a[href]")
         : null;
 
+      const href = target.getAttribute("href") || "";
       if (
         !target ||
+        href.startsWith("#") ||
+        href.startsWith("javascript:") ||
         target.target === "_blank" ||
         target.hasAttribute("download") ||
         target.origin !== window.location.origin
@@ -61,7 +64,7 @@ export function SmoothExperience() {
         return;
       }
 
-      const sameRoute = target.pathname === window.location.pathname && target.search === window.location.search;
+      const sameRoute = target.pathname === window.location.pathname;
       if (sameRoute) return;
 
       window.setTimeout(() => startTransition(), 0);

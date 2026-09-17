@@ -60,12 +60,7 @@ export function MarketNews() {
   };
 
   useVisibilityPolling(async (initial) => {
-    if (initial) {
-      await load(false);
-      await load(true);
-      return;
-    }
-    await load(true);
+    await load(!initial);
   }, 2 * 60_000);
 
   if (loading) {
