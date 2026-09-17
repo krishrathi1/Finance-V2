@@ -252,17 +252,37 @@ async function readLimitedBody(response: UndiciResponse): Promise<Uint8Array | n
   return body;
 }
 
-export async function GET(request: NextRequest) {
-  const rawUrl = request.nextUrl.searchParams.get("url");
-  const title = request.nextUrl.searchParams.get("title") || "";
-  const idx = Number(request.nextUrl.searchParams.get("idx") || 0);
+const FALLBACK_PHOTOS = [
+  "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?auto=format&fit=crop&q=80&w=800", // Trading candlestick chart
+  "https://images.unsplash.com/photo-1590283603385-17ffb3a7f29f?auto=format&fit=crop&q=80&w=800", // Stock charts / Analytics
+  "https://images.unsplash.com/photo-1559526324-4b87b5e36e44?auto=format&fit=crop&q=80&w=800", // Investment banking / Finance
+  "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&q=80&w=800", // Corporate skyline
+  "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&q=80&w=800", // Tech & AI
+  "https://images.unsplash.com/photo-1579532537598-459ecdaf39cc?auto=format&fit=crop&q=80&w=800", // Wealth & Investment
+  "https://images.unsplash.com/photo-1535320903710-d993d3d77d29?auto=format&fit=crop&q=80&w=800", // Stock Exchange
+  "https://images.unsplash.com/photo-1526304640581-d334cdbbf45e?auto=format&fit=crop&q=80&w=800", // Markets & Currency
+];
 
-  if (!rawUrl) return placeholderSvg(title, idx);
+export function selectFallbackPhoto(title: string, index = 0): string {
+  const lower = (title || "").toLowerCase();
+  if (/tech|it|software|ai|digital|cyber/i.test(lower)) return FALLBACK_PHOTOS[4];
+  if (/bank|loan|interest|rbi|rate|inflation|currency|rupee|tax|income/i.test(lower)) return FALLBACK_PHOTOS[7];
+  if (/ipo|listing|wealth|mutual|fund|sip|invest|savings|annapurna|scheme/i.test(lower)) return FALLBACK_PHOTOS[5];
+  if (/corporate|company|deal|promoter|merger|tata|reliance/i.test(lower)) return FALLBACK_PHOTOS[3];
+  if (/nifty|sensex|bse|nse|stock|market|rally|trade|shares|gain|loss/i.test(lower)) return FALLBACK_PHOTOS[0];
 
+  let hash = index;
+  for (let i = 0; i < title.length; i++) {
+    hash = (hash << 5) - hash + title.charCodeAt(i);
+  }
+  return FALLBACK_PHOTOS[Math.abs(hash) % FALLBACK_PHOTOS.length];
+}
+
+async function fetchImageBuffer(imageUrl: string): Promise<{ buffer: ArrayBuffer; contentType: string } | null> {
   try {
-    let targetUrl = new URL(rawUrl);
+    let targetUrl = new URL(imageUrl);
     for (let redirectCount = 0; redirectCount <= 3; redirectCount += 1) {
-      if (!isPlausiblyPublicUrl(targetUrl)) return placeholderSvg(title, idx);
+      if (!isPlausiblyPublicUrl(targetUrl)) return null;
 
       const response = await undiciFetch(targetUrl.toString(), {
         dispatcher: pinnedDispatcher,
@@ -278,7 +298,7 @@ export async function GET(request: NextRequest) {
 
       if (response.status >= 300 && response.status < 400) {
         const location = response.headers.get("location");
-        if (!location || redirectCount === 3) return placeholderSvg(title, idx);
+        if (!location || redirectCount === 3) return null;
         targetUrl = new URL(location, targetUrl);
         continue;
       }
@@ -287,21 +307,47 @@ export async function GET(request: NextRequest) {
         .split(";", 1)[0]
         .trim()
         .toLowerCase();
-      if (!response.ok || !ALLOWED_IMAGE_TYPES.has(contentType)) return placeholderSvg(title, idx);
+      if (!response.ok || !ALLOWED_IMAGE_TYPES.has(contentType)) return null;
       const body = await readLimitedBody(response);
-      if (!body) return placeholderSvg(title, idx);
+      if (!body) return null;
 
       const responseBody = body.buffer.slice(
         body.byteOffset,
         body.byteOffset + body.byteLength
       ) as ArrayBuffer;
-      return new NextResponse(responseBody, {
-        headers: { ...IMAGE_HEADERS, "Content-Type": contentType },
+
+      return { buffer: responseBody, contentType };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export async function GET(request: NextRequest) {
+  const rawUrl = request.nextUrl.searchParams.get("url");
+  const title = request.nextUrl.searchParams.get("title") || "";
+  const idx = Number(request.nextUrl.searchParams.get("idx") || 0);
+
+  // 1. Try fetching the requested image URL if provided
+  if (rawUrl) {
+    const fetched = await fetchImageBuffer(rawUrl);
+    if (fetched) {
+      return new NextResponse(fetched.buffer, {
+        headers: { ...IMAGE_HEADERS, "Content-Type": fetched.contentType },
       });
     }
-    return placeholderSvg(title, idx);
-  } catch (error) {
-    console.warn("Proxy image failed:", error);
-    return placeholderSvg(title, idx);
   }
+
+  // 2. Fallback to curated topic-matched financial photo
+  const fallbackPhotoUrl = selectFallbackPhoto(title, idx);
+  const fallbackFetched = await fetchImageBuffer(fallbackPhotoUrl);
+  if (fallbackFetched) {
+    return new NextResponse(fallbackFetched.buffer, {
+      headers: { ...IMAGE_HEADERS, "Content-Type": fallbackFetched.contentType },
+    });
+  }
+
+  // 3. Ultimate fallback: SVG placeholder
+  return placeholderSvg(title, idx);
 }

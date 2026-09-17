@@ -68,7 +68,7 @@ export class NewsProvider {
     }
 
     // Scrape OpenGraph images for top articles that don't have images yet
-    const articlesNeedingImages = articles.filter((a) => !a.imageUrl).slice(0, 6);
+    const articlesNeedingImages = articles.filter((a) => !a.imageUrl).slice(0, 10);
     if (articlesNeedingImages.length > 0) {
       await Promise.all(
         articlesNeedingImages.map(async (article) => {
@@ -78,18 +78,23 @@ export class NewsProvider {
               article.imageUrl = scavenged;
             }
           } catch {
-            // Keep null so fallback placeholder handles it cleanly
+            // Handled below with curated topic photo
           }
         })
       );
     }
 
-    // Sort: Articles with images first, then latest by publish date
-    const finalArticles = articles.sort((a, b) => {
-      if (a.imageUrl && !b.imageUrl) return -1;
-      if (!a.imageUrl && b.imageUrl) return 1;
-      return new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime();
-    }).slice(0, 30);
+    // Ensure EVERY single article has a high-quality relevant image
+    for (let i = 0; i < articles.length; i++) {
+      if (!articles[i].imageUrl) {
+        articles[i].imageUrl = this.getTopicFallbackImage(articles[i].title, i);
+      }
+    }
+
+    // Sort by latest publish date
+    const finalArticles = articles.sort((a, b) => 
+      new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
+    ).slice(0, 30);
 
     if (finalArticles.length > 0) {
       this.cache = { timestamp: now, articles: finalArticles };
@@ -98,8 +103,44 @@ export class NewsProvider {
     return finalArticles;
   }
 
+  private getTopicFallbackImage(title: string, index = 0): string {
+    const photos = [
+      "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?auto=format&fit=crop&q=80&w=800", // Candlestick chart
+      "https://images.unsplash.com/photo-1590283603385-17ffb3a7f29f?auto=format&fit=crop&q=80&w=800", // Stock charts
+      "https://images.unsplash.com/photo-1559526324-4b87b5e36e44?auto=format&fit=crop&q=80&w=800", // Banking
+      "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&q=80&w=800", // Corporate
+      "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&q=80&w=800", // Tech
+      "https://images.unsplash.com/photo-1579532537598-459ecdaf39cc?auto=format&fit=crop&q=80&w=800", // Investment
+      "https://images.unsplash.com/photo-1535320903710-d993d3d77d29?auto=format&fit=crop&q=80&w=800", // Exchange
+      "https://images.unsplash.com/photo-1526304640581-d334cdbbf45e?auto=format&fit=crop&q=80&w=800", // Currency
+    ];
+    const lower = (title || "").toLowerCase();
+    if (/tech|it|software|ai|digital|cyber/i.test(lower)) return photos[4];
+    if (/bank|loan|interest|rbi|rate|inflation|currency|rupee|tax|income/i.test(lower)) return photos[7];
+    if (/ipo|listing|wealth|mutual|fund|sip|invest|savings|annapurna|scheme/i.test(lower)) return photos[5];
+    if (/corporate|company|deal|promoter|merger|tata|reliance/i.test(lower)) return photos[3];
+    if (/nifty|sensex|bse|nse|stock|market|rally|trade|shares|gain|loss/i.test(lower)) return photos[0];
+
+    let hash = index;
+    for (let i = 0; i < title.length; i++) {
+      hash = (hash << 5) - hash + title.charCodeAt(i);
+    }
+    return photos[Math.abs(hash) % photos.length];
+  }
+
   private normalizeTitle(title: string): string {
     return (title || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  }
+
+  private cleanImageUrl(url: string): string | null {
+    if (!url) return null;
+    let clean = url.trim().replace(/^<!\[CDATA\[/, '').replace(/\]\]>$/, '').trim();
+    if (clean.includes('%20(') || clean.includes('(Photo') || clean.includes('(photo') || clean.length > 500) {
+      return null;
+    }
+    if (!clean.startsWith('http://') && !clean.startsWith('https://')) return null;
+    if (clean.includes('pixel') || clean.includes('tracker')) return null;
+    return clean;
   }
 
   private cleanText(str: string): string {
@@ -129,22 +170,32 @@ export class NewsProvider {
   private extractImageUrl(itemXml: string): string | null {
     // 1. media:content / media:thumbnail
     const mediaMatch = itemXml.match(/<media:(?:content|thumbnail)[^>]+url=["']([^"']+)["']/i);
-    if (mediaMatch && mediaMatch[1] && mediaMatch[1].startsWith('http')) return mediaMatch[1];
+    if (mediaMatch && mediaMatch[1]) {
+      const u = this.cleanImageUrl(mediaMatch[1]);
+      if (u) return u;
+    }
 
     // 2. enclosure
     const enclosureMatch = itemXml.match(/<enclosure[^>]+url=["']([^"']+)["']/i);
-    if (enclosureMatch && enclosureMatch[1] && enclosureMatch[1].startsWith('http')) return enclosureMatch[1];
+    if (enclosureMatch && enclosureMatch[1]) {
+      const u = this.cleanImageUrl(enclosureMatch[1]);
+      if (u) return u;
+    }
 
     // 3. image tag within item
     const imageTagMatch = itemXml.match(/<image[^>]*>[\s\S]*?<url>([^<]+)<\/url>/i);
-    if (imageTagMatch && imageTagMatch[1] && imageTagMatch[1].trim().startsWith('http')) return imageTagMatch[1].trim();
+    if (imageTagMatch && imageTagMatch[1]) {
+      const u = this.cleanImageUrl(imageTagMatch[1]);
+      if (u) return u;
+    }
 
     // 4. encoded <img> or raw <img> in description or content:encoded
     const imgMatch = itemXml.match(/(?:&lt;|<)img[^>]+src=(?:&quot;|["'])([^"'\s&]+)(?:&quot;|["'])/i);
     if (imgMatch && imgMatch[1]) {
       let src = imgMatch[1];
       if (src.startsWith('//')) src = 'https:' + src;
-      if (src.startsWith('http') && !src.includes('pixel') && !src.includes('tracker')) return src;
+      const u = this.cleanImageUrl(src);
+      if (u) return u;
     }
 
     return null;
