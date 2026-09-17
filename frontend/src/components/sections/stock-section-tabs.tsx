@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 
 const allSections = [
@@ -14,13 +15,30 @@ const allSections = [
 ];
 
 export function StockSectionTabs() {
-  const { user, loading } = useAuth();
+  const { user } = useAuth();
   const hasLocalSession = typeof window !== "undefined" && Boolean(localStorage.getItem("myfinance_auth_user"));
   const isAuthed = user || hasLocalSession;
   const sections = isAuthed ? allSections : allSections.slice(0, 1);
+  const [activeId, setActiveId] = useState("overview");
+
+  useEffect(() => {
+    const handleScroll = () => {
+      const scrollPosition = window.scrollY + 160;
+      for (let i = sections.length - 1; i >= 0; i--) {
+        const el = document.getElementById(sections[i].id);
+        if (el && el.offsetTop <= scrollPosition) {
+          setActiveId(sections[i].id);
+          break;
+        }
+      }
+    };
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, [sections]);
 
   const handleTabClick = (e: React.MouseEvent<HTMLAnchorElement>, id: string) => {
     e.preventDefault();
+    setActiveId(id);
     const targetEl = document.getElementById(id);
     if (targetEl) {
       const yOffset = -135; // Accounts for sticky header + sticky tabs offset
@@ -30,18 +48,28 @@ export function StockSectionTabs() {
   };
 
   return (
-    <div className="sticky top-[88px] z-30 -mx-1 overflow-x-auto no-scrollbar rounded-2xl border border-border/80 bg-panel/95 backdrop-blur-xl p-1.5 shadow-lg sm:-mx-0 sm:top-[90px] sm:p-2 md:top-[92px]">
+    <div
+      style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+      className="sticky top-[88px] z-30 -mx-1 overflow-x-auto no-scrollbar scrollbar-hide rounded-2xl border border-border/80 bg-panel/95 backdrop-blur-xl p-1.5 shadow-lg sm:-mx-0 sm:top-[90px] sm:p-2 md:top-[92px]"
+    >
       <div className="flex min-w-max items-center gap-1 sm:gap-1.5">
-        {sections.map((item) => (
-          <a
-            key={item.id}
-            href={`#${item.id}`}
-            onClick={(e) => handleTabClick(e, item.id)}
-            className="rounded-xl px-3 py-1.5 text-xs font-semibold text-muted-fg transition-all hover:bg-primary/10 hover:border-primary/40 hover:text-primary active:scale-95 sm:px-3.5 sm:py-2 sm:text-xs border border-transparent"
-          >
-            {item.label}
-          </a>
-        ))}
+        {sections.map((item) => {
+          const isActive = activeId === item.id;
+          return (
+            <a
+              key={item.id}
+              href={`#${item.id}`}
+              onClick={(e) => handleTabClick(e, item.id)}
+              className={`rounded-xl px-3 py-1.5 text-xs font-semibold transition-all active:scale-95 sm:px-3.5 sm:py-2 ${
+                isActive
+                  ? "bg-accent/15 text-accent border border-accent/40 font-bold shadow-sm"
+                  : "text-muted hover:bg-accent/10 hover:text-text border border-transparent"
+              }`}
+            >
+              {item.label}
+            </a>
+          );
+        })}
       </div>
     </div>
   );
