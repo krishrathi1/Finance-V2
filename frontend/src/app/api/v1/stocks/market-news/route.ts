@@ -6,10 +6,10 @@ export const maxDuration = 30;
 
 export async function GET(request: NextRequest) {
   try {
-    void request.nextUrl.searchParams.get('refresh');
+    const refresh = request.nextUrl.searchParams.get('refresh') === 'true' || request.nextUrl.searchParams.get('force') === 'true';
     
-    // Fetch live news from NewsAPI instead of mock data
-    const articles = await newsProvider.getMarketNews();
+    // Fetch live market news
+    const articles = await newsProvider.getMarketNews(refresh);
 
     // The API client in frontend/lib/api.ts expects a { data: [...] } envelope
     return NextResponse.json({

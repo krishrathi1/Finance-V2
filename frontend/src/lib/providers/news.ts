@@ -13,78 +13,217 @@ const MARKET_PLACEHOLDER = 'https://images.unsplash.com/photo-1611974717482-98aa
 export class NewsProvider {
   private apiKey: string | null = process.env.NEWS_API_KEY || null;
   private theNewsApiKey: string | null = process.env.THE_NEWS_API_KEY || null;
-  private cache: { date: string; articles: NewsArticle[] } | null = null;
+  private cache: { timestamp: number; articles: NewsArticle[] } | null = null;
+  private CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
-  async getMarketNews(): Promise<NewsArticle[]> {
-    const today = new Date().toISOString().split('T')[0];
+  async getMarketNews(force = false): Promise<NewsArticle[]> {
+    const now = Date.now();
     
-    // 1. Try Cache First
-    if (this.cache?.date === today && this.cache.articles.length > 0) {
+    // 1. Try Cache First (within TTL)
+    if (!force && this.cache && (now - this.cache.timestamp < this.CACHE_TTL_MS) && this.cache.articles.length > 0) {
       return this.cache.articles;
     }
 
-    // 2. Fetch fresh data
-    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-    
+    const yesterday = new Date(now - 24 * 60 * 60 * 1000).toISOString();
     let articles: NewsArticle[] = [];
 
-    // Use TheNewsAPI if available (Primary for Home Page)
+    // Use TheNewsAPI if available
     if (this.theNewsApiKey) {
-      articles = await this.getTheNewsAPIArticles();
-    }
-
-    // Fallback to old sources if TheNewsAPI failed or empty
-    if (articles.length < 3 && this.apiKey) {
-      console.log('[NewsProvider] TheNewsAPI empty, trying NewsAPI...');
-      const newsApiArticles = await this.getNewsAPIArticles(yesterday);
-      const seen = new Set(articles.map(a => a.url));
-      for (const a of newsApiArticles) {
-        if (!seen.has(a.url)) articles.push(a);
+      try {
+        articles = await this.getTheNewsAPIArticles();
+      } catch (err) {
+        console.warn('[NewsProvider] TheNewsAPI error:', err);
       }
     }
 
-    // 2. Fallback to RSS if NewsAPI failed
-    if (articles.length < 3) {
-      console.log('NewsAPI limited or empty, fetching RSS fallback...');
-      const fallbackArticles = await this.getGoogleNewsFallback();
-      
-      const seen = new Set(articles.map(a => a.url));
-      for (const article of fallbackArticles) {
-        if (!seen.has(article.url)) {
+    // Fallback to NewsAPI if TheNewsAPI failed or empty
+    if (articles.length < 5 && this.apiKey) {
+      try {
+        const newsApiArticles = await this.getNewsAPIArticles(yesterday);
+        const seen = new Set(articles.map((a) => a.url));
+        for (const a of newsApiArticles) {
+          if (!seen.has(a.url)) articles.push(a);
+        }
+      } catch (err) {
+        console.warn('[NewsProvider] NewsAPI error:', err);
+      }
+    }
+
+    // Primary & Fallback: High-Quality Indian Finance RSS Feeds with rich images
+    try {
+      const rssArticles = await this.getRichIndianMarketFeeds();
+      const seenUrls = new Set(articles.map((a) => a.url));
+      const seenTitles = new Set(articles.map((a) => this.normalizeTitle(a.title)));
+
+      for (const article of rssArticles) {
+        const norm = this.normalizeTitle(article.title);
+        if (!seenUrls.has(article.url) && !seenTitles.has(norm)) {
+          seenUrls.add(article.url);
+          seenTitles.add(norm);
           articles.push(article);
-          seen.add(article.url);
         }
       }
+    } catch (err) {
+      console.warn('[NewsProvider] RSS feeds error:', err);
     }
 
-    // 3. Image Scavenging with Redirect Resolution
-    // We only scrape the top 5 articles without images to keep performance high
-    const articlesNeedingImages = articles.filter(a => !a.imageUrl).slice(0, 5);
+    // Scrape OpenGraph images for top articles that don't have images yet
+    const articlesNeedingImages = articles.filter((a) => !a.imageUrl).slice(0, 6);
     if (articlesNeedingImages.length > 0) {
-      await Promise.all(articlesNeedingImages.map(async (article) => {
-        try {
-          const scavenged = await this.fetchOgImage(article.url);
-          if (scavenged) {
-            article.imageUrl = scavenged;
-          } else {
-            article.imageUrl = MARKET_PLACEHOLDER;
+      await Promise.all(
+        articlesNeedingImages.map(async (article) => {
+          try {
+            const scavenged = await this.fetchOgImage(article.url);
+            if (scavenged) {
+              article.imageUrl = scavenged;
+            }
+          } catch {
+            // Keep null so fallback placeholder handles it cleanly
           }
-        } catch {
-          article.imageUrl = MARKET_PLACEHOLDER;
-        }
-      }));
+        })
+      );
     }
 
-    // 4. Final Cleanup: Ensure no 'null' images for UI
-    articles.forEach(a => { if (!a.imageUrl) a.imageUrl = MARKET_PLACEHOLDER; });
+    // Sort: Articles with images first, then latest by publish date
+    const finalArticles = articles.sort((a, b) => {
+      if (a.imageUrl && !b.imageUrl) return -1;
+      if (!a.imageUrl && b.imageUrl) return 1;
+      return new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime();
+    }).slice(0, 30);
 
-    const finalArticles = articles.sort((a, b) => 
-      new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
-    );
-
-    this.cache = { date: today, articles: finalArticles };
+    if (finalArticles.length > 0) {
+      this.cache = { timestamp: now, articles: finalArticles };
+    }
 
     return finalArticles;
+  }
+
+  private normalizeTitle(title: string): string {
+    return (title || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  }
+
+  private cleanText(str: string): string {
+    if (!str) return '';
+    let clean = str.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/gi, '$1');
+    clean = clean.replace(/\]\]>$/g, '');
+    clean = this.decodeHTML(clean);
+    clean = clean.replace(/<[^>]+>/g, ' ');
+    return clean.replace(/\s+/g, ' ').trim();
+  }
+
+  private decodeHTML(str: string): string {
+    if (!str) return '';
+    return str
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#34;/g, '"')
+      .replace(/&apos;/g, "'")
+      .replace(/&#39;/g, "'")
+      .replace(/&amp;/g, '&')
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&(?:ndash|mdash|#8211|#8212);/gi, '-')
+      .replace(/&hellip;|&#8230;/gi, '...');
+  }
+
+  private extractImageUrl(itemXml: string): string | null {
+    // 1. media:content / media:thumbnail
+    const mediaMatch = itemXml.match(/<media:(?:content|thumbnail)[^>]+url=["']([^"']+)["']/i);
+    if (mediaMatch && mediaMatch[1] && mediaMatch[1].startsWith('http')) return mediaMatch[1];
+
+    // 2. enclosure
+    const enclosureMatch = itemXml.match(/<enclosure[^>]+url=["']([^"']+)["']/i);
+    if (enclosureMatch && enclosureMatch[1] && enclosureMatch[1].startsWith('http')) return enclosureMatch[1];
+
+    // 3. image tag within item
+    const imageTagMatch = itemXml.match(/<image[^>]*>[\s\S]*?<url>([^<]+)<\/url>/i);
+    if (imageTagMatch && imageTagMatch[1] && imageTagMatch[1].trim().startsWith('http')) return imageTagMatch[1].trim();
+
+    // 4. encoded <img> or raw <img> in description or content:encoded
+    const imgMatch = itemXml.match(/(?:&lt;|<)img[^>]+src=(?:&quot;|["'])([^"'\s&]+)(?:&quot;|["'])/i);
+    if (imgMatch && imgMatch[1]) {
+      let src = imgMatch[1];
+      if (src.startsWith('//')) src = 'https:' + src;
+      if (src.startsWith('http') && !src.includes('pixel') && !src.includes('tracker')) return src;
+    }
+
+    return null;
+  }
+
+  private async fetchFeed(feedUrl: string, defaultSource: string): Promise<NewsArticle[]> {
+    try {
+      const response = await fetch(feedUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+          'Accept': 'application/rss+xml, application/xml, text/xml, */*'
+        },
+        signal: AbortSignal.timeout(6000)
+      });
+      if (!response.ok) return [];
+      const xml = await response.text();
+      return this.parseFeedXml(xml, defaultSource);
+    } catch {
+      return [];
+    }
+  }
+
+  private parseFeedXml(xml: string, defaultSource: string): NewsArticle[] {
+    const articles: NewsArticle[] = [];
+    const items = xml.split(/<item[\s>]/i).slice(1);
+
+    for (const item of items) {
+      const extract = (tag: string) => {
+        const match = item.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'i'));
+        return match ? match[1] : '';
+      };
+
+      const rawTitle = extract('title');
+      const rawLink = extract('link');
+      const rawPubDate = extract('pubDate');
+      const rawDesc = extract('description');
+      const rawSource = extract('source');
+
+      const title = this.cleanText(rawTitle);
+      const url = this.cleanText(rawLink).replace(/\s+/g, '');
+      if (!title || !url || !url.startsWith('http')) continue;
+
+      let source = this.cleanText(rawSource) || defaultSource;
+      if (source === 'Google News' && title.includes(' - ')) {
+        const parts = title.split(' - ');
+        source = parts.pop() || defaultSource;
+      }
+
+      const imageUrl = this.extractImageUrl(item);
+      const summaryText = this.cleanText(rawDesc);
+      const summary = summaryText.length > 15 ? summaryText.slice(0, 250) : title;
+
+      const dateObj = rawPubDate ? new Date(rawPubDate) : new Date();
+      const publishedAt = Number.isNaN(dateObj.getTime()) ? new Date().toISOString() : dateObj.toISOString();
+
+      articles.push({
+        title,
+        source,
+        url,
+        summary,
+        imageUrl,
+        publishedAt
+      });
+    }
+    return articles;
+  }
+
+  private async getRichIndianMarketFeeds(): Promise<NewsArticle[]> {
+    const feeds = [
+      { url: 'https://economictimes.indiatimes.com/markets/rssfeeds/1977021501.cms', source: 'Economic Times' },
+      { url: 'https://economictimes.indiatimes.com/markets/stocks/rssfeeds/2146842.cms', source: 'ET Markets' },
+      { url: 'https://www.business-standard.com/rss/markets-106.rss', source: 'Business Standard' },
+      { url: 'https://feeds.feedburner.com/ndtvprofit-latest', source: 'NDTV Profit' },
+      { url: 'https://www.moneycontrol.com/rss/MCtopnews.xml', source: 'Moneycontrol' },
+      { url: 'https://www.moneycontrol.com/rss/marketreports.xml', source: 'Moneycontrol' }
+    ];
+
+    const results = await Promise.all(feeds.map((f) => this.fetchFeed(f.url, f.source)));
+    return results.flat();
   }
 
   private async getTheNewsAPIArticles(): Promise<NewsArticle[]> {
@@ -121,11 +260,11 @@ export class NewsProvider {
         if (!item.url || seen.has(item.url)) continue;
         seen.add(item.url);
         articles.push({
-          title: item.title,
+          title: this.cleanText(item.title),
           source: item.source || 'Market News',
           publishedAt: item.published_at,
           url: item.url,
-          summary: item.snippet || item.description || '',
+          summary: this.cleanText(item.snippet || item.description || ''),
           imageUrl: item.image_url || null,
         });
       }
@@ -147,14 +286,13 @@ export class NewsProvider {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
           'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8'
         },
-        redirect: 'follow', // CRITICAL: Follow Google News redirects
+        redirect: 'follow',
         signal: AbortSignal.timeout(4500)
       });
       
       if (!response.ok) return null;
       
       const finalUrl = response.url;
-      // Skip if we are still on a google-owned domain (consent screens, etc.)
       if (finalUrl.includes('google.com') && !finalUrl.includes('lh3.googleusercontent.com')) {
         return null;
       }
@@ -180,9 +318,7 @@ export class NewsProvider {
 
   private isGoodImageUrl(url: string): boolean {
     if (!url) return false;
-    // Skip small icons or logos usually starting with /
     if (url.startsWith('/') && !url.startsWith('//')) return false;
-    // Skip known tracker/empty images
     if (url.includes('pixel') || url.includes('tracker')) return false;
     return true;
   }
@@ -208,81 +344,16 @@ export class NewsProvider {
         if (!article.url || seen.has(article.url)) continue;
         seen.add(article.url);
         uniqueArticles.push({
-          title: article.title,
+          title: this.cleanText(article.title),
           source: article.source?.name || 'News',
           publishedAt: article.publishedAt,
           url: article.url,
-          summary: article.description || '',
+          summary: this.cleanText(article.description || ''),
           imageUrl: article.urlToImage || null,
         });
       }
       return uniqueArticles;
     } catch { return []; }
-  }
-
-  private async getGoogleNewsFallback(): Promise<NewsArticle[]> {
-    const query = encodeURIComponent('Indian stock market');
-    const url = `https://news.google.com/rss/search?q=${query}&hl=en-IN&gl=IN&ceid=IN:en`;
-    try {
-      const response = await fetch(url, { 
-        headers: { 'User-Agent': 'Mozilla/5.0' },
-        next: { revalidate: 300 } 
-      });
-      if (!response.ok) return [];
-      const xml = await response.text();
-      return this.parseRSS(xml);
-    } catch { return []; }
-  }
-
-  private decodeHTML(str: string): string {
-    return str
-      .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"')
-      .replace(/&amp;/g, '&').replace(/&#39;/g, "'").replace(/&nbsp;/g, ' ');
-  }
-
-  private parseRSS(xml: string): NewsArticle[] {
-    const articles: NewsArticle[] = [];
-    const items = xml.split('<item>').slice(1);
-    for (const item of items) {
-      const extract = (tag: string) => {
-        const match = item.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`));
-        return match ? match[1].replace(/<!\[CDATA\[(.*?)\]\]>/g, '$1').trim() : '';
-      };
-      const titleRaw = extract('title');
-      const link = extract('link');
-      const pubDate = extract('pubDate');
-      const descriptionRaw = extract('description');
-      const sourceRaw = extract('source');
-      const description = this.decodeHTML(descriptionRaw);
-      
-      let title = titleRaw;
-      let source = sourceRaw || 'Google News';
-      if (!sourceRaw && titleRaw.includes(' - ')) {
-        const parts = titleRaw.split(' - ');
-        source = parts.pop() || 'Google News';
-        title = parts.join(' - ');
-      }
-
-      let imageUrl: string | null = null;
-      const imgMatch = description.match(/<img[^>]+src="([^">]+)"/i);
-      if (imgMatch) {
-         imageUrl = imgMatch[1];
-         if (imageUrl.startsWith('//')) imageUrl = 'https:' + imageUrl;
-      }
-
-      let summary = description.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-      if (summary.length < 10) summary = title;
-
-      const publishedDate = new Date(pubDate);
-      articles.push({
-        title, source, url: link,
-        publishedAt: Number.isNaN(publishedDate.getTime()) ? new Date().toISOString() : publishedDate.toISOString(),
-        summary: summary.substring(0, 250),
-        imageUrl: imageUrl
-      });
-      if (articles.length >= 20) break;
-    }
-    return articles;
   }
 }
 

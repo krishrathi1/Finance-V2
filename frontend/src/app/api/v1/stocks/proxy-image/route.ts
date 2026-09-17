@@ -22,6 +22,7 @@ const ALLOWED_IMAGE_TYPES = new Set([
   "image/avif",
   "image/gif",
   "image/jpeg",
+  "image/jpg",
   "image/png",
   "image/webp",
 ]);
@@ -196,19 +197,28 @@ function isPlausiblyPublicUrl(url: URL): boolean {
  */
 function pinnedPublicLookup(
   hostname: string,
-  _options: unknown,
-  callback: (err: NodeJS.ErrnoException | null, address: string, family: number) => void
+  options: unknown,
+  callback: (err: NodeJS.ErrnoException | null, address?: any, family?: number) => void
 ): void {
+  let cb = callback;
+  let opts: any = options;
+  if (typeof options === "function") {
+    cb = options as any;
+    opts = {};
+  }
   dns.lookup(hostname, { all: true, verbatim: true }, (err, addresses) => {
-    if (err) return callback(err, "", 4);
-    const list = (addresses as Array<{ address: string; family: number }>) || [];
-    const valid = list.find((a) => !isPrivateIp(a.address));
+    if (err) return cb(err, "", 4);
+    const list = Array.isArray(addresses) ? addresses : [addresses];
+    const valid = list.find((a) => a && a.address && !isPrivateIp(a.address));
     if (!valid) {
       const notFound = new Error(`No public address for ${hostname}`) as NodeJS.ErrnoException;
       notFound.code = "ENOTFOUND";
-      return callback(notFound, "", 4);
+      return cb(notFound, "", 4);
     }
-    callback(null, valid.address, valid.family);
+    if (opts && opts.all) {
+      return cb(null, list.filter((a) => a && a.address && !isPrivateIp(a.address)) as any);
+    }
+    return cb(null, valid.address, valid.family || 4);
   });
 }
 
