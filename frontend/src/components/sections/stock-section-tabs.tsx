@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
-import { publishVoicePageContext } from "@/lib/voice/page-context";
 
 const allSections = [
   { id: "overview", label: "Overview" },
@@ -29,7 +28,6 @@ export function StockSectionTabs() {
         const el = document.getElementById(sections[i].id);
         if (el && el.offsetTop <= scrollPosition) {
           setActiveId(sections[i].id);
-          publishVoicePageContext({ activeTab: sections[i].label });
           break;
         }
       }
@@ -41,10 +39,6 @@ export function StockSectionTabs() {
   const handleTabClick = (e: React.MouseEvent<HTMLAnchorElement>, id: string) => {
     e.preventDefault();
     setActiveId(id);
-    const item = sections.find((s) => s.id === id);
-    if (item) {
-      publishVoicePageContext({ activeTab: item.label });
-    }
     const targetEl = document.getElementById(id);
     if (targetEl) {
       const yOffset = -135; // Accounts for sticky header + sticky tabs offset

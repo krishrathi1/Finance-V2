@@ -48,7 +48,6 @@ import { SwotAnalysis } from "@/components/sections/swot-analysis";
 import { TechnicalsSection } from "@/components/sections/technicals-section";
 import { useVisibilityPolling } from "@/hooks/useVisibilityPolling";
 import { fetchDashboardEnvelope } from "@/lib/api";
-import { publishVoicePageContext } from "@/lib/voice/page-context";
 import type { DashboardData } from "@/shared/types";
 
 const FinancialsSection = dynamic(() => import("@/components/sections/financials-section").then((m) => m.FinancialsSection), { ssr: false });
@@ -122,83 +121,8 @@ export function LiveStockDetails({ initialData, symbol, exchange }: { initialDat
     };
   }, [exchange, symbol]);
 
-  useEffect(() => {
-    const qLatest = data.financials?.quarterly?.slice(-1)[0];
-    const qStr = qLatest ? `${qLatest.period}: Revenue ₹${qLatest.revenue ?? "N/A"}Cr, PAT ₹${qLatest.profit ?? "N/A"}Cr` : undefined;
 
-    publishVoicePageContext({
-      pageType: "stock-detail",
-      route: `/stocks/${data.symbol || symbol}`,
-      title: `${data.companyName || symbol} (${data.symbol || symbol}) Share Price`,
-      stock: {
-        symbol: data.symbol || symbol,
-        companyName: data.companyName,
-        exchange: data.exchange || exchange,
-        sector: data.sector,
-        industry: data.profile?.industry,
-      },
-      price: {
-        current: data.price?.cmp,
-        change: data.price?.change,
-        changePercent: data.price?.changePercent,
-        high52Week: data.price?.fiftyTwoWeekHigh,
-        low52Week: data.price?.fiftyTwoWeekLow,
-        aiTarget: data.price?.aiTarget,
-      },
-      valuation: {
-        pe: (data.metrics as any)?.pe ?? (data.metrics as any)?.peRatio,
-        pb: (data.metrics as any)?.pb ?? (data.metrics as any)?.pbRatio,
-        marketCap: (data.metrics as any)?.marketCap,
-        dividendYield: (data.metrics as any)?.dividendYield,
-        roe: (data.metrics as any)?.roe,
-        roce: (data.metrics as any)?.roce,
-        evToEbitda: (data.metrics as any)?.evToEbitda ?? (data.metrics as any)?.evEbitda,
-        eps: (data.metrics as any)?.eps,
-      },
-      fundamentals: {
-        revenue: qLatest?.revenue,
-        profit: qLatest?.profit,
-        quarterlySummary: qStr,
-      },
-      technicals: {
-        rsi: data.technicals?.rsi14,
-        macd: data.technicals?.macd,
-        trend: data.technicals?.trend,
-        ema20: data.technicals?.ema20,
-        ema50: data.technicals?.ema50,
-      },
-      smartScore: {
-        score: data.smartScore?.score,
-        maxScore: data.smartScore?.maxScore,
-        label: data.smartScore?.label,
-        explanation: data.smartScore?.explanation || data.smartScore?.aiExplanation,
-      },
-      riskScore: {
-        score: data.riskScore?.score,
-        maxScore: data.riskScore?.maxScore,
-        label: data.riskScore?.label,
-        explanation: data.riskScore?.explanation || data.riskScore?.aiExplanation,
-      },
-      shareholding: {
-        promoter: data.shareholding?.promoters,
-        fii: data.shareholding?.fii,
-        dii: data.shareholding?.dii,
-        publicHolding: data.shareholding?.public,
-      },
-      news: (data.news || []).slice(0, 3).map((n) => ({ title: n.title, date: n.publishedAt })),
-      visibleSections: [
-        "Price & Summary",
-        "Key Metrics & Valuation",
-        "Smart Score",
-        "Forensics & Risk",
-        "Technicals & EMA",
-        "Shareholding Pattern",
-        "Financial Statements",
-        "Corporate Actions",
-        "News & Filings",
-      ],
-    });
-  }, [data, exchange, symbol]);
+
 
   useVisibilityPolling((initial) => {
     // Initial load (and reloads on symbol/exchange change) are handled by the effect above.

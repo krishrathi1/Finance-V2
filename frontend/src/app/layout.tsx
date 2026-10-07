@@ -14,7 +14,6 @@ import { NavLinks } from "@/components/nav-links";
 import { ScrollProgress } from "@/components/scroll-progress";
 import { SmoothExperience } from "@/components/smooth-experience";
 import { ThemeProvider } from "@/components/theme-provider";
-import { VoiceAssistant } from "@/components/voice-assistant";
 import { OG_IMAGE_PATH, SITE_DESCRIPTION, SITE_NAME, SITE_TITLE, SITE_URL } from "@/shared/seo";
 
 import "./globals.css";
@@ -339,9 +338,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 </div>
               </div>
             </footer>
-            <Suspense fallback={null}>
-              <VoiceAssistant />
-            </Suspense>
           </AuthProvider>
         </ThemeProvider>
       </body>

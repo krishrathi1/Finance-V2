@@ -19,7 +19,6 @@ import { Activity, BarChart3, LineChart as LineChartIcon, PieChart, ShieldAlert,
 
 import { Card } from "@/components/ui/card";
 import type { DashboardData } from "@/shared/types";
-import { publishVoicePageContext } from "@/lib/voice/page-context";
 
 type TabKey = "price-dma" | "financials" | "shareholding" | "drawdown" | "sip";
 
@@ -35,13 +34,6 @@ export function InteractiveChartsSuite({ data }: { data: DashboardData }) {
       "drawdown": { name: "Peak-to-Trough Drawdown History", indicators: ["Drawdown %", "Underwater Curve"] },
       "sip": { name: "Monthly SIP Simulation", indicators: ["Total Invested", "Current Value", "Absolute Return"] },
     };
-    publishVoicePageContext({
-      chart: {
-        activeTab: indicatorMap[newTab]?.name || newTab,
-        timeframe: "Historical Daily / Yearly",
-        indicators: indicatorMap[newTab]?.indicators || [],
-      },
-    });
   };
 
   // 1. Price & Moving Averages (50-DMA & 200-DMA)

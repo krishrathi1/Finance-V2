@@ -32,7 +32,6 @@ import { PortfolioDoctor } from "@/components/sections/portfolio-doctor";
 import { useVisibilityPolling } from "@/hooks/useVisibilityPolling";
 import { fetchAIScreenerResults, fetchTickerTape, fetchPortfolioRiskAssessment, searchStocks, parsePortfolioDocument } from "@/lib/api";
 import { addAlert, getAlertsForSymbol, removeAlert } from "@/lib/alerts";
-import { publishVoicePageContext } from "@/lib/voice/page-context";
 import { ImportModal } from "@/components/modals/import-modal";
 import { BrokerImportModal } from "@/components/modals/broker-import-modal";
 import { PortfolioBenchmark } from "@/components/sections/portfolio-benchmark";
@@ -854,20 +853,6 @@ export default function PortfolioPage() {
       .slice(0, 5)
       .map((h) => `${h.symbol} (${h.quantity} shares, Current: ₹${h.currentPrice ?? h.buyPrice}, PnL: ${h.pnlPercent !== null ? (h.pnlPercent > 0 ? "+" : "") + h.pnlPercent.toFixed(1) + "%" : "N/A"})`);
 
-    publishVoicePageContext({
-      pageType: "portfolio",
-      route: "/portfolio",
-      title: "Portfolio Tracker | Finance-V2",
-      portfolio: {
-        totalValue: summary.totalCurrentValue,
-        totalInvested: summary.totalInvested,
-        totalPnl: summary.totalPnl,
-        totalPnlPercent: summary.totalPnlPercent,
-        holdingsCount: holdings.length,
-        topHoldings,
-      },
-      visibleSections: ["Summary Cards", "Allocation Chart", "Holdings Table", "Portfolio Doctor", "Dividend Calendar"],
-    });
   }, [holdings, summary]);
 
   const handleRemove = useCallback((id: string) => {
