@@ -8,11 +8,9 @@ import {
   MicOff,
   X,
   Volume2,
-  VolumeX,
   Send,
   Sparkles,
-  Info,
-  RotateCcw,
+  ChevronDown,
 } from "lucide-react";
 
 export type VoiceState =
@@ -24,119 +22,108 @@ export type VoiceState =
   | "interactive";
 
 /**
- * FloatingVoiceAssistant — ULTRA REAL-TIME VOICE-ONLY AGENT.
+ * VoiceAssistant — SLEEK, ULTRA-RESPONSIVE VOICE AGENT
  *
- * Collapsed:
- *  - Matches reference UI pill (#C57708, green glowing pulse dot, "Need help?").
+ * Powered by OpenRouter: NVIDIA Nemotron 3 Nano Omni 30B Reasoning.
  *
- * Active:
- *  - Morphs into real-time voice pill with animated equalizer bars.
- *  - Speaks answers aloud using Speech Synthesis / Fish Audio neural TTS.
- *  - Solves Chromium onend stall / garbage collection bug with safety timers & ref binding.
- *  - Real-time barge-in: clicking or speaking immediately stops previous audio.
- *  - Full contextual awareness of the active stock (CMP, 52W range, P/E, RSI, M-Score).
- *  - Shows live spoken subtitles so answers are immediately readable and audible.
+ * - Matches the amber reference UI pill (#C57708, green glowing pulse dot, "Need help?").
+ * - Morphs in place into an active voice pill.
+ * - Zero hanging: Speech synthesis has tight deterministic safety timers and GC protection.
+ * - Compact & unobtrusive: No huge dialog cards covering the dashboard charts.
+ * - Instant barge-in: Click or speak anytime to interrupt audio.
  */
 export function VoiceAssistant() {
   const [voiceState, setVoiceState] = useState<VoiceState>("idle");
   const [transcript, setTranscript] = useState<string>("");
   const [spokenReply, setSpokenReply] = useState<string>("");
   const [isMicAvailable, setIsMicAvailable] = useState<boolean>(true);
+  const [showQuickTray, setShowQuickTray] = useState<boolean>(false);
   const [textInput, setTextInput] = useState<string>("");
 
   const recognitionRef = useRef<any>(null);
   const micStreamRef = useRef<MediaStream | null>(null);
-  const audioRef = useRef<HTMLAudioElement>(null);
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
-  const speechSafetyTimerRef = useRef<any>(null);
-  const resumeHeartbeatRef = useRef<any>(null);
+  const safetyTimerRef = useRef<any>(null);
   const isSpeakingRef = useRef<boolean>(false);
   const isAbortedRef = useRef<boolean>(false);
-  const fishAudioSupportedRef = useRef<boolean | null>(null);
 
-  // Stop any ongoing audio or speech synthesis immediately
+  // Stop any ongoing speech playback cleanly
   const cancelSpeech = useCallback(() => {
-    if (speechSafetyTimerRef.current) {
-      clearTimeout(speechSafetyTimerRef.current);
-      speechSafetyTimerRef.current = null;
-    }
-    if (resumeHeartbeatRef.current) {
-      clearInterval(resumeHeartbeatRef.current);
-      resumeHeartbeatRef.current = null;
-    }
-    if (audioRef.current) {
-      try {
-        audioRef.current.pause();
-        audioRef.current.currentTime = 0;
-      } catch {}
+    if (safetyTimerRef.current) {
+      clearTimeout(safetyTimerRef.current);
+      safetyTimerRef.current = null;
     }
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
       try {
         window.speechSynthesis.cancel();
-        window.speechSynthesis.resume(); // Unpause Chromium audio pipeline
       } catch {}
     }
     utteranceRef.current = null;
+    if (typeof window !== "undefined") {
+      (window as any).__voiceUtterance = null;
+    }
     isSpeakingRef.current = false;
   }, []);
 
-  // Browser Native Speech Synthesis with robust Chromium GC & stall protection
-  const playNativeVoice = useCallback(
+  // Browser Native Speech Synthesis with guaranteed deterministic finish
+  const playVoice = useCallback(
     (cleanText: string, onFinish?: () => void) => {
       cancelSpeech();
 
       if (typeof window === "undefined" || !("speechSynthesis" in window)) {
         isSpeakingRef.current = false;
-        setVoiceState((prev) => (isMicAvailable ? "listening" : "interactive"));
+        setVoiceState(isMicAvailable ? "listening" : "interactive");
         onFinish?.();
         return;
       }
 
-      try {
-        window.speechSynthesis.resume();
-      } catch {}
-
       const utterance = new SpeechSynthesisUtterance(cleanText);
-      utterance.rate = 1.08;
+      utterance.rate = 1.1;
       utterance.pitch = 1.0;
 
-      // Select natural voice (Indian English/Hindi preferred, otherwise standard English)
+      // Pick Indian/English voice if present
       try {
         const voices = window.speechSynthesis.getVoices();
-        const preferredVoice =
+        const preferred =
           voices.find(
             (v) =>
               v.lang.includes("en-IN") ||
               v.lang.includes("hi-IN") ||
               v.name.toLowerCase().includes("india")
           ) ||
-          voices.find((v) => v.lang.startsWith("en") && (v.name.includes("Natural") || v.name.includes("Google") || v.name.includes("Microsoft"))) ||
+          voices.find(
+            (v) =>
+              v.lang.startsWith("en") &&
+              (v.name.includes("Natural") ||
+                v.name.includes("Google") ||
+                v.name.includes("Microsoft"))
+          ) ||
           voices.find((v) => v.lang.startsWith("en"));
 
-        if (preferredVoice) {
-          utterance.voice = preferredVoice;
-        }
+        if (preferred) utterance.voice = preferred;
       } catch {}
 
-      // Retain utterance in ref to prevent Chromium Garbage Collection bug
+      // Anchor to window & ref to prevent Chromium GC cancellation
       utteranceRef.current = utterance;
+      (window as any).__voiceUtterance = utterance;
+
       isSpeakingRef.current = true;
       setVoiceState("speaking");
 
-      let isFinished = false;
-      const finishExecution = () => {
-        if (isFinished) return;
-        isFinished = true;
+      let resolved = false;
+      const finishPlayback = () => {
+        if (resolved) return;
+        resolved = true;
 
-        if (speechSafetyTimerRef.current) {
-          clearTimeout(speechSafetyTimerRef.current);
-          speechSafetyTimerRef.current = null;
+        if (safetyTimerRef.current) {
+          clearTimeout(safetyTimerRef.current);
+          safetyTimerRef.current = null;
         }
-        if (resumeHeartbeatRef.current) {
-          clearInterval(resumeHeartbeatRef.current);
-          resumeHeartbeatRef.current = null;
-        }
+
         utteranceRef.current = null;
+        if (typeof window !== "undefined") {
+          (window as any).__voiceUtterance = null;
+        }
         isSpeakingRef.current = false;
 
         if (!isAbortedRef.current) {
@@ -148,43 +135,25 @@ export function VoiceAssistant() {
         }
       };
 
-      utterance.onend = finishExecution;
-      utterance.onerror = (e) => {
-        console.warn("[voice] speech synthesis error event:", e);
-        finishExecution();
-      };
+      utterance.onend = finishPlayback;
+      utterance.onerror = finishPlayback;
 
-      // Safety timeout: prevents stuck "Speaking..." state in Chromium under any circumstance
-      // Approx 13 chars per second + 2 seconds safety buffer
-      const estDurationMs = Math.max(2500, Math.ceil((cleanText.length / 13) * 1000) + 1800);
-      speechSafetyTimerRef.current = setTimeout(() => {
-        console.log("[voice] safety timer triggered, advancing state");
-        finishExecution();
-      }, estDurationMs);
-
-      // Chromium 15s pause bug workaround
-      resumeHeartbeatRef.current = setInterval(() => {
-        if (typeof window !== "undefined" && "speechSynthesis" in window && window.speechSynthesis.speaking) {
-          window.speechSynthesis.pause();
-          window.speechSynthesis.resume();
-        }
-      }, 3500);
+      // Tight, realistic safety timer: max 6.5s, speech speed ~14 chars/sec
+      const timeoutMs = Math.min(6500, Math.max(1600, Math.ceil(cleanText.length * 60) + 900));
+      safetyTimerRef.current = setTimeout(finishPlayback, timeoutMs);
 
       try {
         window.speechSynthesis.speak(utterance);
       } catch {
-        finishExecution();
+        finishPlayback();
       }
     },
     [cancelSpeech, isMicAvailable]
   );
 
-  // Speak AI answer aloud (Neural Fish Audio if configured, else instant high-quality native synthesis)
+  // Clean formatted response for spoken pronunciation
   const speakResponse = useCallback(
-    async (text: string, onFinish?: () => void) => {
-      cancelSpeech();
-
-      // Clean symbols & acronyms for natural financial pronunciation
+    (text: string, onFinish?: () => void) => {
       const cleanText = text
         .replace(/[*#_`~>]/g, "")
         .replace(/₹/g, "Rupees ")
@@ -196,7 +165,7 @@ export function VoiceAssistant() {
         .replace(/\bFII\b/gi, "F I I")
         .replace(/\bDII\b/gi, "D I I")
         .replace(/\bRSI\b/gi, "R S I")
-        .replace(/\bCMP\b/gi, "Current Market Price")
+        .replace(/\bCMP\b/gi, "Current Price")
         .trim();
 
       if (!cleanText) {
@@ -205,67 +174,12 @@ export function VoiceAssistant() {
       }
 
       setSpokenReply(text);
-
-      // If Fish Audio is known to be unavailable, skip network roundtrip directly to 0ms native voice
-      if (fishAudioSupportedRef.current === false) {
-        playNativeVoice(cleanText, onFinish);
-        return;
-      }
-
-      // Try Fish Audio neural TTS with a fast timeout (2.5s)
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 2500);
-
-        const res = await fetch("/api/v1/ai/voice/tts", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text: cleanText, model: "fish-audio/s2.1-pro" }),
-          signal: controller.signal,
-        });
-
-        clearTimeout(timeoutId);
-
-        if (res.ok && res.headers.get("content-type")?.includes("audio") && audioRef.current) {
-          fishAudioSupportedRef.current = true;
-          const blob = await res.blob();
-          const audioUrl = URL.createObjectURL(blob);
-          audioRef.current.src = audioUrl;
-          isSpeakingRef.current = true;
-          setVoiceState("speaking");
-
-          audioRef.current.onended = () => {
-            isSpeakingRef.current = false;
-            URL.revokeObjectURL(audioUrl);
-            if (!isAbortedRef.current) {
-              if (onFinish) onFinish();
-              else setVoiceState(isMicAvailable ? "listening" : "interactive");
-            }
-          };
-
-          audioRef.current.onerror = () => {
-            isSpeakingRef.current = false;
-            URL.revokeObjectURL(audioUrl);
-            playNativeVoice(cleanText, onFinish);
-          };
-
-          await audioRef.current.play();
-          return;
-        } else {
-          // If 402 verification required or unavailable, cache false to prevent repeated delays
-          fishAudioSupportedRef.current = false;
-        }
-      } catch {
-        fishAudioSupportedRef.current = false;
-      }
-
-      // Immediate browser speech synthesis fallback
-      playNativeVoice(cleanText, onFinish);
+      playVoice(cleanText, onFinish);
     },
-    [cancelSpeech, playNativeVoice, isMicAvailable]
+    [playVoice]
   );
 
-  // Extract live context from current page DOM and route
+  // Extract live context from current page DOM
   const extractPageContext = useCallback(() => {
     if (typeof window === "undefined") {
       return { symbol: "", exchange: "NSE", title: "", screenText: "", pathname: "" };
@@ -286,13 +200,13 @@ export function VoiceAssistant() {
     let screenText = "";
     try {
       const main = document.querySelector("main") || document.body;
-      const text = (main?.innerText || "").slice(0, 3500);
+      const text = (main?.innerText || "").slice(0, 3000);
       screenText = text
         .replace(/\n\s*\n/g, "\n")
         .split("\n")
         .map((s) => s.trim())
         .filter((s) => s.length > 0 && !s.startsWith("http"))
-        .slice(0, 70)
+        .slice(0, 50)
         .join(" | ");
     } catch {}
 
@@ -305,7 +219,7 @@ export function VoiceAssistant() {
     };
   }, []);
 
-  // Start speech recognition (Web Speech STT)
+  // Web Speech recognition loop
   const startListening = useCallback(() => {
     if (typeof window === "undefined" || isAbortedRef.current) return;
 
@@ -348,7 +262,6 @@ export function VoiceAssistant() {
       };
 
       recognition.onerror = (e: any) => {
-        console.warn("[voice] speech recognition error:", e.error);
         if (e.error === "not-allowed" || e.error === "service-not-allowed") {
           setIsMicAvailable(false);
           setVoiceState("interactive");
@@ -364,7 +277,6 @@ export function VoiceAssistant() {
       };
 
       recognition.onend = () => {
-        // Auto-reconnect listening loop if still active and not speaking
         if (voiceState === "listening" && !isAbortedRef.current && !isSpeakingRef.current) {
           try {
             recognition.start();
@@ -380,7 +292,7 @@ export function VoiceAssistant() {
     }
   }, [cancelSpeech, voiceState, isMicAvailable]);
 
-  // Query AI backend with user voice query + active screen and financial data
+  // Query AI Backend (OpenRouter NVIDIA Nemotron 3 Nano Omni 30B)
   const processVoiceQuery = useCallback(
     async (userSpeech: string) => {
       if (!userSpeech.trim() || isAbortedRef.current) return;
@@ -417,7 +329,7 @@ export function VoiceAssistant() {
         const json = await res.json();
         const reply =
           json.reply ||
-          "I checked the stock details on your screen. The numbers and metrics are up to date.";
+          "Data on screen has been checked. Metrics are up to date.";
 
         if (!isAbortedRef.current) {
           speakResponse(reply, () => {
@@ -432,7 +344,7 @@ export function VoiceAssistant() {
         }
       } catch {
         if (!isAbortedRef.current) {
-          speakResponse("I couldn't process that right now. Please try asking again.", () => {
+          speakResponse("Please ask again, I will check the live numbers.", () => {
             if (isMicAvailable) {
               startListening();
             } else {
@@ -454,8 +366,7 @@ export function VoiceAssistant() {
         setIsMicAvailable(true);
         startListening();
         return true;
-      } catch (err) {
-        console.warn("[voice] microphone permission denied:", err);
+      } catch {
         setIsMicAvailable(false);
         setVoiceState("interactive");
         return false;
@@ -464,7 +375,7 @@ export function VoiceAssistant() {
     return false;
   }, [startListening]);
 
-  // Start Voice Assistant session (Speaks greeting and immediately listens)
+  // Start Voice Assistant session (Plays brief greeting & auto-listens)
   const startVoice = useCallback(async () => {
     isAbortedRef.current = false;
     setVoiceState("connecting");
@@ -484,32 +395,20 @@ export function VoiceAssistant() {
       }
     }
 
-    setTimeout(() => {
-      if (isAbortedRef.current) return;
+    const pageCtx = extractPageContext();
+    const greeting = pageCtx.symbol
+      ? `Hello! Ask me anything about ${pageCtx.symbol}.`
+      : "Hello! What stock would you like to check?";
 
-      const pageCtx = extractPageContext();
-      let greeting =
-        "Hello! I am your financial voice agent. What stock or metric would you like to explore?";
-      if (pageCtx.symbol) {
-        greeting = `Hello! I am your voice agent for ${pageCtx.symbol} on ${pageCtx.exchange}. Ask me anything about its current price, 52-week range, P E ratio, RSI, or financial health.`;
-      } else if (pageCtx.pathname.includes("screener")) {
-        greeting =
-          "Hello! I am your stock screener voice agent. What screening criteria or filters are you looking for?";
-      } else if (pageCtx.pathname.includes("portfolio")) {
-        greeting =
-          "Hello! I am your portfolio voice agent. How can I assist with your holdings or risk analysis?";
-      }
-
-      speakResponse(greeting, () => {
-        if (!isAbortedRef.current) {
-          if (micGranted) {
-            startListening();
-          } else {
-            setVoiceState("interactive");
-          }
+    speakResponse(greeting, () => {
+      if (!isAbortedRef.current) {
+        if (micGranted) {
+          startListening();
+        } else {
+          setVoiceState("interactive");
         }
-      });
-    }, 120);
+      }
+    });
   }, [extractPageContext, speakResponse, startListening]);
 
   // Stop & hang up voice session
@@ -534,6 +433,7 @@ export function VoiceAssistant() {
     setVoiceState("idle");
     setTranscript("");
     setSpokenReply("");
+    setShowQuickTray(false);
   }, [cancelSpeech]);
 
   // Cleanup on unmount
@@ -559,89 +459,84 @@ export function VoiceAssistant() {
 
   const QUICK_QUESTIONS = pageCtx.symbol
     ? [
-        "52-week High aur Low kya hai?",
-        "P/E ratio kitna chal raha hai?",
-        "RSI aur trend kaisa hai?",
+        "52-week High/Low kya hai?",
+        "P/E ratio kitna hai?",
+        "RSI trend kaisa hai?",
         "Promoter holding kitni hai?",
-        "M-Score aur risk kaisa hai?",
       ]
     : [
-        "Nifty aur market trend kaisa hai?",
-        "Top gainers aur losers kaun hain?",
-        "Market breadth aur risk kaisa hai?",
+        "Nifty trend kaisa hai?",
+        "Top gainers kaun hain?",
+        "Market sentiment kaisa hai?",
       ];
 
   return (
-    <div className="fixed bottom-5 right-5 z-50 pointer-events-auto flex flex-col items-end">
-      <audio ref={audioRef} autoPlay className="hidden" />
-
-      {/* ── Active Voice Dock when in Interactive / Mic Blocked / Spoken Mode ── */}
+    <div className="fixed bottom-5 right-5 z-50 pointer-events-auto flex flex-col items-end gap-2">
+      {/* ── Sleek Spoken Subtitle Bubble (Compact Floating Bubble) ── */}
       <AnimatePresence>
-        {isActive && (!isMicAvailable || voiceState === "interactive") && (
+        {isActive && spokenReply && (
+          <motion.div
+            initial={{ opacity: 0, y: 8, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 8, scale: 0.96 }}
+            className="max-w-xs rounded-2xl bg-panel/95 backdrop-blur-xl border border-[#C57708]/30 shadow-2xl px-3.5 py-2.5 text-xs text-fg flex items-start gap-2"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-[#C57708] shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-[11px] leading-relaxed line-clamp-3 text-fg font-medium">
+                {spokenReply}
+              </p>
+            </div>
+            <button
+              onClick={() => setSpokenReply("")}
+              className="text-muted hover:text-fg p-0.5"
+              title="Dismiss"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Compact Quick Prompt Tray (Only when tray toggled or mic is blocked) ── */}
+      <AnimatePresence>
+        {isActive && (showQuickTray || (!isMicAvailable && voiceState === "interactive")) && (
           <motion.div
             initial={{ opacity: 0, y: 10, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 10, scale: 0.95 }}
-            className="mb-3 w-88 rounded-2xl bg-panel/95 backdrop-blur-xl border border-[#C57708]/30 shadow-2xl p-4 text-xs"
+            className="w-80 rounded-2xl bg-panel/95 backdrop-blur-xl border border-[#C57708]/30 shadow-2xl p-3 text-xs"
           >
-            <div className="flex items-center justify-between gap-2 mb-2.5 pb-2 border-b border-border/50">
-              <span className="font-bold text-fg flex items-center gap-1.5 text-amber-500">
-                <Volume2 className="w-4 h-4 text-[#C57708]" />
-                Voice Agent Spoken Audio Mode
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[11px] font-bold text-[#C57708] flex items-center gap-1">
+                <Volume2 className="w-3.5 h-3.5" />
+                Tap to hear voice answer:
               </span>
-              <button
-                onClick={tryRequestMic}
-                className="text-[11px] font-semibold text-[#C57708] hover:underline flex items-center gap-1 bg-[#C57708]/10 px-2 py-0.5 rounded-full"
-                title="Click to request microphone permission"
-              >
-                <Mic className="w-3 h-3" />
-                Allow Mic
-              </button>
+              {!isMicAvailable && (
+                <button
+                  onClick={tryRequestMic}
+                  className="text-[10px] font-semibold text-[#C57708] bg-[#C57708]/15 px-2 py-0.5 rounded-full hover:bg-[#C57708]/25 flex items-center gap-1"
+                >
+                  <Mic className="w-2.5 h-2.5" />
+                  Enable Mic
+                </button>
+              )}
             </div>
 
-            {/* Mic Permission Guidance */}
-            <div className="mb-2.5 p-2 rounded-lg bg-secondary/50 border border-border/40 text-[11px] text-muted flex items-start gap-1.5">
-              <Info className="w-3.5 h-3.5 text-[#C57708] shrink-0 mt-0.5" />
-              <span>
-                Microphone blocked in browser? Click the <strong>lock icon (🔒)</strong> in the address bar &rarr; Site settings &rarr; <strong>Allow Microphone</strong>. Or tap any question below to hear spoken answers:
-              </span>
-            </div>
-
-            {/* Live Spoken Subtitle / Answer Card */}
-            {spokenReply && (
-              <div className="mb-3 p-2.5 rounded-xl bg-[#C57708]/10 border border-[#C57708]/25 text-[11px] text-fg">
-                <div className="flex items-center justify-between gap-1 mb-1">
-                  <span className="font-semibold text-[#C57708] flex items-center gap-1">
-                    <Sparkles className="w-3 h-3" />
-                    Live Spoken Answer:
-                  </span>
-                  <button
-                    onClick={() => speakResponse(spokenReply)}
-                    className="text-[10px] text-muted hover:text-fg flex items-center gap-0.5"
-                    title="Replay Voice"
-                  >
-                    <RotateCcw className="w-2.5 h-2.5" />
-                    Replay
-                  </button>
-                </div>
-                <p className="line-clamp-3 leading-relaxed">{spokenReply}</p>
-              </div>
-            )}
-
-            {/* Quick Spoken Question Chips */}
-            <div className="flex flex-wrap gap-1.5 mb-3">
+            {/* Quick Question Chips */}
+            <div className="flex flex-wrap gap-1.5 mb-2">
               {QUICK_QUESTIONS.map((q) => (
                 <button
                   key={q}
                   onClick={() => processVoiceQuery(q)}
-                  className="text-[11px] px-2.5 py-1.5 rounded-lg bg-secondary/90 hover:bg-[#C57708]/20 hover:text-[#C57708] text-fg font-medium transition-all text-left shadow-sm active:scale-95"
+                  className="text-[11px] px-2.5 py-1 rounded-lg bg-secondary/80 hover:bg-[#C57708]/20 hover:text-[#C57708] text-fg font-medium transition-colors text-left active:scale-95"
                 >
                   {q}
                 </button>
               ))}
             </div>
 
-            {/* Quick Typed Spoken Prompt */}
+            {/* Compact Typed Query Bar */}
             <form
               onSubmit={(e) => {
                 e.preventDefault();
@@ -656,45 +551,25 @@ export function VoiceAssistant() {
                 type="text"
                 value={textInput}
                 onChange={(e) => setTextInput(e.target.value)}
-                placeholder="Ask any question to hear voice answer..."
-                className="flex-1 px-3 py-1.5 rounded-lg border border-border/70 bg-bg/80 text-xs text-fg placeholder:text-muted focus:outline-none focus:border-[#C57708]"
+                placeholder="Ask anything..."
+                className="flex-1 px-2.5 py-1 rounded-lg border border-border/70 bg-bg/90 text-xs text-fg placeholder:text-muted focus:outline-none focus:border-[#C57708]"
               />
               <button
                 type="submit"
                 disabled={!textInput.trim()}
-                className="p-1.5 rounded-lg bg-[#C57708] text-white disabled:opacity-40 hover:bg-[#A85F00] transition-colors"
-                title="Ask & Speak"
+                className="p-1 rounded-lg bg-[#C57708] text-white disabled:opacity-40 hover:bg-[#A85F00] transition-colors"
               >
-                <Send className="w-3.5 h-3.5" />
+                <Send className="w-3 h-3" />
               </button>
             </form>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* ── Live Spoken Floating Subtitle Bubble (when mic is active and dock is closed) ── */}
-      <AnimatePresence>
-        {isActive && isMicAvailable && spokenReply && voiceState === "speaking" && (
-          <motion.div
-            initial={{ opacity: 0, y: 8, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 8, scale: 0.95 }}
-            className="mb-2 max-w-sm rounded-xl bg-panel/95 backdrop-blur-md border border-[#C57708]/30 shadow-xl p-2.5 text-xs text-fg"
-          >
-            <div className="flex items-center gap-1.5 text-[10px] font-bold text-[#C57708] mb-1">
-              <Volume2 className="w-3 h-3 animate-pulse" />
-              Speaking aloud:
-            </div>
-            <p className="text-[11px] leading-relaxed line-clamp-3 text-muted">
-              {spokenReply}
-            </p>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
+      {/* ── Main Voice Pill Button ── */}
       <AnimatePresence mode="popLayout" initial={false}>
         {!isActive ? (
-          /* ── Collapsed: Exact Reference Pill "Need help?" (#C57708, green pulse dot) ── */
+          /* ── Collapsed: Warm Amber "Need help?" (#C57708, green pulse dot) ── */
           <motion.button
             key="btn"
             layout
@@ -707,7 +582,6 @@ export function VoiceAssistant() {
             aria-label="Talk to voice assistant"
             className="flex items-center gap-2.5 rounded-full bg-[#C57708] text-white pl-4 pr-5 py-3 shadow-xl shadow-[#C57708]/30 hover:bg-[#A85F00] transition-colors cursor-pointer select-none"
           >
-            {/* Message Bubble Icon with Glowing Green Dot */}
             <span className="relative flex items-center justify-center">
               <MessageCircle className="w-5 h-5 text-white stroke-[2.2]" />
               <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
@@ -721,7 +595,7 @@ export function VoiceAssistant() {
             </span>
           </motion.button>
         ) : (
-          /* ── Active: Morphs in place into Voice Pill ── */
+          /* ── Active: Morphs in place into sleek Voice Pill ── */
           <motion.div
             key="pill"
             layout
@@ -729,16 +603,16 @@ export function VoiceAssistant() {
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.7, opacity: 0 }}
             transition={{ type: "spring", stiffness: 380, damping: 26 }}
-            className="flex items-center gap-3 rounded-2xl bg-panel/95 backdrop-blur-md border border-[#C57708]/35 shadow-2xl shadow-[#C57708]/25 pl-3.5 pr-2 py-2"
+            className="flex items-center gap-2.5 rounded-2xl bg-panel/95 backdrop-blur-md border border-[#C57708]/35 shadow-2xl shadow-[#C57708]/25 pl-3 pr-2 py-2"
           >
             {voiceState === "connecting" ? (
               <>
                 <span className="w-4 h-4 border-2 border-[#C57708]/40 border-t-[#C57708] rounded-full animate-spin" />
-                <span className="text-xs font-semibold text-fg pr-1">Connecting voice…</span>
+                <span className="text-xs font-semibold text-fg pr-1">Connecting…</span>
               </>
             ) : (
               <>
-                {/* Pulsing Glowing Mic / Speaker */}
+                {/* Interactive Mic / Speaker Toggle */}
                 <button
                   type="button"
                   onClick={() => {
@@ -752,54 +626,54 @@ export function VoiceAssistant() {
                       tryRequestMic();
                     }
                   }}
-                  className="relative flex items-center justify-center cursor-pointer"
+                  className="relative flex items-center justify-center cursor-pointer p-1"
                   title={
                     voiceState === "speaking"
-                      ? "Click to interrupt/stop speech"
+                      ? "Click to interrupt speech"
                       : isMicAvailable
-                      ? "Listening - click to speak"
-                      : "Microphone blocked - click to allow"
+                      ? "Listening — click to speak"
+                      : "Mic blocked — click to request"
                   }
                 >
                   <motion.span
-                    className="absolute w-9 h-9 rounded-full bg-[#C57708]/25"
-                    animate={{ scale: [1, 1.7], opacity: [0.6, 0] }}
+                    className="absolute w-8 h-8 rounded-full bg-[#C57708]/20"
+                    animate={{ scale: [1, 1.6], opacity: [0.6, 0] }}
                     transition={{ duration: 1.4, repeat: Infinity, ease: "easeOut" }}
                   />
-                  <span className="relative w-8 h-8 rounded-full bg-[#C57708]/20 flex items-center justify-center">
+                  <span className="relative w-7 h-7 rounded-full bg-[#C57708]/15 flex items-center justify-center">
                     {voiceState === "speaking" ? (
-                      <Volume2 className="w-4 h-4 text-[#C57708] animate-pulse" />
+                      <Volume2 className="w-3.5 h-3.5 text-[#C57708] animate-pulse" />
                     ) : isMicAvailable ? (
-                      <Mic className="w-4 h-4 text-[#C57708]" />
+                      <Mic className="w-3.5 h-3.5 text-[#C57708]" />
                     ) : (
-                      <MicOff className="w-4 h-4 text-rose-500" />
+                      <MicOff className="w-3.5 h-3.5 text-rose-500" />
                     )}
                   </span>
                 </button>
 
-                {/* Live Animated 5-Bar Equalizer */}
-                <div className="flex items-end gap-[3px] h-5">
+                {/* Animated 5-Bar Equalizer */}
+                <div className="flex items-end gap-[2.5px] h-4">
                   {[0, 1, 2, 3, 4].map((i) => (
                     <motion.span
                       key={i}
-                      className="w-[3px] rounded-full bg-[#C57708]"
+                      className="w-[2.5px] rounded-full bg-[#C57708]"
                       animate={
                         voiceState === "listening" || voiceState === "speaking"
-                          ? { height: ["5px", "20px", "8px", "16px", "6px"] }
-                          : { height: ["6px", "6px"] }
+                          ? { height: ["4px", "16px", "7px", "14px", "5px"] }
+                          : { height: ["5px", "5px"] }
                       }
                       transition={{
-                        duration: voiceState === "speaking" ? 0.7 : 0.9,
+                        duration: voiceState === "speaking" ? 0.6 : 0.85,
                         repeat: Infinity,
                         ease: "easeInOut",
-                        delay: i * 0.12,
+                        delay: i * 0.1,
                       }}
                     />
                   ))}
                 </div>
 
-                {/* Real-time State & Live Transcript */}
-                <div className="flex flex-col min-w-[70px] max-w-[170px]">
+                {/* Real-time State Title */}
+                <div className="flex flex-col min-w-[65px] max-w-[140px]">
                   <span className="text-xs font-bold text-fg truncate">
                     {voiceState === "listening"
                       ? "Listening…"
@@ -807,9 +681,7 @@ export function VoiceAssistant() {
                       ? "Thinking…"
                       : voiceState === "speaking"
                       ? "Speaking…"
-                      : !isMicAvailable
-                      ? "Voice Active"
-                      : "Voice Active"}
+                      : "Voice Ready"}
                   </span>
                   {transcript && voiceState === "thinking" && (
                     <span className="text-[10px] text-muted truncate">
@@ -817,17 +689,31 @@ export function VoiceAssistant() {
                     </span>
                   )}
                 </div>
+
+                {/* Quick Prompts Toggle */}
+                <button
+                  type="button"
+                  onClick={() => setShowQuickTray((prev) => !prev)}
+                  className="p-1 rounded-lg text-muted hover:text-fg hover:bg-secondary/60 transition-colors"
+                  title="Toggle Quick Questions"
+                >
+                  <ChevronDown
+                    className={`w-3.5 h-3.5 transition-transform ${
+                      showQuickTray ? "rotate-180" : ""
+                    }`}
+                  />
+                </button>
               </>
             )}
 
-            {/* End Call / Stop Button (✕) */}
+            {/* End Voice Session Button (✕) */}
             <button
               onClick={stopVoice}
-              aria-label="End Call"
-              title="End Voice Agent"
-              className="ml-1 w-8 h-8 rounded-full bg-rose-500/10 text-rose-500 flex items-center justify-center hover:bg-rose-500/20 active:scale-90 transition-all cursor-pointer"
+              aria-label="End Voice Agent"
+              title="Close Voice Assistant"
+              className="w-7 h-7 rounded-full bg-rose-500/10 text-rose-500 flex items-center justify-center hover:bg-rose-500/20 active:scale-90 transition-all cursor-pointer"
             >
-              <X className="w-4 h-4" />
+              <X className="w-3.5 h-3.5" />
             </button>
           </motion.div>
         )}
