@@ -315,8 +315,9 @@ export function VoiceAssistant() {
       setVoiceState("speaking");
 
       const utterance = new SpeechSynthesisUtterance(cleanText);
-      utterance.rate = 1.1;
-      utterance.pitch = 1.0;
+      utterance.volume = 1.0; // Maximum volume
+      utterance.rate = 1.25;  // Fast and responsive speech delivery
+      utterance.pitch = 1.05; // Clear presence and pitch
 
       try {
         const voices = window.speechSynthesis.getVoices();
