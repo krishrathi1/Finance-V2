@@ -2,52 +2,37 @@
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import {
-  MessageCircle,
-  Mic,
-  MicOff,
-  X,
-  Volume2,
-  Send,
-  Sparkles,
-  ChevronDown,
-} from "lucide-react";
+import { MessageCircle, Mic, MicOff, X, Volume2 } from "lucide-react";
 
 export type VoiceState =
   | "idle"
   | "connecting"
   | "listening"
   | "thinking"
-  | "speaking"
-  | "interactive";
+  | "speaking";
 
 /**
- * VoiceAssistant — SLEEK, ULTRA-RESPONSIVE VOICE AGENT
+ * PURE REAL-TIME VOICE-TO-VOICE AGENT
  *
- * Powered by OpenRouter: NVIDIA Nemotron 3 Nano Omni 30B Reasoning.
+ * 🎙️ You Speak -> 🧠 Nemotron Thinks -> 🔊 Agent Speaks -> 🎙️ Back to Listening
  *
- * - Matches the amber reference UI pill (#C57708, green glowing pulse dot, "Need help?").
- * - Morphs in place into an active voice pill.
- * - Zero hanging: Speech synthesis has tight deterministic safety timers and GC protection.
- * - Compact & unobtrusive: No huge dialog cards covering the dashboard charts.
- * - Instant barge-in: Click or speak anytime to interrupt audio.
+ * - ZERO text cards, ZERO question chips, ZERO modals.
+ * - Pure voice conversation just like a real-time voice call.
+ * - Hands-free continuous loop.
+ * - Full awareness of on-screen stock & market data.
  */
 export function VoiceAssistant() {
   const [voiceState, setVoiceState] = useState<VoiceState>("idle");
-  const [transcript, setTranscript] = useState<string>("");
-  const [spokenReply, setSpokenReply] = useState<string>("");
-  const [isMicAvailable, setIsMicAvailable] = useState<boolean>(true);
-  const [showQuickTray, setShowQuickTray] = useState<boolean>(false);
-  const [textInput, setTextInput] = useState<string>("");
+  const [liveTranscript, setLiveTranscript] = useState<string>("");
+  const [micBlocked, setMicBlocked] = useState<boolean>(false);
 
   const recognitionRef = useRef<any>(null);
-  const micStreamRef = useRef<MediaStream | null>(null);
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
   const safetyTimerRef = useRef<any>(null);
-  const isSpeakingRef = useRef<boolean>(false);
   const isAbortedRef = useRef<boolean>(false);
+  const isProcessingRef = useRef<boolean>(false);
 
-  // Stop any ongoing speech playback cleanly
+  // Stop any active speech synthesis immediately
   const cancelSpeech = useCallback(() => {
     if (safetyTimerRef.current) {
       clearTimeout(safetyTimerRef.current);
@@ -62,124 +47,9 @@ export function VoiceAssistant() {
     if (typeof window !== "undefined") {
       (window as any).__voiceUtterance = null;
     }
-    isSpeakingRef.current = false;
   }, []);
 
-  // Browser Native Speech Synthesis with guaranteed deterministic finish
-  const playVoice = useCallback(
-    (cleanText: string, onFinish?: () => void) => {
-      cancelSpeech();
-
-      if (typeof window === "undefined" || !("speechSynthesis" in window)) {
-        isSpeakingRef.current = false;
-        setVoiceState(isMicAvailable ? "listening" : "interactive");
-        onFinish?.();
-        return;
-      }
-
-      const utterance = new SpeechSynthesisUtterance(cleanText);
-      utterance.rate = 1.1;
-      utterance.pitch = 1.0;
-
-      // Pick Indian/English voice if present
-      try {
-        const voices = window.speechSynthesis.getVoices();
-        const preferred =
-          voices.find(
-            (v) =>
-              v.lang.includes("en-IN") ||
-              v.lang.includes("hi-IN") ||
-              v.name.toLowerCase().includes("india")
-          ) ||
-          voices.find(
-            (v) =>
-              v.lang.startsWith("en") &&
-              (v.name.includes("Natural") ||
-                v.name.includes("Google") ||
-                v.name.includes("Microsoft"))
-          ) ||
-          voices.find((v) => v.lang.startsWith("en"));
-
-        if (preferred) utterance.voice = preferred;
-      } catch {}
-
-      // Anchor to window & ref to prevent Chromium GC cancellation
-      utteranceRef.current = utterance;
-      (window as any).__voiceUtterance = utterance;
-
-      isSpeakingRef.current = true;
-      setVoiceState("speaking");
-
-      let resolved = false;
-      const finishPlayback = () => {
-        if (resolved) return;
-        resolved = true;
-
-        if (safetyTimerRef.current) {
-          clearTimeout(safetyTimerRef.current);
-          safetyTimerRef.current = null;
-        }
-
-        utteranceRef.current = null;
-        if (typeof window !== "undefined") {
-          (window as any).__voiceUtterance = null;
-        }
-        isSpeakingRef.current = false;
-
-        if (!isAbortedRef.current) {
-          if (onFinish) {
-            onFinish();
-          } else {
-            setVoiceState(isMicAvailable ? "listening" : "interactive");
-          }
-        }
-      };
-
-      utterance.onend = finishPlayback;
-      utterance.onerror = finishPlayback;
-
-      // Tight, realistic safety timer: max 6.5s, speech speed ~14 chars/sec
-      const timeoutMs = Math.min(6500, Math.max(1600, Math.ceil(cleanText.length * 60) + 900));
-      safetyTimerRef.current = setTimeout(finishPlayback, timeoutMs);
-
-      try {
-        window.speechSynthesis.speak(utterance);
-      } catch {
-        finishPlayback();
-      }
-    },
-    [cancelSpeech, isMicAvailable]
-  );
-
-  // Clean formatted response for spoken pronunciation
-  const speakResponse = useCallback(
-    (text: string, onFinish?: () => void) => {
-      const cleanText = text
-        .replace(/[*#_`~>]/g, "")
-        .replace(/₹/g, "Rupees ")
-        .replace(/Cr\b/g, "Crore")
-        .replace(/\bPE\b/gi, "P E")
-        .replace(/\bPB\b/gi, "P B")
-        .replace(/\bROE\b/gi, "R O E")
-        .replace(/\bROCE\b/gi, "R O C E")
-        .replace(/\bFII\b/gi, "F I I")
-        .replace(/\bDII\b/gi, "D I I")
-        .replace(/\bRSI\b/gi, "R S I")
-        .replace(/\bCMP\b/gi, "Current Price")
-        .trim();
-
-      if (!cleanText) {
-        onFinish?.();
-        return;
-      }
-
-      setSpokenReply(text);
-      playVoice(cleanText, onFinish);
-    },
-    [playVoice]
-  );
-
-  // Extract live context from current page DOM
+  // Extract live context from current page
   const extractPageContext = useCallback(() => {
     if (typeof window === "undefined") {
       return { symbol: "", exchange: "NSE", title: "", screenText: "", pathname: "" };
@@ -206,7 +76,7 @@ export function VoiceAssistant() {
         .split("\n")
         .map((s) => s.trim())
         .filter((s) => s.length > 0 && !s.startsWith("http"))
-        .slice(0, 50)
+        .slice(0, 60)
         .join(" | ");
     } catch {}
 
@@ -219,85 +89,15 @@ export function VoiceAssistant() {
     };
   }, []);
 
-  // Web Speech recognition loop
-  const startListening = useCallback(() => {
-    if (typeof window === "undefined" || isAbortedRef.current) return;
-
-    cancelSpeech();
-
-    const SpeechRecognition =
-      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-
-    if (!SpeechRecognition) {
-      setIsMicAvailable(false);
-      setVoiceState("interactive");
-      return;
-    }
-
-    try {
-      if (recognitionRef.current) {
-        try {
-          recognitionRef.current.abort();
-        } catch {}
-      }
-
-      const recognition = new SpeechRecognition();
-      recognition.lang = "en-IN";
-      recognition.continuous = false;
-      recognition.interimResults = false;
-      recognition.maxAlternatives = 1;
-
-      recognition.onstart = () => {
-        if (!isAbortedRef.current) {
-          setIsMicAvailable(true);
-          setVoiceState("listening");
-        }
-      };
-
-      recognition.onresult = (event: any) => {
-        const speech = event.results[0]?.[0]?.transcript;
-        if (speech && !isAbortedRef.current) {
-          processVoiceQuery(speech);
-        }
-      };
-
-      recognition.onerror = (e: any) => {
-        if (e.error === "not-allowed" || e.error === "service-not-allowed") {
-          setIsMicAvailable(false);
-          setVoiceState("interactive");
-        } else if (!isAbortedRef.current && !isSpeakingRef.current) {
-          setTimeout(() => {
-            if (!isAbortedRef.current && !isSpeakingRef.current && isMicAvailable) {
-              try {
-                recognition.start();
-              } catch {}
-            }
-          }, 350);
-        }
-      };
-
-      recognition.onend = () => {
-        if (voiceState === "listening" && !isAbortedRef.current && !isSpeakingRef.current) {
-          try {
-            recognition.start();
-          } catch {}
-        }
-      };
-
-      recognitionRef.current = recognition;
-      recognition.start();
-    } catch {
-      setIsMicAvailable(false);
-      setVoiceState("interactive");
-    }
-  }, [cancelSpeech, voiceState, isMicAvailable]);
-
-  // Query AI Backend (OpenRouter NVIDIA Nemotron 3 Nano Omni 30B)
-  const processVoiceQuery = useCallback(
+  // Query AI Backend (OpenRouter Nemotron 3 Nano Omni 30B)
+  const processVoiceInput = useCallback(
     async (userSpeech: string) => {
-      if (!userSpeech.trim() || isAbortedRef.current) return;
+      if (!userSpeech.trim() || isAbortedRef.current || isProcessingRef.current) return;
 
+      isProcessingRef.current = true;
       cancelSpeech();
+
+      // Pause speech recognition while thinking & speaking
       if (recognitionRef.current) {
         try {
           recognitionRef.current.abort();
@@ -305,7 +105,7 @@ export function VoiceAssistant() {
       }
 
       setVoiceState("thinking");
-      setTranscript(userSpeech);
+      setLiveTranscript(userSpeech);
 
       try {
         const pageCtx = extractPageContext();
@@ -327,101 +127,250 @@ export function VoiceAssistant() {
         });
 
         const json = await res.json();
-        const reply =
-          json.reply ||
-          "Data on screen has been checked. Metrics are up to date.";
+        const reply = json.reply || "Stock data checked. Metrics are up to date.";
 
         if (!isAbortedRef.current) {
-          speakResponse(reply, () => {
-            if (!isAbortedRef.current) {
-              if (isMicAvailable) {
-                startListening();
-              } else {
-                setVoiceState("interactive");
-              }
-            }
-          });
+          speakAndListen(reply);
         }
       } catch {
         if (!isAbortedRef.current) {
-          speakResponse("Please ask again, I will check the live numbers.", () => {
-            if (isMicAvailable) {
-              startListening();
-            } else {
-              setVoiceState("interactive");
-            }
-          });
+          speakAndListen("Please ask again, I will check the live numbers.");
         }
+      } finally {
+        isProcessingRef.current = false;
       }
     },
-    [cancelSpeech, extractPageContext, speakResponse, isMicAvailable, startListening]
+    [cancelSpeech, extractPageContext]
   );
 
-  // Request browser hardware microphone permission
-  const tryRequestMic = useCallback(async () => {
-    if (typeof navigator !== "undefined" && navigator?.mediaDevices?.getUserMedia) {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        micStreamRef.current = stream;
-        setIsMicAvailable(true);
-        startListening();
-        return true;
-      } catch {
-        setIsMicAvailable(false);
-        setVoiceState("interactive");
-        return false;
-      }
+  // Start continuous listening
+  const listen = useCallback(() => {
+    if (typeof window === "undefined" || isAbortedRef.current) return;
+
+    cancelSpeech();
+
+    const SpeechRecognition =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+      setMicBlocked(true);
+      return;
     }
-    return false;
-  }, [startListening]);
 
-  // Start Voice Assistant session (Plays brief greeting & auto-listens)
-  const startVoice = useCallback(async () => {
+    try {
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.abort();
+        } catch {}
+      }
+
+      const recognition = new SpeechRecognition();
+      recognition.lang = "en-IN";
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.maxAlternatives = 1;
+
+      let silenceTimeout: any = null;
+
+      recognition.onstart = () => {
+        if (!isAbortedRef.current) {
+          setMicBlocked(false);
+          setVoiceState("listening");
+        }
+      };
+
+      recognition.onresult = (event: any) => {
+        if (isAbortedRef.current || isProcessingRef.current) return;
+
+        let interim = "";
+        let final = "";
+
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          const item = event.results[i];
+          if (item.isFinal) {
+            final += item[0].transcript;
+          } else {
+            interim += item[0].transcript;
+          }
+        }
+
+        const currentText = (final || interim).trim();
+        if (currentText) {
+          setLiveTranscript(currentText);
+
+          // Clear any prior speech pause timer
+          if (silenceTimeout) clearTimeout(silenceTimeout);
+
+          // If final transcript or silence after speech, process immediately
+          if (final) {
+            processVoiceInput(final);
+          } else {
+            // Wait 1.1s of silence before sending interim speech
+            silenceTimeout = setTimeout(() => {
+              if (currentText && !isProcessingRef.current) {
+                processVoiceInput(currentText);
+              }
+            }, 1100);
+          }
+        }
+      };
+
+      recognition.onerror = (e: any) => {
+        if (e.error === "not-allowed" || e.error === "service-not-allowed") {
+          setMicBlocked(true);
+        } else if (!isAbortedRef.current && !isProcessingRef.current) {
+          setTimeout(() => {
+            if (!isAbortedRef.current && !isProcessingRef.current) {
+              try {
+                recognition.start();
+              } catch {}
+            }
+          }, 300);
+        }
+      };
+
+      recognition.onend = () => {
+        // Auto-reconnect loop if still in listening mode
+        if (
+          !isAbortedRef.current &&
+          !isProcessingRef.current &&
+          voiceState === "listening"
+        ) {
+          try {
+            recognition.start();
+          } catch {}
+        }
+      };
+
+      recognitionRef.current = recognition;
+      recognition.start();
+    } catch {
+      setMicBlocked(true);
+    }
+  }, [cancelSpeech, isProcessingRef, processVoiceInput, voiceState]);
+
+  // Speak AI answer aloud, and automatically switch back to listening
+  const speakAndListen = useCallback(
+    (text: string) => {
+      cancelSpeech();
+
+      if (typeof window === "undefined" || !("speechSynthesis" in window)) {
+        listen();
+        return;
+      }
+
+      const cleanText = text
+        .replace(/[*#_`~>]/g, "")
+        .replace(/₹/g, "Rupees ")
+        .replace(/Cr\b/g, "Crore")
+        .replace(/\bPE\b/gi, "P E")
+        .replace(/\bPB\b/gi, "P B")
+        .replace(/\bROE\b/gi, "R O E")
+        .replace(/\bROCE\b/gi, "R O C E")
+        .replace(/\bFII\b/gi, "F I I")
+        .replace(/\bDII\b/gi, "D I I")
+        .replace(/\bRSI\b/gi, "R S I")
+        .replace(/\bCMP\b/gi, "Current Price")
+        .trim();
+
+      if (!cleanText) {
+        listen();
+        return;
+      }
+
+      setLiveTranscript(text);
+      setVoiceState("speaking");
+
+      const utterance = new SpeechSynthesisUtterance(cleanText);
+      utterance.rate = 1.1;
+      utterance.pitch = 1.0;
+
+      // Select natural voice
+      try {
+        const voices = window.speechSynthesis.getVoices();
+        const preferred =
+          voices.find(
+            (v) =>
+              v.lang.includes("en-IN") ||
+              v.lang.includes("hi-IN") ||
+              v.name.toLowerCase().includes("india")
+          ) ||
+          voices.find((v) => v.lang.startsWith("en"));
+
+        if (preferred) utterance.voice = preferred;
+      } catch {}
+
+      utteranceRef.current = utterance;
+      (window as any).__voiceUtterance = utterance;
+
+      let finished = false;
+      const onComplete = () => {
+        if (finished) return;
+        finished = true;
+
+        if (safetyTimerRef.current) {
+          clearTimeout(safetyTimerRef.current);
+          safetyTimerRef.current = null;
+        }
+
+        utteranceRef.current = null;
+        if (typeof window !== "undefined") {
+          (window as any).__voiceUtterance = null;
+        }
+
+        if (!isAbortedRef.current) {
+          setLiveTranscript("");
+          listen();
+        }
+      };
+
+      utterance.onend = onComplete;
+      utterance.onerror = onComplete;
+
+      // Deterministic safety timer so it NEVER gets stuck
+      const maxMs = Math.min(8000, Math.max(1800, cleanText.length * 60) + 800);
+      safetyTimerRef.current = setTimeout(onComplete, maxMs);
+
+      try {
+        window.speechSynthesis.speak(utterance);
+      } catch {
+        onComplete();
+      }
+    },
+    [cancelSpeech, listen]
+  );
+
+  // Start real-time voice session
+  const startSession = useCallback(async () => {
     isAbortedRef.current = false;
+    isProcessingRef.current = false;
+    setMicBlocked(false);
     setVoiceState("connecting");
-    setTranscript("");
-    setSpokenReply("");
+    setLiveTranscript("");
 
-    let micGranted = false;
+    // Request mic directly
     if (typeof navigator !== "undefined" && navigator?.mediaDevices?.getUserMedia) {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        micStreamRef.current = stream;
-        micGranted = true;
-        setIsMicAvailable(true);
+        await navigator.mediaDevices.getUserMedia({ audio: true });
+        setMicBlocked(false);
       } catch {
-        micGranted = false;
-        setIsMicAvailable(false);
+        setMicBlocked(true);
       }
     }
 
     const pageCtx = extractPageContext();
     const greeting = pageCtx.symbol
-      ? `Hello! Ask me anything about ${pageCtx.symbol}.`
-      : "Hello! What stock would you like to check?";
+      ? `I'm listening. Ask me anything about ${pageCtx.symbol}.`
+      : "I'm listening. What stock would you like to check?";
 
-    speakResponse(greeting, () => {
-      if (!isAbortedRef.current) {
-        if (micGranted) {
-          startListening();
-        } else {
-          setVoiceState("interactive");
-        }
-      }
-    });
-  }, [extractPageContext, speakResponse, startListening]);
+    speakAndListen(greeting);
+  }, [extractPageContext, speakAndListen]);
 
-  // Stop & hang up voice session
-  const stopVoice = useCallback(() => {
+  // Stop session & hang up
+  const endSession = useCallback(() => {
     isAbortedRef.current = true;
+    isProcessingRef.current = false;
     cancelSpeech();
-
-    if (micStreamRef.current) {
-      try {
-        micStreamRef.current.getTracks().forEach((t) => t.stop());
-      } catch {}
-      micStreamRef.current = null;
-    }
 
     if (recognitionRef.current) {
       try {
@@ -431,9 +380,8 @@ export function VoiceAssistant() {
     }
 
     setVoiceState("idle");
-    setTranscript("");
-    setSpokenReply("");
-    setShowQuickTray(false);
+    setLiveTranscript("");
+    setMicBlocked(false);
   }, [cancelSpeech]);
 
   // Cleanup on unmount
@@ -441,11 +389,6 @@ export function VoiceAssistant() {
     return () => {
       isAbortedRef.current = true;
       cancelSpeech();
-      if (micStreamRef.current) {
-        try {
-          micStreamRef.current.getTracks().forEach((t) => t.stop());
-        } catch {}
-      }
       if (recognitionRef.current) {
         try {
           recognitionRef.current.abort();
@@ -455,132 +398,23 @@ export function VoiceAssistant() {
   }, [cancelSpeech]);
 
   const isActive = voiceState !== "idle";
-  const pageCtx = extractPageContext();
-
-  const QUICK_QUESTIONS = pageCtx.symbol
-    ? [
-        "52-week High/Low kya hai?",
-        "P/E ratio kitna hai?",
-        "RSI trend kaisa hai?",
-        "Promoter holding kitni hai?",
-      ]
-    : [
-        "Nifty trend kaisa hai?",
-        "Top gainers kaun hain?",
-        "Market sentiment kaisa hai?",
-      ];
 
   return (
-    <div className="fixed bottom-5 right-5 z-50 pointer-events-auto flex flex-col items-end gap-2">
-      {/* ── Sleek Spoken Subtitle Bubble (Compact Floating Bubble) ── */}
-      <AnimatePresence>
-        {isActive && spokenReply && (
-          <motion.div
-            initial={{ opacity: 0, y: 8, scale: 0.96 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 8, scale: 0.96 }}
-            className="max-w-xs rounded-2xl bg-panel/95 backdrop-blur-xl border border-[#C57708]/30 shadow-2xl px-3.5 py-2.5 text-xs text-fg flex items-start gap-2"
-          >
-            <Sparkles className="w-3.5 h-3.5 text-[#C57708] shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <p className="text-[11px] leading-relaxed line-clamp-3 text-fg font-medium">
-                {spokenReply}
-              </p>
-            </div>
-            <button
-              onClick={() => setSpokenReply("")}
-              className="text-muted hover:text-fg p-0.5"
-              title="Dismiss"
-            >
-              <X className="w-3 h-3" />
-            </button>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* ── Compact Quick Prompt Tray (Only when tray toggled or mic is blocked) ── */}
-      <AnimatePresence>
-        {isActive && (showQuickTray || (!isMicAvailable && voiceState === "interactive")) && (
-          <motion.div
-            initial={{ opacity: 0, y: 10, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 10, scale: 0.95 }}
-            className="w-80 rounded-2xl bg-panel/95 backdrop-blur-xl border border-[#C57708]/30 shadow-2xl p-3 text-xs"
-          >
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[11px] font-bold text-[#C57708] flex items-center gap-1">
-                <Volume2 className="w-3.5 h-3.5" />
-                Tap to hear voice answer:
-              </span>
-              {!isMicAvailable && (
-                <button
-                  onClick={tryRequestMic}
-                  className="text-[10px] font-semibold text-[#C57708] bg-[#C57708]/15 px-2 py-0.5 rounded-full hover:bg-[#C57708]/25 flex items-center gap-1"
-                >
-                  <Mic className="w-2.5 h-2.5" />
-                  Enable Mic
-                </button>
-              )}
-            </div>
-
-            {/* Quick Question Chips */}
-            <div className="flex flex-wrap gap-1.5 mb-2">
-              {QUICK_QUESTIONS.map((q) => (
-                <button
-                  key={q}
-                  onClick={() => processVoiceQuery(q)}
-                  className="text-[11px] px-2.5 py-1 rounded-lg bg-secondary/80 hover:bg-[#C57708]/20 hover:text-[#C57708] text-fg font-medium transition-colors text-left active:scale-95"
-                >
-                  {q}
-                </button>
-              ))}
-            </div>
-
-            {/* Compact Typed Query Bar */}
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (textInput.trim()) {
-                  processVoiceQuery(textInput);
-                  setTextInput("");
-                }
-              }}
-              className="flex items-center gap-1.5 pt-1"
-            >
-              <input
-                type="text"
-                value={textInput}
-                onChange={(e) => setTextInput(e.target.value)}
-                placeholder="Ask anything..."
-                className="flex-1 px-2.5 py-1 rounded-lg border border-border/70 bg-bg/90 text-xs text-fg placeholder:text-muted focus:outline-none focus:border-[#C57708]"
-              />
-              <button
-                type="submit"
-                disabled={!textInput.trim()}
-                className="p-1 rounded-lg bg-[#C57708] text-white disabled:opacity-40 hover:bg-[#A85F00] transition-colors"
-              >
-                <Send className="w-3 h-3" />
-              </button>
-            </form>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* ── Main Voice Pill Button ── */}
+    <div className="fixed bottom-6 right-6 z-50 pointer-events-auto select-none">
       <AnimatePresence mode="popLayout" initial={false}>
         {!isActive ? (
-          /* ── Collapsed: Warm Amber "Need help?" (#C57708, green pulse dot) ── */
+          /* ── Collapsed: Warm Amber Reference Pill "Need help?" (#C57708, green pulse dot) ── */
           <motion.button
-            key="btn"
+            key="collapsed-btn"
             layout
             initial={{ scale: 0.85, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.85, opacity: 0 }}
             whileTap={{ scale: 0.94 }}
-            transition={{ type: "spring", stiffness: 400, damping: 28 }}
-            onClick={startVoice}
-            aria-label="Talk to voice assistant"
-            className="flex items-center gap-2.5 rounded-full bg-[#C57708] text-white pl-4 pr-5 py-3 shadow-xl shadow-[#C57708]/30 hover:bg-[#A85F00] transition-colors cursor-pointer select-none"
+            transition={{ type: "spring", stiffness: 420, damping: 28 }}
+            onClick={startSession}
+            aria-label="Start Real-Time Voice Agent"
+            className="flex items-center gap-2.5 rounded-full bg-[#C57708] text-white pl-4 pr-5 py-3 shadow-xl shadow-[#C57708]/30 hover:bg-[#A85F00] transition-colors cursor-pointer"
           >
             <span className="relative flex items-center justify-center">
               <MessageCircle className="w-5 h-5 text-white stroke-[2.2]" />
@@ -595,125 +429,105 @@ export function VoiceAssistant() {
             </span>
           </motion.button>
         ) : (
-          /* ── Active: Morphs in place into sleek Voice Pill ── */
+          /* ── Active: Real-time Voice Call Pill with Dancing Equalizer ── */
           <motion.div
-            key="pill"
+            key="active-voice-pill"
             layout
-            initial={{ scale: 0.7, opacity: 0, originX: 1, originY: 1 }}
+            initial={{ scale: 0.75, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.7, opacity: 0 }}
+            exit={{ scale: 0.75, opacity: 0 }}
             transition={{ type: "spring", stiffness: 380, damping: 26 }}
-            className="flex items-center gap-2.5 rounded-2xl bg-panel/95 backdrop-blur-md border border-[#C57708]/35 shadow-2xl shadow-[#C57708]/25 pl-3 pr-2 py-2"
+            className="flex items-center gap-3 rounded-full bg-panel/95 backdrop-blur-xl border border-[#C57708]/40 shadow-2xl shadow-[#C57708]/25 pl-3.5 pr-2 py-2"
           >
-            {voiceState === "connecting" ? (
-              <>
-                <span className="w-4 h-4 border-2 border-[#C57708]/40 border-t-[#C57708] rounded-full animate-spin" />
-                <span className="text-xs font-semibold text-fg pr-1">Connecting…</span>
-              </>
-            ) : (
-              <>
-                {/* Interactive Mic / Speaker Toggle */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (voiceState === "speaking") {
-                      cancelSpeech();
-                      if (isMicAvailable) startListening();
-                      else setVoiceState("interactive");
-                    } else if (isMicAvailable) {
-                      startListening();
-                    } else {
-                      tryRequestMic();
-                    }
-                  }}
-                  className="relative flex items-center justify-center cursor-pointer p-1"
-                  title={
-                    voiceState === "speaking"
-                      ? "Click to interrupt speech"
-                      : isMicAvailable
-                      ? "Listening — click to speak"
-                      : "Mic blocked — click to request"
-                  }
-                >
-                  <motion.span
-                    className="absolute w-8 h-8 rounded-full bg-[#C57708]/20"
-                    animate={{ scale: [1, 1.6], opacity: [0.6, 0] }}
-                    transition={{ duration: 1.4, repeat: Infinity, ease: "easeOut" }}
-                  />
-                  <span className="relative w-7 h-7 rounded-full bg-[#C57708]/15 flex items-center justify-center">
-                    {voiceState === "speaking" ? (
-                      <Volume2 className="w-3.5 h-3.5 text-[#C57708] animate-pulse" />
-                    ) : isMicAvailable ? (
-                      <Mic className="w-3.5 h-3.5 text-[#C57708]" />
-                    ) : (
-                      <MicOff className="w-3.5 h-3.5 text-rose-500" />
-                    )}
-                  </span>
-                </button>
+            {/* Pulsing Voice Orb / Mic Indicator */}
+            <div className="relative flex items-center justify-center">
+              <motion.span
+                className="absolute w-10 h-10 rounded-full bg-[#C57708]/25"
+                animate={
+                  voiceState === "listening" || voiceState === "speaking"
+                    ? { scale: [1, 1.8], opacity: [0.6, 0] }
+                    : { scale: 1, opacity: 0.2 }
+                }
+                transition={{ duration: 1.2, repeat: Infinity, ease: "easeOut" }}
+              />
 
-                {/* Animated 5-Bar Equalizer */}
-                <div className="flex items-end gap-[2.5px] h-4">
-                  {[0, 1, 2, 3, 4].map((i) => (
-                    <motion.span
-                      key={i}
-                      className="w-[2.5px] rounded-full bg-[#C57708]"
-                      animate={
-                        voiceState === "listening" || voiceState === "speaking"
-                          ? { height: ["4px", "16px", "7px", "14px", "5px"] }
-                          : { height: ["5px", "5px"] }
-                      }
-                      transition={{
-                        duration: voiceState === "speaking" ? 0.6 : 0.85,
-                        repeat: Infinity,
-                        ease: "easeInOut",
-                        delay: i * 0.1,
-                      }}
-                    />
-                  ))}
-                </div>
+              <div
+                className={`relative w-8 h-8 rounded-full flex items-center justify-center transition-colors ${
+                  voiceState === "speaking"
+                    ? "bg-[#C57708] text-white shadow-lg shadow-[#C57708]/40"
+                    : micBlocked
+                    ? "bg-rose-500/15 text-rose-500"
+                    : "bg-[#C57708]/20 text-[#C57708]"
+                }`}
+              >
+                {voiceState === "speaking" ? (
+                  <Volume2 className="w-4 h-4 animate-pulse" />
+                ) : micBlocked ? (
+                  <MicOff className="w-4 h-4" />
+                ) : (
+                  <Mic className="w-4 h-4" />
+                )}
+              </div>
+            </div>
 
-                {/* Real-time State Title */}
-                <div className="flex flex-col min-w-[65px] max-w-[140px]">
-                  <span className="text-xs font-bold text-fg truncate">
-                    {voiceState === "listening"
-                      ? "Listening…"
-                      : voiceState === "thinking"
-                      ? "Thinking…"
+            {/* Live 5-Bar Dancing Equalizer Wave */}
+            <div className="flex items-end gap-[3px] h-5">
+              {[0, 1, 2, 3, 4].map((i) => (
+                <motion.span
+                  key={i}
+                  className={`w-[3px] rounded-full ${
+                    voiceState === "speaking" ? "bg-[#C57708]" : "bg-[#25AB21]"
+                  }`}
+                  animate={
+                    voiceState === "listening"
+                      ? { height: ["5px", "18px", "7px", "14px", "6px"] }
                       : voiceState === "speaking"
-                      ? "Speaking…"
-                      : "Voice Ready"}
-                  </span>
-                  {transcript && voiceState === "thinking" && (
-                    <span className="text-[10px] text-muted truncate">
-                      &quot;{transcript}&quot;
-                    </span>
-                  )}
-                </div>
+                      ? { height: ["6px", "22px", "10px", "18px", "7px"] }
+                      : { height: ["5px", "5px"] }
+                  }
+                  transition={{
+                    duration: voiceState === "speaking" ? 0.55 : 0.75,
+                    repeat: Infinity,
+                    ease: "easeInOut",
+                    delay: i * 0.1,
+                  }}
+                />
+              ))}
+            </div>
 
-                {/* Quick Prompts Toggle */}
-                <button
-                  type="button"
-                  onClick={() => setShowQuickTray((prev) => !prev)}
-                  className="p-1 rounded-lg text-muted hover:text-fg hover:bg-secondary/60 transition-colors"
-                  title="Toggle Quick Questions"
-                >
-                  <ChevronDown
-                    className={`w-3.5 h-3.5 transition-transform ${
-                      showQuickTray ? "rotate-180" : ""
-                    }`}
-                  />
-                </button>
-              </>
-            )}
+            {/* Live Status & Transcript Display */}
+            <div className="flex flex-col min-w-[90px] max-w-[200px]">
+              <span className="text-xs font-bold text-fg">
+                {voiceState === "connecting"
+                  ? "Connecting…"
+                  : voiceState === "listening"
+                  ? "Listening to you…"
+                  : voiceState === "thinking"
+                  ? "Nemotron thinking…"
+                  : voiceState === "speaking"
+                  ? "Speaking…"
+                  : "Voice Active"}
+              </span>
 
-            {/* End Voice Session Button (✕) */}
+              {micBlocked ? (
+                <span className="text-[10px] text-rose-500 font-semibold truncate">
+                  Mic blocked in browser
+                </span>
+              ) : liveTranscript ? (
+                <span className="text-[10px] text-muted truncate">
+                  &quot;{liveTranscript}&quot;
+                </span>
+              ) : null}
+            </div>
+
+            {/* End Call Button (✕) */}
             <button
-              onClick={stopVoice}
-              aria-label="End Voice Agent"
-              title="Close Voice Assistant"
-              className="w-7 h-7 rounded-full bg-rose-500/10 text-rose-500 flex items-center justify-center hover:bg-rose-500/20 active:scale-90 transition-all cursor-pointer"
+              onClick={endSession}
+              aria-label="End Call"
+              title="End Voice Call"
+              className="ml-1 w-8 h-8 rounded-full bg-rose-500/10 text-rose-500 flex items-center justify-center hover:bg-rose-500/20 active:scale-90 transition-all cursor-pointer"
             >
-              <X className="w-3.5 h-3.5" />
+              <X className="w-4 h-4" />
             </button>
           </motion.div>
         )}
