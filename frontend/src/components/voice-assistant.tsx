@@ -112,7 +112,11 @@ export function VoiceAssistant() {
   // Query AI Backend with User Question + Complete Structured Page Context + History
   const processVoiceInput = useCallback(
     async (userSpeech: string) => {
-      if (!userSpeech.trim() || isAbortedRef.current || isProcessingRef.current) return;
+      const trimmed = userSpeech.trim();
+      if (!trimmed || isAbortedRef.current || isProcessingRef.current) {
+        console.log("[Voice] Ignored empty or duplicate processVoiceInput call", { trimmed, aborted: isAbortedRef.current, processing: isProcessingRef.current });
+        return;
+      }
 
       isProcessingRef.current = true;
       cancelSpeech();
@@ -124,24 +128,30 @@ export function VoiceAssistant() {
         } catch {}
       }
 
+      console.log("[Voice] Sending AI request for:", trimmed);
       setVoiceState("thinking");
-      setLiveTranscript(userSpeech);
+      setLiveTranscript(trimmed);
 
       // Record user turn in conversational memory
-      conversationMemoryRef.current.push({ role: "user", content: userSpeech });
+      conversationMemoryRef.current.push({ role: "user", content: trimmed });
       if (conversationMemoryRef.current.length > 6) {
         conversationMemoryRef.current = conversationMemoryRef.current.slice(-6);
       }
 
       try {
-        // Retrieve live structured page context (Requirement 2 & 5)
+        // Retrieve live structured page context
         const pageContext: VoicePageContext = getVoicePageContext();
+        console.log("[Voice] Page context attached:", {
+          route: pageContext.route,
+          symbol: pageContext.stock?.symbol,
+          price: pageContext.price?.current,
+        });
 
         const res = await fetch("/api/v1/ai/copilot", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            message: userSpeech,
+            message: trimmed,
             context: {
               mode: "voice",
               pageContext,
@@ -152,10 +162,16 @@ export function VoiceAssistant() {
           }),
         });
 
+        if (!res.ok) {
+          throw new Error(`Copilot API responded with status ${res.status}`);
+        }
+
         const json = await res.json();
         const reply =
           json.reply ||
           "Data on this page has been verified. The numbers are up to date.";
+
+        console.log("[Voice] AI response received:", reply);
 
         // Record assistant turn in memory
         conversationMemoryRef.current.push({ role: "assistant", content: reply });
@@ -166,7 +182,8 @@ export function VoiceAssistant() {
         if (!isAbortedRef.current) {
           speakAndListen(reply);
         }
-      } catch {
+      } catch (err) {
+        console.error("[Voice] Copilot request failed:", err);
         if (!isAbortedRef.current) {
           speakAndListen("Please ask again, I will check the live screen data.");
         }
@@ -178,7 +195,7 @@ export function VoiceAssistant() {
     [cancelSpeech]
   );
 
-  // Start continuous Web Speech recognition
+  // Start Web Speech recognition
   const listen = useCallback(() => {
     if (typeof window === "undefined" || isAbortedRef.current) return;
 
@@ -188,6 +205,7 @@ export function VoiceAssistant() {
       (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
     if (!SpeechRecognition) {
+      console.warn("[Voice] Speech recognition not supported in this browser");
       setVoiceState("error");
       setErrorMessage("Speech recognition not supported in this browser");
       return;
@@ -200,16 +218,20 @@ export function VoiceAssistant() {
         } catch {}
       }
 
+      console.log("[Voice] Recognition started");
       const recognition = new SpeechRecognition();
       recognition.lang = "en-IN";
-      recognition.continuous = true;
+      // Using single-turn mode avoids Chromium continuous hanging issues
+      recognition.continuous = false;
       recognition.interimResults = true;
       recognition.maxAlternatives = 1;
 
-      let silenceTimer: any = null;
+      let recognizedFinal = "";
+      let recognizedInterim = "";
 
       recognition.onstart = () => {
         if (!isAbortedRef.current) {
+          console.log("[Voice] Recognition listening...");
           setVoiceState("listening");
           setErrorMessage("");
         }
@@ -230,22 +252,14 @@ export function VoiceAssistant() {
           }
         }
 
-        const transcriptChunk = (final || interim).trim();
-        if (transcriptChunk) {
-          setLiveTranscript(transcriptChunk);
-
-          if (silenceTimer) clearTimeout(silenceTimer);
-
-          if (final) {
-            processVoiceInput(final);
-          } else {
-            // After 1.1s of quiet pause following user speech, submit query
-            silenceTimer = setTimeout(() => {
-              if (transcriptChunk && !isProcessingRef.current) {
-                processVoiceInput(transcriptChunk);
-              }
-            }, 1100);
-          }
+        if (final) {
+          recognizedFinal = final;
+          console.log("[Voice] Final transcript:", final);
+          setLiveTranscript(final);
+        } else if (interim) {
+          recognizedInterim = interim;
+          console.log("[Voice] Interim transcript:", interim);
+          setLiveTranscript(interim);
         }
       };
 
@@ -261,26 +275,25 @@ export function VoiceAssistant() {
             } catch {}
             mediaStreamRef.current = null;
           }
-        } else if (!isAbortedRef.current && !isProcessingRef.current && voiceState === "listening") {
-          setTimeout(() => {
-            if (!isAbortedRef.current && !isProcessingRef.current && voiceState === "listening") {
-              try {
-                recognition.start();
-              } catch {}
-            }
-          }, 300);
+        } else if (e.error === "no-speech") {
+          // Normal timeout if user was quiet; onend will restart if still listening
         }
       };
 
       recognition.onend = () => {
-        if (
-          !isAbortedRef.current &&
-          !isProcessingRef.current &&
-          voiceState === "listening"
-        ) {
-          try {
-            recognition.start();
-          } catch {}
+        console.log("[Voice] Recognition ended. Pending transcript:", { recognizedFinal, recognizedInterim });
+        if (isAbortedRef.current) return;
+
+        const candidate = (recognizedFinal || recognizedInterim).trim();
+        if (candidate && !isProcessingRef.current) {
+          processVoiceInput(candidate);
+        } else if (!isProcessingRef.current && voiceState === "listening") {
+          // Restart listening loop if nothing was said and session still active
+          setTimeout(() => {
+            if (!isAbortedRef.current && !isProcessingRef.current) {
+              listen();
+            }
+          }, 200);
         }
       };
 
@@ -299,6 +312,7 @@ export function VoiceAssistant() {
       cancelSpeech();
 
       if (typeof window === "undefined" || !("speechSynthesis" in window)) {
+        console.log("[Voice] SpeechSynthesis unavailable, skipping TTS");
         listen();
         return;
       }
@@ -322,8 +336,16 @@ export function VoiceAssistant() {
         return;
       }
 
+      console.log("[Voice] Starting TTS for:", cleanText);
       setLiveTranscript(text);
       setVoiceState("speaking");
+
+      // Resume speech synthesis in case Chromium paused audio
+      try {
+        if (window.speechSynthesis.paused) {
+          window.speechSynthesis.resume();
+        }
+      } catch {}
 
       const utterance = new SpeechSynthesisUtterance(cleanText);
       utterance.volume = 1.0; // Maximum volume
@@ -362,14 +384,17 @@ export function VoiceAssistant() {
           (window as any).__voiceUtterance = null;
         }
 
+        console.log("[Voice] TTS finished, returning to listening");
         if (!isAbortedRef.current) {
-          setLiveTranscript("");
           listen();
         }
       };
 
       utterance.onend = onComplete;
-      utterance.onerror = onComplete;
+      utterance.onerror = (e) => {
+        console.warn("[Voice] TTS utterance error:", e);
+        onComplete();
+      };
 
       // Deterministic safety timer so state NEVER hangs in "speaking"
       const maxMs = Math.min(8000, Math.max(1800, cleanText.length * 60) + 800);
@@ -377,7 +402,8 @@ export function VoiceAssistant() {
 
       try {
         window.speechSynthesis.speak(utterance);
-      } catch {
+      } catch (err) {
+        console.error("[Voice] window.speechSynthesis.speak error:", err);
         onComplete();
       }
     },
@@ -386,6 +412,7 @@ export function VoiceAssistant() {
 
   // Start real-time voice session with proper state progression
   const startSession = useCallback(async () => {
+    console.log("[Voice] Button clicked");
     isAbortedRef.current = false;
     isProcessingRef.current = false;
     setErrorMessage("");
@@ -393,6 +420,7 @@ export function VoiceAssistant() {
 
     // State 1: requesting_permission
     setVoiceState("requesting_permission");
+    console.log("[Voice] Requesting microphone");
 
     if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
       setVoiceState("error");
@@ -402,17 +430,12 @@ export function VoiceAssistant() {
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      console.log("[Voice] Microphone permission granted");
+      console.log("[Voice] Microphone granted");
       mediaStreamRef.current = stream;
 
-      // Only NOW proceed to start voice greeting and listening
-      const pageCtx = getVoicePageContext();
-      const target = pageCtx.stock?.symbol || pageCtx.stock?.companyName;
-      const greeting = target
-        ? `I'm listening. Ask me anything about ${target}.`
-        : "I'm listening. What stock or metric would you like to explore?";
-
-      speakAndListen(greeting);
+      // Start listening directly so the user can speak immediately
+      setVoiceState("listening");
+      listen();
     } catch (error: any) {
       console.error("[Voice] Microphone error:", error);
       setVoiceState("error");
@@ -427,10 +450,9 @@ export function VoiceAssistant() {
         setErrorMessage("Microphone permission failed");
       }
 
-      // CRITICAL FIX: NEVER proceed to speakAndListen if microphone access failed!
       return;
     }
-  }, [speakAndListen]);
+  }, [listen]);
 
   // Stop session & hang up
   const endSession = useCallback(() => {
