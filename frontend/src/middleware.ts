@@ -44,22 +44,8 @@ export async function middleware(request: NextRequest) {
       const result = await rateLimit(`auth:${ip}`, 6, 10 * 60_000);
       if (!result.ok) return tooManyRequests(result.retryAfterSeconds);
     } else if (AI_API.test(pathname)) {
-      // AI-backed endpoints hit paid LLM quota per call — require a logged-in user
-      // in addition to rate limiting, so anonymous traffic can't drain it.
-      const rawSecret = process.env.JWT_SECRET_KEY?.trim();
-      let authed = false;
-      if (accessToken && rawSecret) {
-        try {
-          await jwtVerify(accessToken, new TextEncoder().encode(rawSecret));
-          authed = true;
-        } catch {
-          authed = false;
-        }
-      }
-      if (!authed) {
-        return NextResponse.json({ detail: "Authentication required." }, { status: 401 });
-      }
-
+      // AI-backed endpoints are rate-limited to prevent abuse while allowing
+      // both authenticated users and guests to access stock analysis features.
       const result = await rateLimit(`ai:${ip}`, 20, 60_000);
       if (!result.ok) return tooManyRequests(result.retryAfterSeconds);
     } else if (DOCUMENT_PARSE_API.test(pathname) && request.method === "POST") {

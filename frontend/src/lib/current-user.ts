@@ -28,16 +28,20 @@ export async function getCurrentUser(request: Request): Promise<CurrentUser | nu
   const userId = Number(payload.sub);
   if (!Number.isInteger(userId)) return null;
 
-  const rows = await query(
-    'SELECT id, email, name, tier, is_admin, is_banned, verified_email, created_at FROM users WHERE id = ?',
-    [userId]
-  );
-  if (!Array.isArray(rows) || rows.length === 0) return null;
+  try {
+    const rows = await query(
+      'SELECT id, email, name, tier, is_admin, is_banned, verified_email, created_at FROM users WHERE id = ?',
+      [userId]
+    );
+    if (!Array.isArray(rows) || rows.length === 0) return null;
 
-  const user = rows[0] as CurrentUser;
-  if (user.is_banned) return null;
+    const user = rows[0] as CurrentUser;
+    if (user.is_banned) return null;
 
-  return user;
+    return user;
+  } catch {
+    return null;
+  }
 }
 
 /**

@@ -48,24 +48,30 @@ export function SmoothExperience() {
         return;
       }
 
-      const target = event.target instanceof Element
+      const anchor = event.target instanceof Element
         ? event.target.closest<HTMLAnchorElement>("a[href]")
         : null;
 
-      const href = target.getAttribute("href") || "";
+      if (!anchor) return;
+
+      const href = anchor.getAttribute("href") || "";
       if (
-        !target ||
+        !href ||
         href.startsWith("#") ||
         href.startsWith("javascript:") ||
-        target.target === "_blank" ||
-        target.hasAttribute("download") ||
-        target.origin !== window.location.origin
+        anchor.target === "_blank" ||
+        anchor.hasAttribute("download")
       ) {
         return;
       }
 
-      const sameRoute = target.pathname === window.location.pathname;
-      if (sameRoute) return;
+      try {
+        const url = new URL(anchor.href, window.location.href);
+        if (url.origin !== window.location.origin) return;
+        if (url.pathname === window.location.pathname && url.search === window.location.search) return;
+      } catch {
+        return;
+      }
 
       window.setTimeout(() => startTransition(), 0);
     };

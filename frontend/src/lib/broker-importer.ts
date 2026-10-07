@@ -72,8 +72,8 @@ export function normalizeDate(raw: string): string {
 /** Clean numeric string with commas, currency symbols, and whitespace */
 export function parseCleanNumber(raw: string | undefined): number {
   if (!raw) return 0;
-  // Remove currency signs (₹, $, Rs), commas, and spaces
-  const cleaned = raw.replace(/[₹$Rs,\s]/gi, "");
+  // Remove currency signs (₹, $, Rs, Rs.), commas, and spaces
+  const cleaned = raw.replace(/₹|\$|\bRs\.?/gi, "").replace(/[,\s]/g, "");
   const val = parseFloat(cleaned);
   return isNaN(val) ? 0 : val;
 }

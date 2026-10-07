@@ -147,12 +147,25 @@ function periodLabel(value: unknown): string | null {
  * Returns the raw `result.chart.result[0]` object or null.
  */
 async function fetchChartResult(ticker: string, days: number, signal?: AbortSignal): Promise<any | null> {
-  const range = days > 365 ? "5y" : days > 30 ? "1y" : "1mo";
+  const isBse = ticker.endsWith(".BO");
+  const range = isBse
+    ? (days > 90 ? "max" : days > 30 ? "3mo" : "1mo")
+    : (days > 365 ? "5y" : days > 30 ? "1y" : "1mo");
   const url = `${YAHOO_QUERY1}/v8/finance/chart/${encodeURIComponent(
     ticker
   )}?range=${range}&interval=1d&includePrePost=false`;
   const payload = await getJson<any>(url, { timeoutMs: 7000, retries: 1, signal });
-  const result = payload?.chart?.result?.[0];
+  let result = payload?.chart?.result?.[0];
+  if (result && Array.isArray(result.timestamp) && result.timestamp.length <= 1 && days > 1) {
+    const valid = result.meta?.validRanges;
+    if (Array.isArray(valid) && valid.includes("max") && range !== "max") {
+      const fallbackUrl = `${YAHOO_QUERY1}/v8/finance/chart/${encodeURIComponent(ticker)}?range=max&interval=1d&includePrePost=false`;
+      const fallbackPayload = await getJson<any>(fallbackUrl, { timeoutMs: 7000, retries: 1, signal });
+      if (fallbackPayload?.chart?.result?.[0]?.timestamp?.length) {
+        result = fallbackPayload.chart.result[0];
+      }
+    }
+  }
   if (!result) return null;
   return result;
 }
@@ -269,6 +282,7 @@ export async function getYahooQuote(marketSymbol: string, signal?: AbortSignal):
         changePercent,
         fiftyTwoWeekHigh: round2(rawNum(meta.fiftyTwoWeekHigh)),
         fiftyTwoWeekLow: round2(rawNum(meta.fiftyTwoWeekLow)),
+        companyName: typeof meta.longName === "string" ? meta.longName : typeof meta.shortName === "string" ? meta.shortName : null,
         currency: typeof meta.currency === "string" && meta.currency.trim() ? meta.currency : "INR",
       };
       return quote;

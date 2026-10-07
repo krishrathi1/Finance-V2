@@ -165,9 +165,6 @@ export function calculateBeneishMScore(input: FinancialStatementsInput) {
   if (score > -1.78) {
     manipulationRisk = "High";
     explanation = "Beneish M-Score exceeds the -1.78 threshold, signaling aggressive revenue recognition, high accruals, or asset capitalization anomalies.";
-  } else if (score > -2.22) {
-    manipulationRisk = "Moderate";
-    explanation = "Beneish M-Score lies in the moderate boundary. While not critical, accruals and revenue growth velocity should be monitored.";
   }
 
   return {
@@ -438,7 +435,7 @@ export function computeForensicAudit(input: FinancialStatementsInput): ForensicM
   if (mScore.manipulationRisk === "High" || zScore.bankruptcyRisk === "High" || fScore.score <= 3) {
     overallHealth = "High Risk";
     summary = "Multiple forensic flags triggered across earnings manipulation indices, high leverage distress, or deteriorating operational efficiency.";
-  } else if (mScore.manipulationRisk === "Moderate" || zScore.bankruptcyRisk === "Moderate" || fScore.score <= 5 || governanceFlags.some((g) => g.severity === "high")) {
+  } else if (zScore.bankruptcyRisk === "Moderate" || fScore.score <= 5 || governanceFlags.some((g) => g.severity === "high")) {
     overallHealth = "Caution";
     summary = "Moderate forensic flags detected. Solvency and cash flow conversions are acceptable but require ongoing vigilance.";
   } else if (fScore.score >= 8 && zScore.zone === "Safe" && mScore.manipulationRisk === "Low") {

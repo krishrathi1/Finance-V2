@@ -17,6 +17,7 @@ import { StockSectionTabs } from "@/components/sections/stock-section-tabs";
 import { loadDashboardEnvelope } from "@/server/application/dashboard-envelope";
 import { POPULAR_STOCK_SYMBOLS, SITE_NAME, SITE_URL, buildBreadcrumbJsonLd, buildStockFaqJsonLd } from "@/shared/seo";
 import type { DashboardData } from "@/shared/types";
+import { cn } from "@/shared/utils";
 
 const PriceSidebar = dynamic(() => import("@/components/sections/price-sidebar").then((m) => m.PriceSidebar), { ssr: false });
 
@@ -382,7 +383,42 @@ export default async function StockDetailsPage({ params, searchParams }: Props) 
     <div className="stagger-fade space-y-4">
       <PageHero
         breadcrumbs={[{ label: "Home", href: "/" }, { label: symbol }]}
-        eyebrow={`${data.exchange} equity`}
+        eyebrow={
+          <div className="flex items-center gap-2">
+            <span className={cn(
+              "rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider",
+              data.exchange === "BSE"
+                ? "bg-amber-500/20 text-amber-400 border border-amber-500/30"
+                : "bg-accent/15 text-accent border border-accent/25"
+            )}>
+              {data.exchange} Equity
+            </span>
+            <div className="inline-flex items-center rounded-lg border border-border/80 bg-panel/90 p-0.5 shadow-sm">
+              <Link
+                href={`/stocks/${symbol}`}
+                className={cn(
+                  "rounded-md px-2.5 py-0.5 text-[11px] font-bold transition",
+                  exchange !== "BSE"
+                    ? "bg-accent text-white shadow-sm"
+                    : "text-muted hover:text-text"
+                )}
+              >
+                NSE
+              </Link>
+              <Link
+                href={`/stocks/${symbol}?exchange=BSE`}
+                className={cn(
+                  "rounded-md px-2.5 py-0.5 text-[11px] font-bold transition",
+                  exchange === "BSE"
+                    ? "bg-amber-500 text-white shadow-sm"
+                    : "text-muted hover:text-text"
+                )}
+              >
+                BSE
+              </Link>
+            </div>
+          </div>
+        }
         title={
           <>
             {data.companyName}

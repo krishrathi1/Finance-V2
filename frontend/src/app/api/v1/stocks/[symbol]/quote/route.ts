@@ -9,7 +9,7 @@ export const maxDuration = 20;
 function yahooQuoteResponse(symbol: string, exchange: string, quote: Awaited<ReturnType<typeof getYahooQuote>>) {
   return {
     symbol: symbol.toUpperCase(),
-    companyName: '',
+    companyName: quote?.companyName || '',
     industry: '',
     sector: '',
     lastPrice: quote?.cmp || 0,

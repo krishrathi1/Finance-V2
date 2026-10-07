@@ -1,5 +1,6 @@
 import { getYahooQuote } from "@/server/infrastructure/providers/yahoo";
 import { DESKTOP_UA, round2 } from "@/server/infrastructure/http";
+import { BSE_STOCKS } from "@/server/infrastructure/providers/bse-data";
 
 const FMP_HOST = "https://financialmodelingprep.com";
 const NSE_EQUITY_LIST_URL = "https://archives.nseindia.com/content/equities/EQUITY_L.csv";
@@ -357,8 +358,22 @@ async function fetchNseListedSecurities(): Promise<ListedSecurity[]> {
 }
 
 async function fetchBseListedSecurities(): Promise<ListedSecurity[]> {
-  return parseBseActiveEquityList(await fetchJson(BSE_ACTIVE_EQUITY_LIST_URL, 12_000, {
-    referer: "https://www.bseindia.com/",
+  try {
+    const payload = await fetchJson(BSE_ACTIVE_EQUITY_LIST_URL, 12_000, {
+      referer: "https://www.bseindia.com/",
+    });
+    const parsed = parseBseActiveEquityList(payload);
+    if (parsed.length > 0) return parsed;
+  } catch {
+    /* edge-blocked or unavailable */
+  }
+
+  return BSE_STOCKS.map((s) => ({
+    symbol: s.symbol,
+    exchange: "BSE" as const,
+    yahooSymbol: `${s.symbol}.BO`,
+    fmpSymbol: `${s.symbol}.BO`,
+    companyName: s.name,
   }));
 }
 

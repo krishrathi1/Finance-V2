@@ -11,6 +11,7 @@ export async function GET(request: NextRequest) {
     const sp = request.nextUrl.searchParams;
     const n = (k: string) => toFloat(sp.get(k)) ?? undefined;
     const filters: UniverseFilters = {
+      exchange: sp.get("exchange") || undefined,
       sector: sp.get("sector") || undefined,
       industry: sp.get("industry") || undefined,
       market_cap_min: n("market_cap_min"),

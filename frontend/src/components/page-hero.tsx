@@ -17,7 +17,7 @@ type HeroStat = {
 
 type PageHeroProps = {
   breadcrumbs?: BreadcrumbItem[];
-  eyebrow?: string;
+  eyebrow?: ReactNode;
   title: ReactNode;
   description: ReactNode;
   actions?: ReactNode;

@@ -23,6 +23,7 @@ import { enrichCorporateActions } from "@/server/domain/corporate-actions-enrich
 import { parseRssItems, meaningfulSummary } from "@/server/infrastructure/providers/news-rss";
 import { getYahooQuote, getYahooCandles, getYahooBundle, getYahooTimeseriesFinancials } from "@/server/infrastructure/providers/yahoo";
 import { screenUniverse } from "@/server/infrastructure/providers/universe";
+import { resolveBseInput } from "@/server/infrastructure/providers/bse-data";
 import {
   getFmpQuote,
   getFmpCandles,
@@ -482,10 +483,20 @@ export interface BuildOptions {
 
 /** Build a full, live DashboardData. Throws only if no meaningful live data was obtained. */
 export async function buildDashboard(symbol: string, options: BuildOptions = {}): Promise<DashboardData> {
-  const base = baseSymbol(symbol);
-  const timeframe = String(options.timeframe || "5Y").toUpperCase();
-  const requestedExchange =
+  let base = baseSymbol(symbol);
+  let requestedExchange =
     (options.exchange || "").trim().toUpperCase() || (/\.BO$/i.test(symbol) ? "BSE" : "NSE");
+
+  // If a 6-digit BSE scrip code is provided (e.g. 500325), resolve to canonical symbol
+  if (/^\d{6}$/.test(base)) {
+    const bseResolved = resolveBseInput(base);
+    if (bseResolved) {
+      base = bseResolved.symbol;
+      requestedExchange = "BSE";
+    }
+  }
+
+  const timeframe = String(options.timeframe || "5Y").toUpperCase();
   const marketSymbol = requestedExchange === "BSE" ? `${base}.BO` : base;
   const historyDays = Math.max(timeframeDays(timeframe), 1825);
 
@@ -623,7 +634,7 @@ export async function buildDashboard(symbol: string, options: BuildOptions = {})
   if (bundle.shareholding && (num(bundle.shareholding.promoters) || num(bundle.shareholding.fii))) {
     data.shareholding = { ...data.shareholding, ...bundle.shareholding };
   }
-  if (requestedExchange !== "BSE" && nseShareholdingHistory && nseShareholdingHistory.length) {
+  if (nseShareholdingHistory && nseShareholdingHistory.length) {
     // NSE's history only carries Promoter/Public (no historical FII/DII split
     // — see getNseShareholdingHistory); overlay Yahoo's real current-quarter
     // FII/DII onto the latest history point (index 0) so the most recent
@@ -721,7 +732,7 @@ export async function buildDashboard(symbol: string, options: BuildOptions = {})
     data.companyName || base,
     data.price?.cmp
   );
-  if (requestedExchange !== "BSE" && nseQuarterly) {
+  if (nseQuarterly) {
     const q: any = nseQuarterly;
     for (const k of ["quarterly", "quarterlyStandalone", "quarterlyConsolidated", "quarterlyDetailedStandalone", "quarterlyDetailedConsolidated"]) {
       if (q[k] && q[k].length) data.financials[k] = q[k];

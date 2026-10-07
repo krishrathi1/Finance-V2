@@ -263,7 +263,7 @@ const FALLBACK_PHOTOS = [
   "https://images.unsplash.com/photo-1526304640581-d334cdbbf45e?auto=format&fit=crop&q=80&w=800", // Markets & Currency
 ];
 
-export function selectFallbackPhoto(title: string, index = 0): string {
+function selectFallbackPhoto(title: string, index = 0): string {
   const lower = (title || "").toLowerCase();
   if (/tech|it|software|ai|digital|cyber/i.test(lower)) return FALLBACK_PHOTOS[4];
   if (/bank|loan|interest|rbi|rate|inflation|currency|rupee|tax|income/i.test(lower)) return FALLBACK_PHOTOS[7];

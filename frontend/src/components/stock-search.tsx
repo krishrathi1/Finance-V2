@@ -94,7 +94,7 @@ export function StockSearch({ className = "" }: { className?: string }) {
           <div className="search-scroll max-h-[290px] overflow-y-auto pr-1">
             {results.map((item) => (
               <button
-                key={item.symbol}
+                key={`${item.symbol}-${item.exchange}`}
                 onClick={() => {
                   router.push(buildStockHref(item.symbol, item.exchange));
                   setOpen(false);
@@ -102,7 +102,9 @@ export function StockSearch({ className = "" }: { className?: string }) {
                 className="group flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-left transition hover:bg-accent/8 sm:rounded-xl"
               >
                 <div className="flex items-center gap-3">
-                  <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent/10 text-xs font-bold text-accent">
+                  <span className={`flex h-8 w-8 items-center justify-center rounded-lg text-xs font-bold ${
+                    item.exchange === "BSE" ? "bg-amber-500/15 text-amber-400" : "bg-accent/10 text-accent"
+                  }`}>
                     {item.symbol.slice(0, 2)}
                   </span>
                   <div>
@@ -111,7 +113,13 @@ export function StockSearch({ className = "" }: { className?: string }) {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="rounded-md bg-bg px-1.5 py-0.5 text-[10px] text-muted">{item.exchange}</span>
+                  <span className={`rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${
+                    item.exchange === "BSE"
+                      ? "bg-amber-500/15 text-amber-400 border border-amber-500/30"
+                      : "bg-bg text-muted"
+                  }`}>
+                    {item.exchange}
+                  </span>
                   <ArrowRight className="h-3.5 w-3.5 text-muted opacity-0 transition group-hover:translate-x-0.5 group-hover:opacity-100" />
                 </div>
               </button>

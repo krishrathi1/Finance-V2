@@ -10,6 +10,7 @@
 
 import { round2, DESKTOP_UA } from "@/server/infrastructure/http";
 import type { ScreenerResult } from "@/shared/types";
+import { BSE_STOCKS } from "@/server/infrastructure/providers/bse-data";
 
 /** Curated NSE universe: liquid large/mid-cap names with their sector. */
 export const NSE_UNIVERSE: Array<{ symbol: string; sector: string }> = [
@@ -126,18 +127,22 @@ export interface UniverseQuote {
   dividendYield: number | null; // percent
 }
 
-/** Fetch live batch quotes from Yahoo v7 for the given base symbols (NSE). */
-export async function getBatchQuotes(symbols: string[]): Promise<Map<string, UniverseQuote>> {
+/** Fetch live batch quotes from Yahoo v7 for the given base symbols. */
+export async function getBatchQuotes(
+  symbols: string[],
+  exchange: "NSE" | "BSE" = "NSE"
+): Promise<Map<string, UniverseQuote>> {
   const out = new Map<string, UniverseQuote>();
   const auth = await getCrumb();
   if (!auth) return out;
 
+  const suffix = exchange === "BSE" ? ".BO" : ".NS";
   const batches: string[][] = [];
   for (let i = 0; i < symbols.length; i += 50) batches.push(symbols.slice(i, i + 50));
 
   await Promise.all(
     batches.map(async (batch) => {
-      const syms = batch.map((s) => `${s}.NS`).join(",");
+      const syms = batch.map((s) => `${s}${suffix}`).join(",");
       const url = `https://query2.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(syms)}&crumb=${encodeURIComponent(auth.crumb)}`;
       try {
         const res = await fetch(url, { headers: { "user-agent": DESKTOP_UA, cookie: auth.cookie }, cache: "no-store" });
@@ -163,10 +168,6 @@ export async function getBatchQuotes(symbols: string[]): Promise<Map<string, Uni
             volume: Number(q.regularMarketVolume) || 0,
             marketCap: q.marketCap ? Math.round(q.marketCap / 1e7) : 0,
             pe: typeof q.trailingPE === "number" ? round2(q.trailingPE) : null,
-            // Yahoo's v7 quote carries these alongside PE; they were simply
-            // never mapped, so the screener's P/B and Beta columns were always
-            // blank. ROE is not on this endpoint (it needs a per-symbol
-            // quoteSummary call, which won't scale across the universe).
             pb: typeof q.priceToBook === "number" ? round2(q.priceToBook) : null,
             beta: typeof q.beta === "number" ? round2(q.beta) : null,
             dividendYield: typeof q.trailingAnnualDividendYield === "number" ? round2(q.trailingAnnualDividendYield * 100) : null,
@@ -181,6 +182,7 @@ export async function getBatchQuotes(symbols: string[]): Promise<Map<string, Uni
 }
 
 export interface UniverseFilters {
+  exchange?: string;
   sector?: string;
   industry?: string;
   market_cap_min?: number;
@@ -196,14 +198,67 @@ export interface UniverseFilters {
 
 /** Screen the curated universe against live Yahoo quotes. Returns ScreenerResult[]. */
 export async function screenUniverse(filters: UniverseFilters): Promise<ScreenerResult[]> {
+  const reqExchange = (filters.exchange || "").trim().toUpperCase();
+  const isBseOnly = reqExchange === "BSE";
   const sectorQ = normalizeSector(filters.sector || filters.industry || "");
-  // If a sector filter is given, only quote that sector's symbols (faster + focused).
+
+  const bseUniverse = BSE_STOCKS.map((s) => ({ symbol: s.symbol, sector: s.sector }));
+  const bseSectorMap = new Map(bseUniverse.map((u) => [u.symbol, u.sector]));
+
+  if (isBseOnly) {
+    const symbols = (sectorQ
+      ? bseUniverse.filter((u) => u.sector.toLowerCase() === sectorQ || u.sector.toLowerCase().includes(sectorQ))
+      : bseUniverse
+    ).map((u) => u.symbol);
+
+    const quotes = await getBatchQuotes(symbols.length ? symbols : bseUniverse.map((u) => u.symbol), "BSE");
+    if (!quotes.size) return [];
+
+    let rows: ScreenerResult[] = [];
+    for (const [base, q] of quotes) {
+      const sector = bseSectorMap.get(base) || "";
+      rows.push({
+        symbol: base,
+        companyName: q.companyName,
+        exchange: "BSE",
+        marketCap: q.marketCap,
+        price: q.price,
+        change: q.change,
+        changePercent: q.changePercent,
+        volume: q.volume,
+        sector,
+        industry: sector,
+        pe: q.pe,
+        pb: q.pb,
+        roe: null,
+        dividendYield: q.dividendYield,
+        beta: q.beta,
+      });
+    }
+
+    const f = filters;
+    if (f.price_min != null) rows = rows.filter((r) => r.price >= f.price_min!);
+    if (f.price_max != null) rows = rows.filter((r) => r.price <= f.price_max!);
+    if (f.volume_min != null) rows = rows.filter((r) => r.volume >= f.volume_min!);
+    if (f.market_cap_min != null) rows = rows.filter((r) => r.marketCap >= f.market_cap_min!);
+    if (f.market_cap_max != null) rows = rows.filter((r) => r.marketCap <= f.market_cap_max!);
+    if (f.pe_min != null) rows = rows.filter((r) => r.pe != null && r.pe >= f.pe_min!);
+    if (f.pe_max != null) rows = rows.filter((r) => r.pe != null && r.pe <= f.pe_max!);
+    if (f.dividend_min != null) rows = rows.filter((r) => (r.dividendYield ?? 0) >= f.dividend_min!);
+    if (sectorQ) rows = rows.filter((r) => r.sector.toLowerCase() === sectorQ || r.sector.toLowerCase().includes(sectorQ));
+
+    rows.sort((a, b) => b.marketCap - a.marketCap);
+    const limit = f.limit && f.limit > 0 ? Math.floor(f.limit) : 50;
+    return rows.slice(0, limit);
+  }
+
+  // NSE (default)
   const symbols = (sectorQ
     ? NSE_UNIVERSE.filter((u) => u.sector.toLowerCase() === sectorQ || u.sector.toLowerCase().includes(sectorQ))
     : NSE_UNIVERSE
   ).map((u) => u.symbol);
 
-  const quotes = await getBatchQuotes(symbols.length ? symbols : NSE_UNIVERSE.map((u) => u.symbol));
+  const quotes = await getBatchQuotes(symbols.length ? symbols : NSE_UNIVERSE.map((u) => u.symbol), "NSE");
   if (!quotes.size) return [];
 
   let rows: ScreenerResult[] = [];
