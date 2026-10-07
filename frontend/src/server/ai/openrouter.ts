@@ -87,3 +87,93 @@ export async function generateViaOpenRouter(
     return null;
   }
 }
+
+export async function* generateStreamingViaOpenRouter(
+  messages: ChatMessage[],
+  options: {
+    model?: string;
+    temperature?: number;
+    maxTokens?: number;
+    timeoutMs?: number;
+    enableReasoning?: boolean;
+    signal?: AbortSignal;
+  } = {}
+): AsyncGenerator<string, void, unknown> {
+  const apiKey = getApiKey();
+  if (!apiKey) return;
+
+  const model = options.model || process.env.OPENROUTER_MODEL || DEFAULT_MODEL;
+  const timeoutMs = options.timeoutMs || 8000;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  const combinedSignal = options.signal;
+  if (combinedSignal) {
+    combinedSignal.addEventListener("abort", () => controller.abort(), { once: true });
+  }
+
+  try {
+    const res = await fetch(OPENROUTER_API_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": "http://localhost:3000",
+        "X-Title": "Finance-V2 Voice Agent",
+      },
+      body: JSON.stringify({
+        model,
+        messages,
+        temperature: options.temperature ?? 0.3,
+        max_tokens: options.maxTokens ?? 120,
+        stream: true,
+        reasoning: {
+          enabled: options.enableReasoning ?? false,
+        },
+      }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timer);
+
+    if (!res.ok || !res.body) {
+      const errText = await res.text().catch(() => "");
+      console.warn(`[openrouter-stream] HTTP ${res.status}: ${errText.slice(0, 160)}`);
+      return;
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder("utf-8");
+    let buffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || !trimmed.startsWith("data:")) continue;
+        const dataStr = trimmed.replace(/^data:\s*/, "").trim();
+        if (dataStr === "[DONE]") return;
+
+        try {
+          const parsed = JSON.parse(dataStr);
+          const delta = parsed.choices?.[0]?.delta?.content;
+          if (typeof delta === "string" && delta.length > 0) {
+            yield delta;
+          }
+        } catch {
+          // ignore chunk parse errors
+        }
+      }
+    }
+  } catch (err: any) {
+    clearTimeout(timer);
+    console.warn(`[openrouter-stream] stream interrupted: ${err?.message || err}`);
+  }
+}

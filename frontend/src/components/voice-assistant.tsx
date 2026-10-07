@@ -55,7 +55,13 @@ export function VoiceAssistant() {
   const currentSymbolRef = useRef<string>("");
   const currentRouteRef = useRef<string>("");
 
-  // Stop any active speech synthesis safely
+  const streamAbortControllerRef = useRef<AbortController | null>(null);
+  const audioQueueRef = useRef<string[]>([]);
+  const isPlayingQueueRef = useRef<boolean>(false);
+  const speechEndTimestampRef = useRef<number>(0);
+  const firstAudioLoggedRef = useRef<boolean>(false);
+
+  // Stop any active speech synthesis and audio playback immediately
   const cancelSpeech = useCallback(() => {
     if (safetyTimerRef.current) {
       clearTimeout(safetyTimerRef.current);
@@ -70,7 +76,123 @@ export function VoiceAssistant() {
     if (typeof window !== "undefined") {
       (window as any).__voiceUtterance = null;
     }
+    audioQueueRef.current = [];
+    isPlayingQueueRef.current = false;
   }, []);
+
+  // Play next sentence in queue or return to listening
+  const playNextSentence = useCallback(() => {
+    if (isAbortedRef.current) return;
+
+    if (audioQueueRef.current.length === 0) {
+      isPlayingQueueRef.current = false;
+      console.log("[Voice] Audio playback completed, returning to listening");
+      setVoiceState("listening");
+      listen();
+      return;
+    }
+
+    const sentence = audioQueueRef.current.shift()!;
+    isPlayingQueueRef.current = true;
+    setVoiceState("speaking");
+
+    const cleanText = sentence
+      .replace(/[*#_`~>]/g, "")
+      .replace(/₹/g, "Rupees ")
+      .replace(/Cr\b/g, "Crore")
+      .replace(/\bPE\b/gi, "P E")
+      .replace(/\bPB\b/gi, "P B")
+      .replace(/\bROE\b/gi, "R O E")
+      .replace(/\bROCE\b/gi, "R O C E")
+      .replace(/\bFII\b/gi, "F I I")
+      .replace(/\bDII\b/gi, "D I I")
+      .replace(/\bRSI\b/gi, "R S I")
+      .replace(/\bCMP\b/gi, "Current Price")
+      .trim();
+
+    if (!cleanText) {
+      playNextSentence();
+      return;
+    }
+
+    const ttsStart = Date.now();
+    console.log("[Voice] tts_request_start:", ttsStart, "for chunk:", cleanText);
+
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) {
+      playNextSentence();
+      return;
+    }
+
+    try {
+      if (window.speechSynthesis.paused) {
+        window.speechSynthesis.resume();
+      }
+    } catch {}
+
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+    utterance.volume = 1.0;
+    utterance.rate = 1.22;
+    utterance.pitch = 1.02;
+
+    try {
+      const voices = window.speechSynthesis.getVoices();
+      const preferred =
+        voices.find(
+          (v) =>
+            v.lang.includes("en-IN") ||
+            v.lang.includes("hi-IN") ||
+            v.name.toLowerCase().includes("india")
+        ) ||
+        voices.find((v) => v.lang.startsWith("en"));
+
+      if (preferred) utterance.voice = preferred;
+    } catch {}
+
+    utteranceRef.current = utterance;
+    (window as any).__voiceUtterance = utterance;
+
+    utterance.onstart = () => {
+      const audioStart = Date.now();
+      console.log("[Voice] first_audio:", audioStart);
+      if (!firstAudioLoggedRef.current && speechEndTimestampRef.current > 0) {
+        firstAudioLoggedRef.current = true;
+        console.log(`[Voice] Total time-to-first-audio latency: ${audioStart - speechEndTimestampRef.current}ms`);
+      }
+    };
+
+    let done = false;
+    const onSentenceComplete = () => {
+      if (done) return;
+      done = true;
+      if (safetyTimerRef.current) {
+        clearTimeout(safetyTimerRef.current);
+        safetyTimerRef.current = null;
+      }
+      playNextSentence();
+    };
+
+    utterance.onend = onSentenceComplete;
+    utterance.onerror = onSentenceComplete;
+
+    const maxMs = Math.min(6000, Math.max(1400, cleanText.length * 55) + 500);
+    safetyTimerRef.current = setTimeout(onSentenceComplete, maxMs);
+
+    try {
+      window.speechSynthesis.speak(utterance);
+    } catch {
+      onSentenceComplete();
+    }
+  }, []);
+
+  // Enqueue sentence into TTS audio pipeline
+  const enqueueSentence = useCallback((sentence: string) => {
+    const trimmed = sentence.trim();
+    if (!trimmed) return;
+    audioQueueRef.current.push(trimmed);
+    if (!isPlayingQueueRef.current) {
+      playNextSentence();
+    }
+  }, [playNextSentence]);
 
   // Track active symbol and previous symbol across navigations
   const previousSymbolRef = useRef<string>("");
@@ -81,12 +203,9 @@ export function VoiceAssistant() {
     const newSymbol = freshContext.stock?.symbol || "";
     const newRoute = freshContext.route || pathname;
 
-    // If navigating between different stocks (e.g. RELIANCE -> TCS)
     if (currentSymbolRef.current && newSymbol && currentSymbolRef.current !== newSymbol) {
       console.log(`[voice] navigating from ${currentSymbolRef.current} to ${newSymbol}`);
       previousSymbolRef.current = currentSymbolRef.current;
-      // Keep a summary bridge in conversation memory so the user can ask:
-      // "Compare this with the previous stock"
       conversationMemoryRef.current = [
         {
           role: "assistant",
@@ -99,7 +218,7 @@ export function VoiceAssistant() {
     currentRouteRef.current = newRoute;
   }, [pathname]);
 
-  // Subscribe to live page context updates from components (e.g. LiveStockDetails, StockSectionTabs)
+  // Subscribe to live page context updates
   useEffect(() => {
     const unsubscribe = subscribeToVoicePageContext((ctx) => {
       if (ctx.stock?.symbol) {
@@ -109,43 +228,44 @@ export function VoiceAssistant() {
     return unsubscribe;
   }, []);
 
-  // Query AI Backend with User Question + Complete Structured Page Context + History
+  // Query Streaming AI Backend with Progressive Turn Delivery
   const processVoiceInput = useCallback(
     async (userSpeech: string, speechEndTimeMs?: number) => {
       const speechEnd = speechEndTimeMs || Date.now();
+      speechEndTimestampRef.current = speechEnd;
+      firstAudioLoggedRef.current = false;
+
       const trimmed = userSpeech.trim();
-      if (!trimmed || isAbortedRef.current || isProcessingRef.current) {
+      if (!trimmed || isAbortedRef.current) {
         return;
       }
 
-      isProcessingRef.current = true;
+      // Interrupt any running stream or playing audio (Barge-in / Interruption)
+      if (streamAbortControllerRef.current) {
+        streamAbortControllerRef.current.abort();
+      }
       cancelSpeech();
 
-      // Pause speech recognition while thinking & speaking
-      if (recognitionRef.current) {
-        try {
-          recognitionRef.current.abort();
-        } catch {}
-      }
+      const abortController = new AbortController();
+      streamAbortControllerRef.current = abortController;
+      isProcessingRef.current = true;
 
       const aiRequestStart = Date.now();
       console.log("[Voice] speech_end:", speechEnd);
       console.log("[Voice] ai_request_start:", aiRequestStart);
-      console.log("[Voice] AI request started for:", trimmed);
+      console.log("[Voice] Final transcript:", trimmed);
       setVoiceState("thinking");
       setLiveTranscript(trimmed);
 
-      // Record user turn in conversational memory
       conversationMemoryRef.current.push({ role: "user", content: trimmed });
       if (conversationMemoryRef.current.length > 6) {
         conversationMemoryRef.current = conversationMemoryRef.current.slice(-6);
       }
 
       try {
-        // Retrieve live structured page context
         const pageContext: VoicePageContext = getVoicePageContext();
 
-        const res = await fetch("/api/v1/ai/copilot", {
+        const res = await fetch("/api/v1/ai/copilot/stream", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -158,48 +278,105 @@ export function VoiceAssistant() {
             },
             history: conversationMemoryRef.current,
           }),
+          signal: abortController.signal,
         });
 
-        if (!res.ok) {
-          throw new Error(`Copilot API responded with status ${res.status}`);
+        if (!res.ok || !res.body) {
+          throw new Error(`Stream responded with status ${res.status}`);
         }
 
-        const json = await res.json();
-        const reply =
-          json.reply ||
-          "Data on this page has been verified. The numbers are up to date.";
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder("utf-8");
+        let sseBuffer = "";
+        let sentenceBuffer = "";
+        let accumulatedFullText = "";
+        let firstTokenLogged = false;
+        let firstSentenceLogged = false;
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          sseBuffer += decoder.decode(value, { stream: true });
+          const lines = sseBuffer.split("\n");
+          sseBuffer = lines.pop() || "";
+
+          for (const line of lines) {
+            const trimmedLine = line.trim();
+            if (!trimmedLine || !trimmedLine.startsWith("data:")) continue;
+            const dataStr = trimmedLine.replace(/^data:\s*/, "").trim();
+            if (dataStr === "[DONE]") break;
+
+            try {
+              const parsed = JSON.parse(dataStr);
+              const textChunk = parsed.text;
+              if (textChunk && typeof textChunk === "string") {
+                if (!firstTokenLogged) {
+                  firstTokenLogged = true;
+                  const firstTokenTime = Date.now();
+                  console.log("[Voice] first_token:", firstTokenTime);
+                  console.log(`[Voice] speech_end → first_token latency: ${firstTokenTime - speechEnd}ms`);
+                }
+
+                accumulatedFullText += textChunk;
+                sentenceBuffer += textChunk;
+                setLiveTranscript(accumulatedFullText.trim());
+
+                // Sentence boundary detection (. ! ? \n)
+                const sentenceMatch = sentenceBuffer.match(/^([\s\S]*?[.!?\n])\s*([\s\S]*)$/);
+                if (sentenceMatch) {
+                  const completedSentence = sentenceMatch[1].trim();
+                  sentenceBuffer = sentenceMatch[2];
+
+                  if (completedSentence.length > 2) {
+                    if (!firstSentenceLogged) {
+                      firstSentenceLogged = true;
+                      const firstSentenceTime = Date.now();
+                      console.log("[Voice] first_sentence:", firstSentenceTime, "->", completedSentence);
+                      console.log(`[Voice] speech_end → first_sentence latency: ${firstSentenceTime - speechEnd}ms`);
+                    }
+                    enqueueSentence(completedSentence);
+                  }
+                }
+              }
+            } catch {
+              // ignore json parse errors in sse chunk
+            }
+          }
+        }
+
+        // Flush any remaining text in sentenceBuffer
+        if (sentenceBuffer.trim()) {
+          enqueueSentence(sentenceBuffer.trim());
+        }
 
         const aiComplete = Date.now();
         console.log("[Voice] ai_complete:", aiComplete, `(took ${aiComplete - aiRequestStart}ms)`);
-        console.log("[Voice] AI response received:", reply);
 
-        // Record assistant turn in memory
-        conversationMemoryRef.current.push({ role: "assistant", content: reply });
-        if (conversationMemoryRef.current.length > 6) {
-          conversationMemoryRef.current = conversationMemoryRef.current.slice(-6);
+        if (accumulatedFullText.trim()) {
+          conversationMemoryRef.current.push({ role: "assistant", content: accumulatedFullText.trim() });
+          if (conversationMemoryRef.current.length > 6) {
+            conversationMemoryRef.current = conversationMemoryRef.current.slice(-6);
+          }
         }
-
-        if (!isAbortedRef.current) {
-          speakAndListen(reply, speechEnd);
-        }
-      } catch (err) {
-        console.error("[Voice] Copilot request failed:", err);
-        if (!isAbortedRef.current) {
-          speakAndListen("Please ask again, I will check the live screen data.", speechEnd);
+      } catch (err: any) {
+        if (err?.name === "AbortError") {
+          console.log("[Voice] Stream aborted by user interruption");
+        } else {
+          console.error("[Voice] Stream request failed:", err);
+          enqueueSentence("Please ask again, I will check the live screen data.");
         }
       } finally {
         isProcessingRef.current = false;
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [cancelSpeech]
+    [cancelSpeech, enqueueSentence]
   );
 
-  // Start Web Speech recognition
+  // Start persistent Web Speech recognition with barge-in support
   const listen = useCallback(() => {
     if (typeof window === "undefined" || isAbortedRef.current) return;
-
-    cancelSpeech();
 
     const SpeechRecognition =
       (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -221,13 +398,14 @@ export function VoiceAssistant() {
       console.log("[Voice] Recognition started");
       const recognition = new SpeechRecognition();
       recognition.lang = "en-IN";
-      recognition.continuous = false;
+      recognition.continuous = true;
       recognition.interimResults = true;
       recognition.maxAlternatives = 1;
 
       let recognizedFinal = "";
       let recognizedInterim = "";
       let lastSpeechTimestamp = Date.now();
+      let silenceTimer: any = null;
 
       recognition.onstart = () => {
         if (!isAbortedRef.current) {
@@ -237,10 +415,18 @@ export function VoiceAssistant() {
         }
       };
 
-      let silenceTimer: any = null;
-
       recognition.onresult = (event: any) => {
-        if (isAbortedRef.current || isProcessingRef.current) return;
+        if (isAbortedRef.current) return;
+
+        // User Barge-In: if user speaks while assistant is speaking or thinking, interrupt immediately!
+        if (isPlayingQueueRef.current || isProcessingRef.current) {
+          console.log("[Voice] User barge-in detected! Stopping current speech/stream");
+          if (streamAbortControllerRef.current) {
+            streamAbortControllerRef.current.abort();
+          }
+          cancelSpeech();
+          setVoiceState("listening");
+        }
 
         let interim = "";
         let final = "";
@@ -266,24 +452,23 @@ export function VoiceAssistant() {
           setLiveTranscript(interim);
         }
 
-        // Fast real-time turn finalizer: if user stops speaking for 750ms, stop recognition and submit
+        // Fast real-time turn detection (350-500ms after user pauses)
         if (silenceTimer) clearTimeout(silenceTimer);
         const candidate = (final || interim || recognizedFinal || recognizedInterim).trim();
         if (candidate) {
           silenceTimer = setTimeout(() => {
-            if (!isAbortedRef.current && !isProcessingRef.current && recognitionRef.current) {
-              console.log("[Voice] Silence detected after speech, stopping recognition for immediate submission");
+            if (!isAbortedRef.current && !isProcessingRef.current && candidate) {
+              console.log("[Voice] End of user turn detected, processing immediately:", candidate);
               try {
-                recognitionRef.current.stop();
+                recognition.stop();
               } catch {}
             }
-          }, 750);
+          }, 420);
         }
       };
 
       recognition.onerror = (e: any) => {
         if (silenceTimer) clearTimeout(silenceTimer);
-        console.warn("[Voice] recognition error:", e.error);
         if (e.error === "not-allowed" || e.error === "service-not-allowed") {
           cancelSpeech();
           setVoiceState("error");
@@ -299,7 +484,7 @@ export function VoiceAssistant() {
 
       recognition.onend = () => {
         if (silenceTimer) clearTimeout(silenceTimer);
-        console.log("[Voice] Recognition ended. Pending transcript:", { recognizedFinal, recognizedInterim });
+        console.log("[Voice] Recognition turn completed. Utterance:", { recognizedFinal, recognizedInterim });
         if (isAbortedRef.current) return;
 
         const candidate = (recognizedFinal || recognizedInterim).trim();
@@ -310,7 +495,7 @@ export function VoiceAssistant() {
             if (!isAbortedRef.current && !isProcessingRef.current) {
               listen();
             }
-          }, 150);
+          }, 100);
         }
       };
 
@@ -321,124 +506,7 @@ export function VoiceAssistant() {
       setVoiceState("error");
       setErrorMessage("Microphone access failed");
     }
-  }, [cancelSpeech, isProcessingRef, processVoiceInput, voiceState]);
-
-  // Speak voice response and immediately loop back to listening
-  const speakAndListen = useCallback(
-    (text: string, speechEndTimeMs?: number) => {
-      cancelSpeech();
-
-      if (typeof window === "undefined" || !("speechSynthesis" in window)) {
-        console.log("[Voice] SpeechSynthesis unavailable, skipping TTS");
-        listen();
-        return;
-      }
-
-      const cleanText = text
-        .replace(/[*#_`~>]/g, "")
-        .replace(/₹/g, "Rupees ")
-        .replace(/Cr\b/g, "Crore")
-        .replace(/\bPE\b/gi, "P E")
-        .replace(/\bPB\b/gi, "P B")
-        .replace(/\bROE\b/gi, "R O E")
-        .replace(/\bROCE\b/gi, "R O C E")
-        .replace(/\bFII\b/gi, "F I I")
-        .replace(/\bDII\b/gi, "D I I")
-        .replace(/\bRSI\b/gi, "R S I")
-        .replace(/\bCMP\b/gi, "Current Price")
-        .trim();
-
-      if (!cleanText) {
-        listen();
-        return;
-      }
-
-      const ttsStart = Date.now();
-      console.log("[Voice] tts_start:", ttsStart);
-      console.log("[Voice] TTS started for:", cleanText);
-      setLiveTranscript(text);
-      setVoiceState("speaking");
-
-      // Resume speech synthesis in case Chromium paused audio
-      try {
-        if (window.speechSynthesis.paused) {
-          window.speechSynthesis.resume();
-        }
-      } catch {}
-
-      const utterance = new SpeechSynthesisUtterance(cleanText);
-      utterance.volume = 1.0; // Clear volume
-      utterance.rate = 1.22;  // Call-like natural responsive speed (1.22x)
-      utterance.pitch = 1.02; // Natural presence
-
-      try {
-        const voices = window.speechSynthesis.getVoices();
-        const preferred =
-          voices.find(
-            (v) =>
-              v.lang.includes("en-IN") ||
-              v.lang.includes("hi-IN") ||
-              v.name.toLowerCase().includes("india")
-          ) ||
-          voices.find((v) => v.lang.startsWith("en"));
-
-        if (preferred) utterance.voice = preferred;
-      } catch {}
-
-      utteranceRef.current = utterance;
-      (window as any).__voiceUtterance = utterance;
-
-      let started = false;
-      utterance.onstart = () => {
-        if (started) return;
-        started = true;
-        const audioStart = Date.now();
-        console.log("[Voice] audio_start:", audioStart);
-        if (speechEndTimeMs) {
-          console.log(`[Voice] Time-to-first-audio latency: ${audioStart - speechEndTimeMs}ms`);
-        }
-      };
-
-      let finished = false;
-      const onComplete = () => {
-        if (finished) return;
-        finished = true;
-
-        if (safetyTimerRef.current) {
-          clearTimeout(safetyTimerRef.current);
-          safetyTimerRef.current = null;
-        }
-
-        utteranceRef.current = null;
-        if (typeof window !== "undefined") {
-          (window as any).__voiceUtterance = null;
-        }
-
-        console.log("[Voice] Audio playback completed, returning to listening");
-        if (!isAbortedRef.current) {
-          listen();
-        }
-      };
-
-      utterance.onend = onComplete;
-      utterance.onerror = (e) => {
-        console.warn("[Voice] TTS utterance error:", e);
-        onComplete();
-      };
-
-      // Deterministic safety timer so state NEVER hangs in "speaking"
-      const maxMs = Math.min(7500, Math.max(1600, cleanText.length * 55) + 600);
-      safetyTimerRef.current = setTimeout(onComplete, maxMs);
-
-      try {
-        window.speechSynthesis.speak(utterance);
-      } catch (err) {
-        console.error("[Voice] window.speechSynthesis.speak error:", err);
-        onComplete();
-      }
-    },
-    [cancelSpeech, listen]
-  );
+  }, [cancelSpeech, processVoiceInput, voiceState]);
 
   // Start real-time voice session with proper state progression
   const startSession = useCallback(async () => {
