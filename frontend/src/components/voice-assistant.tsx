@@ -237,6 +237,8 @@ export function VoiceAssistant() {
         }
       };
 
+      let silenceTimer: any = null;
+
       recognition.onresult = (event: any) => {
         if (isAbortedRef.current || isProcessingRef.current) return;
 
@@ -263,9 +265,24 @@ export function VoiceAssistant() {
           console.log("[Voice] Interim transcript:", interim);
           setLiveTranscript(interim);
         }
+
+        // Fast real-time turn finalizer: if user stops speaking for 750ms, stop recognition and submit
+        if (silenceTimer) clearTimeout(silenceTimer);
+        const candidate = (final || interim || recognizedFinal || recognizedInterim).trim();
+        if (candidate) {
+          silenceTimer = setTimeout(() => {
+            if (!isAbortedRef.current && !isProcessingRef.current && recognitionRef.current) {
+              console.log("[Voice] Silence detected after speech, stopping recognition for immediate submission");
+              try {
+                recognitionRef.current.stop();
+              } catch {}
+            }
+          }, 750);
+        }
       };
 
       recognition.onerror = (e: any) => {
+        if (silenceTimer) clearTimeout(silenceTimer);
         console.warn("[Voice] recognition error:", e.error);
         if (e.error === "not-allowed" || e.error === "service-not-allowed") {
           cancelSpeech();
@@ -281,6 +298,7 @@ export function VoiceAssistant() {
       };
 
       recognition.onend = () => {
+        if (silenceTimer) clearTimeout(silenceTimer);
         console.log("[Voice] Recognition ended. Pending transcript:", { recognizedFinal, recognizedInterim });
         if (isAbortedRef.current) return;
 

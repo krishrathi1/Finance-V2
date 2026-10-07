@@ -45,7 +45,10 @@ export async function POST(request: NextRequest) {
     let serverStockData: any = null;
     let authoritativeSummary = "";
 
-    if (rawSymbol && !rawSymbol.includes("VS") && rawSymbol !== "INDIAN MARKETS" && rawSymbol !== "NSE/BSE INDIAN MARKET") {
+    // For voice mode, NEVER block on the 8-second heavy server envelope unless pageContext has no stock data
+    const shouldFetchHeavyEnvelope = !isVoice && rawSymbol && !rawSymbol.includes("VS") && rawSymbol !== "INDIAN MARKETS" && rawSymbol !== "NSE/BSE INDIAN MARKET";
+
+    if (shouldFetchHeavyEnvelope) {
       try {
         const envelope = await loadDashboardEnvelope(rawSymbol, { exchange });
         if (envelope?.data) {
@@ -187,13 +190,38 @@ Guidelines:
       content: message,
     });
 
+    // 3.5. Instant Zero-Latency Conversational Filter for Greetings
+    if (isVoice) {
+      const trimmedLower = message.trim().toLowerCase().replace(/[?!.]/g, "");
+      if (
+        trimmedLower === "hello" ||
+        trimmedLower === "hi" ||
+        trimmedLower === "hey" ||
+        trimmedLower === "namaste" ||
+        trimmedLower === "kya haal hai" ||
+        trimmedLower === "hello sir" ||
+        trimmedLower === "hey assistant"
+      ) {
+        const greetingReply = rawSymbol
+          ? `Hello! Main sun raha hoon. ${pageContext.stock?.companyName || rawSymbol} currently ₹${pageContext.price?.current ?? "N/A"} par chal raha hai. Aap kya janna chahte hain?`
+          : "Hello! Main sun raha hoon. Aap kis stock ya metric ke baare me puchna chahte hain?";
+
+        return NextResponse.json({
+          status: "success",
+          provider: "instant-conversational-engine",
+          reply: greetingReply,
+          timestamp: new Date().toISOString(),
+        });
+      }
+    }
+
     // 6. Primary Execution: OpenRouter Fast Inference
     if (isOpenRouterConfigured()) {
       const openRouterReply = await generateViaOpenRouter(chatMessages, {
         temperature: isVoice ? 0.3 : 0.2,
-        maxTokens: isVoice ? 80 : 400,
+        maxTokens: isVoice ? 60 : 400,
         enableReasoning: isVoice ? false : true,
-        timeoutMs: isVoice ? 7000 : 15000,
+        timeoutMs: isVoice ? 2800 : 15000,
       });
 
       console.log("[copilot] openRouterReply received:", { isVoice, reply: openRouterReply });
