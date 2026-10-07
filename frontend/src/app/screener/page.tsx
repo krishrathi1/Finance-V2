@@ -29,6 +29,7 @@ import {
 import { FeatureAuthWall } from "@/components/sections/feature-auth-wall";
 import { MarketStatusBadge } from "@/components/market-status-badge";
 import { fetchScreenerResults, fetchAIScreenerResults } from "@/lib/api";
+import { publishVoicePageContext } from "@/lib/voice/page-context";
 import type { ScreenerFilters, ScreenerResult } from "@/shared/types";
 
 // ── Tooltip component ──────────────────────────────────────
@@ -283,6 +284,32 @@ export default function ScreenerPage() {
     setAiParsedFilters(null);
     setError(null);
   };
+
+  useEffect(() => {
+    const topMatches = results.slice(0, 5).map(
+      (r) => `${r.symbol} (₹${r.price}, PE: ${r.pe ?? "N/A"}, MC: ₹${Math.round(r.marketCap || 0)}Cr)`
+    );
+
+    publishVoicePageContext({
+      pageType: "screener",
+      route: "/screener",
+      title: "Stock Screener | Finance-V2",
+      screener: {
+        activePreset: activeCapPreset !== null ? MARKET_CAP_PRESETS[activeCapPreset]?.label : (aiMode ? "AI Search" : "Custom Filters"),
+        query: aiQuery || undefined,
+        resultsCount: results.length,
+        topMatches,
+        filtersApplied: {
+          sector: filters.sector || "All",
+          exchange: filters.exchange,
+          minPe: filters.pe_min,
+          maxPe: filters.pe_max,
+        },
+      },
+      selectedFilters: filters as Record<string, unknown>,
+      visibleSections: ["Filter Sidebar", "Preset Screens", "Results Table", "AI Search Box"],
+    });
+  }, [results, filters, aiQuery, aiMode, activeCapPreset]);
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {

@@ -72,16 +72,27 @@ export function VoiceAssistant() {
     }
   }, []);
 
+  // Track active symbol and previous symbol across navigations
+  const previousSymbolRef = useRef<string>("");
+
   // Update page context and detect symbol change across navigations
   useEffect(() => {
     const freshContext = buildVoicePageContext();
     const newSymbol = freshContext.stock?.symbol || "";
     const newRoute = freshContext.route || pathname;
 
-    // If navigating between different stocks (e.g. RELIANCE -> TCS), reset stock-specific memory
+    // If navigating between different stocks (e.g. RELIANCE -> TCS)
     if (currentSymbolRef.current && newSymbol && currentSymbolRef.current !== newSymbol) {
-      console.log(`[voice] navigating from ${currentSymbolRef.current} to ${newSymbol}, resetting conversation memory.`);
-      conversationMemoryRef.current = [];
+      console.log(`[voice] navigating from ${currentSymbolRef.current} to ${newSymbol}`);
+      previousSymbolRef.current = currentSymbolRef.current;
+      // Keep a summary bridge in conversation memory so the user can ask:
+      // "Compare this with the previous stock"
+      conversationMemoryRef.current = [
+        {
+          role: "assistant",
+          content: `(Context note: User previously looked at ${previousSymbolRef.current} and is now viewing ${newSymbol}).`,
+        },
+      ];
     }
 
     currentSymbolRef.current = newSymbol;

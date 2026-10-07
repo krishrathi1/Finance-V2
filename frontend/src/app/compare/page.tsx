@@ -18,6 +18,7 @@ import { FaqSection } from "@/components/seo/faq-section";
 import { FeatureAuthWall } from "@/components/sections/feature-auth-wall";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { fetchCompareAnalysis, fetchDashboard, searchStocks } from "@/lib/api";
+import { publishVoicePageContext } from "@/lib/voice/page-context";
 import type { DashboardData } from "@/shared/types";
 
 type SearchResult = { symbol: string; name: string; exchange: string };
@@ -424,6 +425,33 @@ function ComparePageContent() {
   }, [symbolA, symbolB]);
 
   const hasData = Boolean(dataA && dataB);
+
+  useEffect(() => {
+    if (dataA && dataB) {
+      publishVoicePageContext({
+        pageType: "compare",
+        route: `/compare?a=${dataA.symbol}&b=${dataB.symbol}`,
+        title: `Compare ${dataA.symbol} vs ${dataB.symbol} | Finance-V2`,
+        stock: {
+          symbol: `${dataA.symbol} vs ${dataB.symbol}`,
+          companyName: `${dataA.companyName} vs ${dataB.companyName}`,
+          exchange: dataA.exchange || "NSE",
+        },
+        visibleSections: [
+          `Stock A: ${dataA.symbol} (₹${dataA.price?.cmp}, PE: ${(dataA.metrics as any)?.peRatio || "N/A"}, Score: ${dataA.smartScore?.score}/5)`,
+          `Stock B: ${dataB.symbol} (₹${dataB.price?.cmp}, PE: ${(dataB.metrics as any)?.peRatio || "N/A"}, Score: ${dataB.smartScore?.score}/5)`,
+        ],
+      });
+    } else {
+      publishVoicePageContext({
+        pageType: "compare",
+        route: "/compare",
+        title: "Compare Stocks | Finance-V2",
+        visibleSections: ["Compare Search Bars", "Metric Comparison Table"],
+      });
+    }
+  }, [dataA, dataB]);
+
   const quickVerdict = dataA && dataB
     ? (() => {
         const upsideA =

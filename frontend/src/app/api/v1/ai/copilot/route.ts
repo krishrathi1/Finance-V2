@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateViaOpenRouter, isOpenRouterConfigured, ChatMessage } from "@/server/ai/openrouter";
 import { loadDashboardEnvelope } from "@/server/application/dashboard-envelope";
+import { buildVoiceFinancialContext } from "@/server/ai/voice-financial-context";
 import type { VoicePageContext } from "@/lib/voice/page-context";
 
 export const dynamic = "force-dynamic";
@@ -33,104 +34,123 @@ export async function POST(request: NextRequest) {
       "NSE"
     ).trim().toUpperCase();
 
-    const pageType = pageContext.pageType || (rawSymbol ? "stock-detail" : "generic");
+    const pageType = pageContext.pageType || (rawSymbol && !rawSymbol.includes("VS") ? "stock-detail" : "generic");
     const route = pageContext.route || context?.pathname || "/";
     const pageTitle = pageContext.title || context?.title || "Finance-V2";
     const activeTab = pageContext.activeTab || "";
     const visibleSections = pageContext.visibleSections || [];
     const screenText = pageContext.screenText || context?.screenText || "";
 
-    // 2. Fetch Authoritative Server-Side Live Data (Requirement 7)
-    // Server data always takes precedence over potentially stale client caches.
+    // 2. Fetch Authoritative Server-Side Live Data from complete DashboardEnvelope
     let serverStockData: any = null;
     let authoritativeSummary = "";
 
-    if (rawSymbol && rawSymbol !== "INDIAN MARKETS" && rawSymbol !== "NSE/BSE INDIAN MARKET") {
+    if (rawSymbol && !rawSymbol.includes("VS") && rawSymbol !== "INDIAN MARKETS" && rawSymbol !== "NSE/BSE INDIAN MARKET") {
       try {
         const envelope = await loadDashboardEnvelope(rawSymbol, { exchange });
         if (envelope?.data) {
           serverStockData = envelope.data;
-          const { price, metrics, smartScore, riskScore, technicals, shareholding, news, companyName } = serverStockData;
-          authoritativeSummary = `
-AUTHORITATIVE LIVE SERVER FINANCIAL DATA FOR ${companyName} (${rawSymbol}) [${exchange}]:
-- Current Market Price (CMP): ₹${price?.cmp ?? "N/A"} (${price?.changePercent ? (price.changePercent > 0 ? "+" : "") + price.changePercent + "%" : "0%"})
-- Day Range / 52-Week: High ₹${price?.fiftyTwoWeekHigh ?? "N/A"}, Low ₹${price?.fiftyTwoWeekLow ?? "N/A"}
-- Valuation Ratios: P/E: ${metrics?.pe ?? metrics?.peRatio ?? "N/A"}, P/B: ${metrics?.pb ?? metrics?.pbRatio ?? "N/A"}, Market Cap: ₹${metrics?.marketCap ? Number(metrics.marketCap).toLocaleString("en-IN") + " Cr" : "N/A"}, Dividend Yield: ${metrics?.dividendYield ?? "0"}%, ROE: ${metrics?.roe ?? "N/A"}%, ROCE: ${metrics?.roce ?? "N/A"}%
-- AI Smart Score: ${smartScore?.score ?? 8}/${smartScore?.maxScore ?? 10} (${smartScore?.label ?? "Healthy"}), Summary: ${smartScore?.explanation ?? ""}
-- Risk Score: ${riskScore?.score ?? 2}/${riskScore?.maxScore ?? 10} (${riskScore?.label ?? "Low Risk"}), Analysis: ${riskScore?.explanation ?? ""}
-- Technical Analysis: RSI (14): ${technicals?.rsi14 ?? "50.0"}, MACD: ${technicals?.macd ?? "0.0"}, Trend: ${technicals?.trend ?? "Neutral"}, 20 EMA: ₹${technicals?.ema20 ?? "N/A"}, 50 EMA: ₹${technicals?.ema50 ?? "N/A"}
-- Shareholding Structure: Promoter: ${shareholding?.promoters ?? shareholding?.promoterHolding ?? "N/A"}%, FII: ${shareholding?.fii ?? shareholding?.fiiHolding ?? "N/A"}%, DII: ${shareholding?.dii ?? shareholding?.diiHolding ?? "N/A"}%, Pledged: ${shareholding?.pledgedPercentage ?? 0}%
-- Recent Corporate News: ${(news || []).slice(0, 3).map((n: any) => n.title).join(" | ")}
-`;
+          authoritativeSummary = buildVoiceFinancialContext(envelope.data);
         }
       } catch (err) {
         console.warn("[copilot] server envelope fetch error for", rawSymbol, err);
       }
     }
 
-    // 3. Compile Structured Current Page Context (Requirement 6)
-    const structuredClientContext = `
-STRUCTURED CLIENT PAGE CONTEXT:
-- Page Type: ${pageType}
-- Route: ${route}
-- Active Page Title: ${pageTitle}
-${rawSymbol ? `- Selected Stock: ${rawSymbol} (${pageContext.stock?.companyName || rawSymbol})` : "- Selected Stock: None (Browsing generic/screener page)"}
-${activeTab ? `- Currently Active Section/Tab: ${activeTab}` : ""}
-${visibleSections.length > 0 ? `- Visible Page Components: ${visibleSections.join(", ")}` : ""}
-${
-  pageContext.price?.current
-    ? `- Client Displayed Price: ₹${pageContext.price.current} (${pageContext.price.changePercent}%)`
-    : ""
-}
-${
-  pageContext.valuation?.pe
-    ? `- Client Displayed P/E: ${pageContext.valuation.pe}`
-    : ""
-}
-${
-  pageContext.technicals?.rsi
-    ? `- Client Displayed RSI: ${pageContext.technicals.rsi} (${pageContext.technicals.trend || "Neutral"})`
-    : ""
-}
-${
-  pageContext.smartScore?.score
-    ? `- Client Displayed Smart Score: ${pageContext.smartScore.score}/${pageContext.smartScore.maxScore || 10} (${pageContext.smartScore.label})`
-    : ""
-}
-${
-  pageContext.riskScore?.score
-    ? `- Client Displayed Risk Score: ${pageContext.riskScore.score}/${pageContext.riskScore.maxScore || 10} (${pageContext.riskScore.label})`
-    : ""
-}
-${screenText ? `- Visible Screen Content Snippet: ${screenText.slice(0, 800)}` : ""}
-`;
+    // 3. Compile Structured Current Page Context
+    const structuredClientContextParts: string[] = [
+      `STRUCTURED CURRENT PAGE STATE:`,
+      `- Page Type: ${pageType}`,
+      `- Route: ${route}`,
+      `- Active Page Title: ${pageTitle}`,
+    ];
 
-    // 4. Voice System Instruction (Requirement 8)
+    if (rawSymbol) {
+      structuredClientContextParts.push(`- Current Stock: ${rawSymbol} (${pageContext.stock?.companyName || rawSymbol})`);
+    }
+    if (activeTab) {
+      structuredClientContextParts.push(`- Currently Active Section / Tab: ${activeTab}`);
+    }
+    if (visibleSections.length > 0) {
+      structuredClientContextParts.push(`- Visible Page Components / Items: ${visibleSections.join(" | ")}`);
+    }
+
+    // Chart State Awareness
+    if (pageContext.chart) {
+      structuredClientContextParts.push(
+        `- Active Chart: ${pageContext.chart.activeTab || "Price"} (Timeframe: ${pageContext.chart.timeframe || "Daily"}, Visible Indicators: ${(pageContext.chart.indicators || []).join(", ")})`
+      );
+    }
+
+    // Portfolio State Awareness
+    if (pageContext.portfolio) {
+      const pf = pageContext.portfolio;
+      structuredClientContextParts.push(
+        `- Portfolio Overview: Total Value ₹${pf.totalValue?.toLocaleString("en-IN") || 0}, Invested ₹${pf.totalInvested?.toLocaleString("en-IN") || 0}, Total P&L ₹${pf.totalPnl?.toLocaleString("en-IN") || 0} (${pf.totalPnlPercent?.toFixed(1) || 0}%), Holdings Count: ${pf.holdingsCount || 0}`
+      );
+      if (pf.topHoldings && pf.topHoldings.length > 0) {
+        structuredClientContextParts.push(`- Top Portfolio Holdings: ${pf.topHoldings.join(" | ")}`);
+      }
+    }
+
+    // Screener State Awareness
+    if (pageContext.screener) {
+      const sc = pageContext.screener;
+      structuredClientContextParts.push(
+        `- Screener View: Preset: ${sc.activePreset || "Default"}, Matches Count: ${sc.resultsCount || 0}${sc.query ? `, Query: "${sc.query}"` : ""}`
+      );
+      if (sc.topMatches && sc.topMatches.length > 0) {
+        structuredClientContextParts.push(`- Top Matching Stocks: ${sc.topMatches.join(" | ")}`);
+      }
+    }
+
+    // Client Displayed Fundamentals & Technicals Fallbacks
+    if (pageContext.price?.current) {
+      structuredClientContextParts.push(`- Client Price: ₹${pageContext.price.current} (${pageContext.price.changePercent}%)`);
+    }
+    if (pageContext.valuation?.pe) {
+      structuredClientContextParts.push(`- Client P/E: ${pageContext.valuation.pe}`);
+    }
+    if (pageContext.technicals?.rsi) {
+      structuredClientContextParts.push(`- Client RSI: ${pageContext.technicals.rsi} (${pageContext.technicals.trend || "Neutral"})`);
+    }
+    if (pageContext.smartScore?.score) {
+      structuredClientContextParts.push(`- Client Smart Score: ${pageContext.smartScore.score}/${pageContext.smartScore.maxScore || 5} (${pageContext.smartScore.label})`);
+    }
+    if (pageContext.riskScore?.score) {
+      structuredClientContextParts.push(`- Client Risk Score: ${pageContext.riskScore.score}/${pageContext.riskScore.maxScore || 5} (${pageContext.riskScore.label})`);
+    }
+    if (screenText) {
+      structuredClientContextParts.push(`- Visible Screen Snippet (Fallback): ${screenText.slice(0, 500)}`);
+    }
+
+    const structuredClientContext = structuredClientContextParts.join("\n");
+
+    // 4. Voice System Instruction
     const systemInstruction = isVoice
-      ? `You are the real-time voice assistant inside Finance-V2.
-You are context-aware.
-The user is currently viewing a specific page in the Finance-V2 application.
-You have access to the structured context of the current page and live authoritative market data.
+      ? `You are Finance-V2's real-time voice financial assistant.
+You have access to the complete current page context and authoritative financial data for the page the user is currently viewing.
 
-${authoritativeSummary || "No specific stock selected on this screen."}
+The current page is the source of context for phrases such as:
+this stock, this company, this, here, its price, its RSI, its valuation, this score, this chart, this risk, this result, my portfolio, this screen.
+
+Always resolve these references using the CURRENT PAGE STATE and AUTHORITATIVE LIVE DATA below.
+
+If the user navigates to another stock or page, immediately use the new page context.
+Never carry stock-specific facts from a previous page into the new page, except when the user explicitly asks for a comparison with the previous stock.
+
+${authoritativeSummary ? `AUTHORITATIVE LIVE FINANCIAL REPORT:\n${authoritativeSummary}` : "No single stock open on this screen."}
+
 ${structuredClientContext}
 
-STRICT VOICE BEHAVIOR RULES:
-1. When the user says words such as: "this stock", "this company", "this", "here", "current price", "its RSI", "its P/E", "this score", "why is it risky", "what does this chart show", resolve those references using the CURRENT PAGE CONTEXT.
-2. Never ask the user to repeat the stock symbol if the current page already identifies it.
-3. If the user navigates to another page, use the new page context. Do not assume that information from a previous page is still relevant.
-4. Use exact values from the supplied current data. If client data conflicts with server-side live financial data, prefer the server-side authoritative live data.
-5. If a requested metric is not available in the current page context, say that it is not available on this page rather than inventing a value.
-6. For financial questions, distinguish clearly between factual data and interpretation.
-7. For voice responses:
-   - Be punchy, fast, and direct.
-   - Keep answers strictly to 1 or 2 spoken sentences maximum so the response is fast and sounds alive.
-   - Jump straight to the answer without fluff (e.g. "Reliance CMP is 2,980 rupees, up 1.4% with a healthy smart score of 8 out of 10.").
-   - NEVER use markdown symbols (*, #, _, \`), bullet points, lists, or tables.
-   - Use Indian English or Hinglish naturally.
-   - If the user speaks Hindi/Hinglish, respond in natural, confident Hinglish.
-   - If the user speaks English, respond in professional English.
-8. The user should feel like they are talking to an assistant that can actually see and understand the page they are currently viewing.`
+STRICT SPOKEN RULES:
+1. Speak naturally with clear financial authority.
+2. Be punchy, fast, and direct. Keep answers strictly to 1 or 2 spoken sentences maximum so the response is fast and sounds alive.
+3. Use exact supplied values from authoritative data. If an exact metric is not available on this screen, clearly state that it is not available.
+4. Jump straight to the answer without preamble or fluff (e.g. "Reliance CMP is 2,980 rupees, up 1.4% with a healthy smart score of 8 out of 10.").
+5. NEVER use markdown symbols (*, #, _, \`), bullet points, numbered lists, or tables.
+6. Use Indian English or Hinglish naturally. If the user speaks Hindi/Hinglish, respond in natural, confident Hinglish. If English, respond in professional English.
+7. You are an assistant, not a financial guarantee or trading recommendation.`
       : `You are "Forensic Copilot", an elite institutional equity research analyst and forensic accounting expert specializing in Indian financial markets (NSE/BSE).
 You have full knowledge of the current stock and page:
 

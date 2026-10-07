@@ -19,11 +19,30 @@ import { Activity, BarChart3, LineChart as LineChartIcon, PieChart, ShieldAlert,
 
 import { Card } from "@/components/ui/card";
 import type { DashboardData } from "@/shared/types";
+import { publishVoicePageContext } from "@/lib/voice/page-context";
 
 type TabKey = "price-dma" | "financials" | "shareholding" | "drawdown" | "sip";
 
 export function InteractiveChartsSuite({ data }: { data: DashboardData }) {
   const [activeTab, setActiveTab] = useState<TabKey>("price-dma");
+
+  const handleTabChange = (newTab: TabKey) => {
+    setActiveTab(newTab);
+    const indicatorMap: Record<TabKey, { name: string; indicators: string[] }> = {
+      "price-dma": { name: "Price & Moving Averages", indicators: ["50-DMA", "200-DMA", "Daily Close Price"] },
+      "financials": { name: "Multi-Year Financial Growth", indicators: ["Revenue (Cr)", "Net Profit (Cr)"] },
+      "shareholding": { name: "Shareholding Trend", indicators: ["Promoter %", "FII %", "DII %", "Public %"] },
+      "drawdown": { name: "Peak-to-Trough Drawdown History", indicators: ["Drawdown %", "Underwater Curve"] },
+      "sip": { name: "Monthly SIP Simulation", indicators: ["Total Invested", "Current Value", "Absolute Return"] },
+    };
+    publishVoicePageContext({
+      chart: {
+        activeTab: indicatorMap[newTab]?.name || newTab,
+        timeframe: "Historical Daily / Yearly",
+        indicators: indicatorMap[newTab]?.indicators || [],
+      },
+    });
+  };
 
   // 1. Price & Moving Averages (50-DMA & 200-DMA)
   const priceChartData = useMemo(() => {
@@ -178,7 +197,7 @@ export function InteractiveChartsSuite({ data }: { data: DashboardData }) {
           {tabs.map((t) => (
             <button
               key={t.id}
-              onClick={() => setActiveTab(t.id)}
+              onClick={() => handleTabChange(t.id)}
               className={`flex items-center justify-center gap-2 px-3 py-2 text-xs font-bold rounded-xl transition-all duration-200 ${
                 activeTab === t.id
                   ? tabColorMap[t.id]

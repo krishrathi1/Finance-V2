@@ -2,13 +2,14 @@
  * Structured Page Context System for Real-Time Voice Agent.
  *
  * Maintains a live, authoritative structured representation of the active page,
- * stock fundamentals, technicals, scores, tabs, and route state.
+ * stock fundamentals, technicals, scores, tabs, charts, screener, portfolio, and route state.
  *
- * Replaces fragile DOM scraping with direct application state.
+ * Primary source: React / application state.
+ * Fallback: lightweight visible DOM screen text.
  */
 
 export interface VoicePageContext {
-  pageType: "stock-detail" | "screener" | "portfolio" | "dashboard" | "watchlist" | "generic";
+  pageType: "stock-detail" | "screener" | "portfolio" | "dashboard" | "watchlist" | "compare" | "generic";
   route: string;
   title: string;
 
@@ -16,6 +17,8 @@ export interface VoicePageContext {
     symbol: string;
     companyName?: string;
     exchange?: string;
+    sector?: string;
+    industry?: string;
   };
 
   price?: {
@@ -25,6 +28,7 @@ export interface VoicePageContext {
     high52Week?: number;
     low52Week?: number;
     aiTarget?: number;
+    volume?: number;
   };
 
   valuation?: {
@@ -34,6 +38,15 @@ export interface VoicePageContext {
     dividendYield?: number | null;
     roe?: number | null;
     roce?: number | null;
+    evToEbitda?: number | null;
+    eps?: number | null;
+  };
+
+  fundamentals?: {
+    revenue?: number | null;
+    profit?: number | null;
+    quarterlySummary?: string;
+    annualSummary?: string;
   };
 
   technicals?: {
@@ -42,6 +55,8 @@ export interface VoicePageContext {
     trend?: string;
     ema20?: number;
     ema50?: number;
+    support?: number;
+    resistance?: number;
   };
 
   smartScore?: {
@@ -61,13 +76,16 @@ export interface VoicePageContext {
   forensics?: {
     mScore?: number;
     altmanZ?: number;
+    fScore?: number;
     qualityLabel?: string;
+    manipulationRisk?: string;
   };
 
   shareholding?: {
     promoter?: number;
     fii?: number;
     dii?: number;
+    publicHolding?: number;
     pledged?: number;
   };
 
@@ -75,6 +93,29 @@ export interface VoicePageContext {
     title: string;
     date?: string;
   }>;
+
+  chart?: {
+    activeTab?: string;
+    timeframe?: string;
+    indicators?: string[];
+  };
+
+  portfolio?: {
+    totalValue?: number;
+    totalInvested?: number;
+    totalPnl?: number;
+    totalPnlPercent?: number;
+    holdingsCount?: number;
+    topHoldings?: string[];
+  };
+
+  screener?: {
+    activePreset?: string;
+    query?: string;
+    resultsCount?: number;
+    topMatches?: string[];
+    filtersApplied?: Record<string, unknown>;
+  };
 
   activeTab?: string;
   visibleSections?: string[];
@@ -90,7 +131,7 @@ declare global {
 }
 
 /**
- * Publish updated structured context from any React component (e.g. LiveStockDetails, Screener).
+ * Publish updated structured context from any React component (e.g. LiveStockDetails, Screener, Portfolio).
  */
 export function publishVoicePageContext(update: Partial<VoicePageContext>): void {
   if (typeof window === "undefined") return;
@@ -102,10 +143,15 @@ export function publishVoicePageContext(update: Partial<VoicePageContext>): void
     stock: update.stock ? { ...current.stock, ...update.stock } : current.stock,
     price: update.price ? { ...current.price, ...update.price } : current.price,
     valuation: update.valuation ? { ...current.valuation, ...update.valuation } : current.valuation,
+    fundamentals: update.fundamentals ? { ...current.fundamentals, ...update.fundamentals } : current.fundamentals,
     technicals: update.technicals ? { ...current.technicals, ...update.technicals } : current.technicals,
     smartScore: update.smartScore ? { ...current.smartScore, ...update.smartScore } : current.smartScore,
     riskScore: update.riskScore ? { ...current.riskScore, ...update.riskScore } : current.riskScore,
+    forensics: update.forensics ? { ...current.forensics, ...update.forensics } : current.forensics,
     shareholding: update.shareholding ? { ...current.shareholding, ...update.shareholding } : current.shareholding,
+    chart: update.chart ? { ...current.chart, ...update.chart } : current.chart,
+    portfolio: update.portfolio ? { ...current.portfolio, ...update.portfolio } : current.portfolio,
+    screener: update.screener ? { ...current.screener, ...update.screener } : current.screener,
   };
 
   window.__FINANCE_PAGE_CONTEXT__ = next;
@@ -119,6 +165,32 @@ export function publishVoicePageContext(update: Partial<VoicePageContext>): void
       }
     });
   }
+}
+
+/**
+ * Reset voice page context explicitly, e.g. when changing pages or stock symbols.
+ */
+export function resetVoicePageContext(newPageType: VoicePageContext["pageType"], route: string, symbol?: string, exchange = "NSE"): VoicePageContext {
+  const fresh: VoicePageContext = {
+    pageType: newPageType,
+    route,
+    title: typeof document !== "undefined" ? document.title : "Finance-V2",
+    stock: symbol ? { symbol, companyName: symbol, exchange } : undefined,
+    visibleSections: [],
+  };
+
+  if (typeof window !== "undefined") {
+    window.__FINANCE_PAGE_CONTEXT__ = fresh;
+    if (window.__FINANCE_PAGE_LISTENERS__) {
+      window.__FINANCE_PAGE_LISTENERS__.forEach((fn) => {
+        try {
+          fn(fresh);
+        } catch {}
+      });
+    }
+  }
+
+  return fresh;
 }
 
 /**
@@ -179,6 +251,8 @@ export function buildVoicePageContext(): VoicePageContext {
     pageType = "portfolio";
   } else if (path.includes("watchlist")) {
     pageType = "watchlist";
+  } else if (path.includes("compare")) {
+    pageType = "compare";
   } else if (path === "/" || path === "") {
     pageType = "dashboard";
   }

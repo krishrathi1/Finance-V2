@@ -123,6 +123,9 @@ export function LiveStockDetails({ initialData, symbol, exchange }: { initialDat
   }, [exchange, symbol]);
 
   useEffect(() => {
+    const qLatest = data.financials?.quarterly?.slice(-1)[0];
+    const qStr = qLatest ? `${qLatest.period}: Revenue ₹${qLatest.revenue ?? "N/A"}Cr, PAT ₹${qLatest.profit ?? "N/A"}Cr` : undefined;
+
     publishVoicePageContext({
       pageType: "stock-detail",
       route: `/stocks/${data.symbol || symbol}`,
@@ -131,6 +134,8 @@ export function LiveStockDetails({ initialData, symbol, exchange }: { initialDat
         symbol: data.symbol || symbol,
         companyName: data.companyName,
         exchange: data.exchange || exchange,
+        sector: data.sector,
+        industry: data.profile?.industry,
       },
       price: {
         current: data.price?.cmp,
@@ -147,6 +152,13 @@ export function LiveStockDetails({ initialData, symbol, exchange }: { initialDat
         dividendYield: (data.metrics as any)?.dividendYield,
         roe: (data.metrics as any)?.roe,
         roce: (data.metrics as any)?.roce,
+        evToEbitda: (data.metrics as any)?.evToEbitda ?? (data.metrics as any)?.evEbitda,
+        eps: (data.metrics as any)?.eps,
+      },
+      fundamentals: {
+        revenue: qLatest?.revenue,
+        profit: qLatest?.profit,
+        quarterlySummary: qStr,
       },
       technicals: {
         rsi: data.technicals?.rsi14,
@@ -171,6 +183,7 @@ export function LiveStockDetails({ initialData, symbol, exchange }: { initialDat
         promoter: data.shareholding?.promoters,
         fii: data.shareholding?.fii,
         dii: data.shareholding?.dii,
+        publicHolding: data.shareholding?.public,
       },
       news: (data.news || []).slice(0, 3).map((n) => ({ title: n.title, date: n.publishedAt })),
       visibleSections: [
