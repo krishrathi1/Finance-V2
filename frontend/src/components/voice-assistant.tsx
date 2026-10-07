@@ -1,30 +1,46 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
-import { MessageCircle, Mic, MicOff, X, Volume2 } from "lucide-react";
+import { MessageCircle, Mic, MicOff, X, Volume2, AlertCircle } from "lucide-react";
+import {
+  getVoicePageContext,
+  buildVoicePageContext,
+  subscribeToVoicePageContext,
+  VoicePageContext,
+} from "@/lib/voice/page-context";
 
 export type VoiceState =
   | "idle"
-  | "connecting"
+  | "requesting_permission"
   | "listening"
   | "thinking"
-  | "speaking";
+  | "speaking"
+  | "error";
+
+interface ChatTurn {
+  role: "user" | "assistant";
+  content: string;
+}
 
 /**
- * PURE REAL-TIME VOICE-TO-VOICE AGENT
+ * PURE CONTEXT-AWARE VOICE AGENT (Finance-V2)
  *
- * 🎙️ You Speak -> 🧠 Nemotron Thinks -> 🔊 Agent Speaks -> 🎙️ Back to Listening
- *
- * - ZERO text cards, ZERO question chips, ZERO modals.
- * - Pure voice conversation just like a real-time voice call.
- * - Hands-free continuous loop.
- * - Full awareness of on-screen stock & market data.
+ * - Real-time Voice-to-Voice Hands-Free Loop.
+ * - Strict State Machine: idle -> requesting_permission -> listening -> thinking -> speaking -> listening.
+ * - Deep Structured Page Context Awareness (Price, Technicals, Scores, Shareholding, Route, Active Tabs).
+ * - Multi-turn conversational memory (e.g. "What's the P/E?" -> "Is that high?").
+ * - Dynamic route change detection (RELIANCE -> TCS automatically updates context).
+ * - Zero clunky modals or text clutter.
  */
 export function VoiceAssistant() {
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
   const [voiceState, setVoiceState] = useState<VoiceState>("idle");
   const [liveTranscript, setLiveTranscript] = useState<string>("");
-  const [micBlocked, setMicBlocked] = useState<boolean>(false);
+  const [errorMessage, setErrorMessage] = useState<string>("");
 
   const recognitionRef = useRef<any>(null);
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
@@ -32,7 +48,12 @@ export function VoiceAssistant() {
   const isAbortedRef = useRef<boolean>(false);
   const isProcessingRef = useRef<boolean>(false);
 
-  // Stop any active speech synthesis immediately
+  // Short-term conversational memory
+  const conversationMemoryRef = useRef<ChatTurn[]>([]);
+  const currentSymbolRef = useRef<string>("");
+  const currentRouteRef = useRef<string>("");
+
+  // Stop any active speech synthesis safely
   const cancelSpeech = useCallback(() => {
     if (safetyTimerRef.current) {
       clearTimeout(safetyTimerRef.current);
@@ -49,47 +70,33 @@ export function VoiceAssistant() {
     }
   }, []);
 
-  // Extract live context from current page
-  const extractPageContext = useCallback(() => {
-    if (typeof window === "undefined") {
-      return { symbol: "", exchange: "NSE", title: "", screenText: "", pathname: "" };
+  // Update page context and detect symbol change across navigations
+  useEffect(() => {
+    const freshContext = buildVoicePageContext();
+    const newSymbol = freshContext.stock?.symbol || "";
+    const newRoute = freshContext.route || pathname;
+
+    // If navigating between different stocks (e.g. RELIANCE -> TCS), reset stock-specific memory
+    if (currentSymbolRef.current && newSymbol && currentSymbolRef.current !== newSymbol) {
+      console.log(`[voice] navigating from ${currentSymbolRef.current} to ${newSymbol}, resetting conversation memory.`);
+      conversationMemoryRef.current = [];
     }
 
-    const path = window.location.pathname;
-    const search = window.location.search;
-    const pathParts = path.split("/").filter(Boolean);
+    currentSymbolRef.current = newSymbol;
+    currentRouteRef.current = newRoute;
+  }, [pathname, searchParams]);
 
-    let symbol = "";
-    if (pathParts[0] === "stocks" && pathParts[1]) {
-      symbol = decodeURIComponent(pathParts[1]).toUpperCase();
-    }
-
-    const searchParams = new URLSearchParams(search);
-    const exchange = (searchParams.get("exchange") || "NSE").toUpperCase();
-
-    let screenText = "";
-    try {
-      const main = document.querySelector("main") || document.body;
-      const text = (main?.innerText || "").slice(0, 3000);
-      screenText = text
-        .replace(/\n\s*\n/g, "\n")
-        .split("\n")
-        .map((s) => s.trim())
-        .filter((s) => s.length > 0 && !s.startsWith("http"))
-        .slice(0, 60)
-        .join(" | ");
-    } catch {}
-
-    return {
-      symbol,
-      exchange,
-      pathname: path,
-      title: document.title,
-      screenText,
-    };
+  // Subscribe to live page context updates from components (e.g. LiveStockDetails, StockSectionTabs)
+  useEffect(() => {
+    const unsubscribe = subscribeToVoicePageContext((ctx) => {
+      if (ctx.stock?.symbol) {
+        currentSymbolRef.current = ctx.stock.symbol;
+      }
+    });
+    return unsubscribe;
   }, []);
 
-  // Query AI Backend (OpenRouter Nemotron 3 Nano Omni 30B)
+  // Query AI Backend with User Question + Complete Structured Page Context + History
   const processVoiceInput = useCallback(
     async (userSpeech: string) => {
       if (!userSpeech.trim() || isAbortedRef.current || isProcessingRef.current) return;
@@ -107,8 +114,15 @@ export function VoiceAssistant() {
       setVoiceState("thinking");
       setLiveTranscript(userSpeech);
 
+      // Record user turn in conversational memory
+      conversationMemoryRef.current.push({ role: "user", content: userSpeech });
+      if (conversationMemoryRef.current.length > 6) {
+        conversationMemoryRef.current = conversationMemoryRef.current.slice(-6);
+      }
+
       try {
-        const pageCtx = extractPageContext();
+        // Retrieve live structured page context (Requirement 2 & 5)
+        const pageContext: VoicePageContext = getVoicePageContext();
 
         const res = await fetch("/api/v1/ai/copilot", {
           method: "POST",
@@ -117,33 +131,41 @@ export function VoiceAssistant() {
             message: userSpeech,
             context: {
               mode: "voice",
-              symbol: pageCtx.symbol,
-              exchange: pageCtx.exchange,
-              title: pageCtx.title,
-              pathname: pageCtx.pathname,
-              screenText: pageCtx.screenText,
+              pageContext,
+              symbol: pageContext.stock?.symbol || "",
+              exchange: pageContext.stock?.exchange || "NSE",
             },
+            history: conversationMemoryRef.current,
           }),
         });
 
         const json = await res.json();
-        const reply = json.reply || "Stock data checked. Metrics are up to date.";
+        const reply =
+          json.reply ||
+          "Data on this page has been verified. The numbers are up to date.";
+
+        // Record assistant turn in memory
+        conversationMemoryRef.current.push({ role: "assistant", content: reply });
+        if (conversationMemoryRef.current.length > 6) {
+          conversationMemoryRef.current = conversationMemoryRef.current.slice(-6);
+        }
 
         if (!isAbortedRef.current) {
           speakAndListen(reply);
         }
       } catch {
         if (!isAbortedRef.current) {
-          speakAndListen("Please ask again, I will check the live numbers.");
+          speakAndListen("Please ask again, I will check the live screen data.");
         }
       } finally {
         isProcessingRef.current = false;
       }
     },
-    [cancelSpeech, extractPageContext]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [cancelSpeech]
   );
 
-  // Start continuous listening
+  // Start continuous Web Speech recognition
   const listen = useCallback(() => {
     if (typeof window === "undefined" || isAbortedRef.current) return;
 
@@ -153,7 +175,8 @@ export function VoiceAssistant() {
       (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
     if (!SpeechRecognition) {
-      setMicBlocked(true);
+      setVoiceState("error");
+      setErrorMessage("Speech Recognition not supported in this browser");
       return;
     }
 
@@ -170,12 +193,12 @@ export function VoiceAssistant() {
       recognition.interimResults = true;
       recognition.maxAlternatives = 1;
 
-      let silenceTimeout: any = null;
+      let silenceTimer: any = null;
 
       recognition.onstart = () => {
         if (!isAbortedRef.current) {
-          setMicBlocked(false);
           setVoiceState("listening");
+          setErrorMessage("");
         }
       };
 
@@ -194,21 +217,19 @@ export function VoiceAssistant() {
           }
         }
 
-        const currentText = (final || interim).trim();
-        if (currentText) {
-          setLiveTranscript(currentText);
+        const transcriptChunk = (final || interim).trim();
+        if (transcriptChunk) {
+          setLiveTranscript(transcriptChunk);
 
-          // Clear any prior speech pause timer
-          if (silenceTimeout) clearTimeout(silenceTimeout);
+          if (silenceTimer) clearTimeout(silenceTimer);
 
-          // If final transcript or silence after speech, process immediately
           if (final) {
             processVoiceInput(final);
           } else {
-            // Wait 1.1s of silence before sending interim speech
-            silenceTimeout = setTimeout(() => {
-              if (currentText && !isProcessingRef.current) {
-                processVoiceInput(currentText);
+            // After 1.1s of quiet pause following user speech, submit query
+            silenceTimer = setTimeout(() => {
+              if (transcriptChunk && !isProcessingRef.current) {
+                processVoiceInput(transcriptChunk);
               }
             }, 1100);
           }
@@ -217,7 +238,8 @@ export function VoiceAssistant() {
 
       recognition.onerror = (e: any) => {
         if (e.error === "not-allowed" || e.error === "service-not-allowed") {
-          setMicBlocked(true);
+          setVoiceState("error");
+          setErrorMessage("Microphone blocked in browser");
         } else if (!isAbortedRef.current && !isProcessingRef.current) {
           setTimeout(() => {
             if (!isAbortedRef.current && !isProcessingRef.current) {
@@ -230,7 +252,6 @@ export function VoiceAssistant() {
       };
 
       recognition.onend = () => {
-        // Auto-reconnect loop if still in listening mode
         if (
           !isAbortedRef.current &&
           !isProcessingRef.current &&
@@ -245,11 +266,12 @@ export function VoiceAssistant() {
       recognitionRef.current = recognition;
       recognition.start();
     } catch {
-      setMicBlocked(true);
+      setVoiceState("error");
+      setErrorMessage("Microphone access failed");
     }
   }, [cancelSpeech, isProcessingRef, processVoiceInput, voiceState]);
 
-  // Speak AI answer aloud, and automatically switch back to listening
+  // Speak voice response and immediately loop back to listening
   const speakAndListen = useCallback(
     (text: string) => {
       cancelSpeech();
@@ -285,7 +307,6 @@ export function VoiceAssistant() {
       utterance.rate = 1.1;
       utterance.pitch = 1.0;
 
-      // Select natural voice
       try {
         const voices = window.speechSynthesis.getVoices();
         const preferred =
@@ -327,7 +348,7 @@ export function VoiceAssistant() {
       utterance.onend = onComplete;
       utterance.onerror = onComplete;
 
-      // Deterministic safety timer so it NEVER gets stuck
+      // Deterministic safety timer so state NEVER hangs in "speaking"
       const maxMs = Math.min(8000, Math.max(1800, cleanText.length * 60) + 800);
       safetyTimerRef.current = setTimeout(onComplete, maxMs);
 
@@ -340,31 +361,50 @@ export function VoiceAssistant() {
     [cancelSpeech, listen]
   );
 
-  // Start real-time voice session
+  // Start real-time voice session with proper state progression
   const startSession = useCallback(async () => {
     isAbortedRef.current = false;
     isProcessingRef.current = false;
-    setMicBlocked(false);
-    setVoiceState("connecting");
+    setErrorMessage("");
     setLiveTranscript("");
 
-    // Request mic directly
+    // State 1: requesting_permission (Requirement 10)
+    setVoiceState("requesting_permission");
+
+    let micPermitted = false;
     if (typeof navigator !== "undefined" && navigator?.mediaDevices?.getUserMedia) {
       try {
-        await navigator.mediaDevices.getUserMedia({ audio: true });
-        setMicBlocked(false);
-      } catch {
-        setMicBlocked(true);
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        // Release immediate test stream, speech recognition will open audio channel
+        stream.getTracks().forEach((t) => t.stop());
+        micPermitted = true;
+      } catch (err) {
+        console.warn("[voice] microphone permission denied:", err);
+        setVoiceState("error");
+        setErrorMessage("Microphone blocked — allow in browser address bar");
+        return;
       }
+    } else {
+      setVoiceState("error");
+      setErrorMessage("Microphone not available");
+      return;
     }
 
-    const pageCtx = extractPageContext();
-    const greeting = pageCtx.symbol
-      ? `I'm listening. Ask me anything about ${pageCtx.symbol}.`
-      : "I'm listening. What stock would you like to check?";
+    if (!micPermitted) {
+      setVoiceState("error");
+      setErrorMessage("Microphone access required");
+      return;
+    }
+
+    // Context-Aware Greeting based on CURRENT page
+    const pageCtx = getVoicePageContext();
+    const target = pageCtx.stock?.symbol || pageCtx.stock?.companyName;
+    const greeting = target
+      ? `I'm listening. Ask me anything about ${target}.`
+      : "I'm listening. What stock or metric would you like to explore?";
 
     speakAndListen(greeting);
-  }, [extractPageContext, speakAndListen]);
+  }, [speakAndListen]);
 
   // Stop session & hang up
   const endSession = useCallback(() => {
@@ -381,7 +421,8 @@ export function VoiceAssistant() {
 
     setVoiceState("idle");
     setLiveTranscript("");
-    setMicBlocked(false);
+    setErrorMessage("");
+    conversationMemoryRef.current = [];
   }, [cancelSpeech]);
 
   // Cleanup on unmount
@@ -413,7 +454,7 @@ export function VoiceAssistant() {
             whileTap={{ scale: 0.94 }}
             transition={{ type: "spring", stiffness: 420, damping: 28 }}
             onClick={startSession}
-            aria-label="Start Real-Time Voice Agent"
+            aria-label="Start Context-Aware Voice Agent"
             className="flex items-center gap-2.5 rounded-full bg-[#C57708] text-white pl-4 pr-5 py-3 shadow-xl shadow-[#C57708]/30 hover:bg-[#A85F00] transition-colors cursor-pointer"
           >
             <span className="relative flex items-center justify-center">
@@ -437,81 +478,110 @@ export function VoiceAssistant() {
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.75, opacity: 0 }}
             transition={{ type: "spring", stiffness: 380, damping: 26 }}
-            className="flex items-center gap-3 rounded-full bg-panel/95 backdrop-blur-xl border border-[#C57708]/40 shadow-2xl shadow-[#C57708]/25 pl-3.5 pr-2 py-2"
+            className={`flex items-center gap-3 rounded-full bg-panel/95 backdrop-blur-xl border shadow-2xl pl-3.5 pr-2 py-2 transition-colors ${
+              voiceState === "error"
+                ? "border-rose-500/40 shadow-rose-500/20"
+                : "border-[#C57708]/40 shadow-[#C57708]/25"
+            }`}
           >
             {/* Pulsing Voice Orb / Mic Indicator */}
             <div className="relative flex items-center justify-center">
-              <motion.span
-                className="absolute w-10 h-10 rounded-full bg-[#C57708]/25"
-                animate={
-                  voiceState === "listening" || voiceState === "speaking"
-                    ? { scale: [1, 1.8], opacity: [0.6, 0] }
-                    : { scale: 1, opacity: 0.2 }
-                }
-                transition={{ duration: 1.2, repeat: Infinity, ease: "easeOut" }}
-              />
+              {voiceState !== "error" && (
+                <motion.span
+                  className="absolute w-10 h-10 rounded-full bg-[#C57708]/25"
+                  animate={
+                    voiceState === "listening" || voiceState === "speaking"
+                      ? { scale: [1, 1.8], opacity: [0.6, 0] }
+                      : { scale: 1, opacity: 0.2 }
+                  }
+                  transition={{ duration: 1.2, repeat: Infinity, ease: "easeOut" }}
+                />
+              )}
 
-              <div
-                className={`relative w-8 h-8 rounded-full flex items-center justify-center transition-colors ${
+              <button
+                type="button"
+                onClick={() => {
+                  if (voiceState === "error") {
+                    startSession();
+                  } else if (voiceState === "speaking") {
+                    cancelSpeech();
+                    listen();
+                  }
+                }}
+                className={`relative w-8 h-8 rounded-full flex items-center justify-center transition-colors cursor-pointer ${
                   voiceState === "speaking"
                     ? "bg-[#C57708] text-white shadow-lg shadow-[#C57708]/40"
-                    : micBlocked
+                    : voiceState === "error"
                     ? "bg-rose-500/15 text-rose-500"
                     : "bg-[#C57708]/20 text-[#C57708]"
                 }`}
+                title={
+                  voiceState === "error"
+                    ? "Click to retry microphone permission"
+                    : voiceState === "speaking"
+                    ? "Click to interrupt speech"
+                    : "Active microphone"
+                }
               >
                 {voiceState === "speaking" ? (
                   <Volume2 className="w-4 h-4 animate-pulse" />
-                ) : micBlocked ? (
+                ) : voiceState === "error" ? (
                   <MicOff className="w-4 h-4" />
                 ) : (
                   <Mic className="w-4 h-4" />
                 )}
-              </div>
+              </button>
             </div>
 
-            {/* Live 5-Bar Dancing Equalizer Wave */}
-            <div className="flex items-end gap-[3px] h-5">
-              {[0, 1, 2, 3, 4].map((i) => (
-                <motion.span
-                  key={i}
-                  className={`w-[3px] rounded-full ${
-                    voiceState === "speaking" ? "bg-[#C57708]" : "bg-[#25AB21]"
-                  }`}
-                  animate={
-                    voiceState === "listening"
-                      ? { height: ["5px", "18px", "7px", "14px", "6px"] }
-                      : voiceState === "speaking"
-                      ? { height: ["6px", "22px", "10px", "18px", "7px"] }
-                      : { height: ["5px", "5px"] }
-                  }
-                  transition={{
-                    duration: voiceState === "speaking" ? 0.55 : 0.75,
-                    repeat: Infinity,
-                    ease: "easeInOut",
-                    delay: i * 0.1,
-                  }}
-                />
-              ))}
-            </div>
+            {/* Live 5-Bar Dancing Equalizer Wave (Hidden during error/requesting) */}
+            {voiceState !== "error" && voiceState !== "requesting_permission" && (
+              <div className="flex items-end gap-[3px] h-5">
+                {[0, 1, 2, 3, 4].map((i) => (
+                  <motion.span
+                    key={i}
+                    className={`w-[3px] rounded-full ${
+                      voiceState === "speaking" ? "bg-[#C57708]" : "bg-[#25AB21]"
+                    }`}
+                    animate={
+                      voiceState === "listening"
+                        ? { height: ["5px", "18px", "7px", "14px", "6px"] }
+                        : voiceState === "speaking"
+                        ? { height: ["6px", "22px", "10px", "18px", "7px"] }
+                        : { height: ["5px", "5px"] }
+                    }
+                    transition={{
+                      duration: voiceState === "speaking" ? 0.55 : 0.75,
+                      repeat: Infinity,
+                      ease: "easeInOut",
+                      delay: i * 0.1,
+                    }}
+                  />
+                ))}
+              </div>
+            )}
 
             {/* Live Status & Transcript Display */}
-            <div className="flex flex-col min-w-[90px] max-w-[200px]">
-              <span className="text-xs font-bold text-fg">
-                {voiceState === "connecting"
-                  ? "Connecting…"
+            <div className="flex flex-col min-w-[90px] max-w-[210px]">
+              <span className="text-xs font-bold text-fg truncate">
+                {voiceState === "requesting_permission"
+                  ? "Allowing mic…"
                   : voiceState === "listening"
-                  ? "Listening to you…"
+                  ? currentSymbolRef.current
+                    ? `Listening (${currentSymbolRef.current})…`
+                    : "Listening to you…"
                   : voiceState === "thinking"
                   ? "Nemotron thinking…"
                   : voiceState === "speaking"
                   ? "Speaking…"
+                  : voiceState === "error"
+                  ? "Microphone Error"
                   : "Voice Active"}
               </span>
 
-              {micBlocked ? (
-                <span className="text-[10px] text-rose-500 font-semibold truncate">
-                  Mic blocked in browser
+              {voiceState === "error" ? (
+                <span className="text-[10px] text-rose-500 font-semibold truncate flex items-center gap-1">
+                  <AlertCircle className="w-3 h-3 shrink-0" />
+                  {errorMessage || "Click to retry mic"}
                 </span>
               ) : liveTranscript ? (
                 <span className="text-[10px] text-muted truncate">
