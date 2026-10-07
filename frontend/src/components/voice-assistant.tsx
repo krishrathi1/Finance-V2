@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { MessageCircle, Mic, MicOff, X, Volume2, AlertCircle, RotateCcw } from "lucide-react";
 import {
@@ -38,7 +38,6 @@ interface ChatTurn {
  */
 export function VoiceAssistant() {
   const pathname = usePathname();
-  const searchParams = useSearchParams();
 
   const [voiceState, setVoiceState] = useState<VoiceState>("idle");
   const [liveTranscript, setLiveTranscript] = useState<string>("");
@@ -87,7 +86,7 @@ export function VoiceAssistant() {
 
     currentSymbolRef.current = newSymbol;
     currentRouteRef.current = newRoute;
-  }, [pathname, searchParams]);
+  }, [pathname]);
 
   // Subscribe to live page context updates from components (e.g. LiveStockDetails, StockSectionTabs)
   useEffect(() => {

@@ -339,7 +339,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 </div>
               </div>
             </footer>
-            <VoiceAssistant />
+            <Suspense fallback={null}>
+              <VoiceAssistant />
+            </Suspense>
           </AuthProvider>
         </ThemeProvider>
       </body>
