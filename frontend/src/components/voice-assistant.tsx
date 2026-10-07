@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
-import { MessageCircle, Mic, MicOff, X, Volume2, AlertCircle } from "lucide-react";
+import { MessageCircle, Mic, MicOff, X, Volume2, AlertCircle, RotateCcw } from "lucide-react";
 import {
   getVoicePageContext,
   buildVoicePageContext,
@@ -29,6 +29,8 @@ interface ChatTurn {
  *
  * - Real-time Voice-to-Voice Hands-Free Loop.
  * - Strict State Machine: idle -> requesting_permission -> listening -> thinking -> speaking -> listening.
+ * - Proper Microphone Permission Handling: Blocks progression on failure, never says "Speaking" when mic denied.
+ * - Retains and safely releases MediaStream hardware handle.
  * - Deep Structured Page Context Awareness (Price, Technicals, Scores, Shareholding, Route, Active Tabs).
  * - Multi-turn conversational memory (e.g. "What's the P/E?" -> "Is that high?").
  * - Dynamic route change detection (RELIANCE -> TCS automatically updates context).
@@ -43,6 +45,7 @@ export function VoiceAssistant() {
   const [errorMessage, setErrorMessage] = useState<string>("");
 
   const recognitionRef = useRef<any>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
   const safetyTimerRef = useRef<any>(null);
   const isAbortedRef = useRef<boolean>(false);
@@ -176,7 +179,7 @@ export function VoiceAssistant() {
 
     if (!SpeechRecognition) {
       setVoiceState("error");
-      setErrorMessage("Speech Recognition not supported in this browser");
+      setErrorMessage("Speech recognition not supported in this browser");
       return;
     }
 
@@ -237,12 +240,20 @@ export function VoiceAssistant() {
       };
 
       recognition.onerror = (e: any) => {
+        console.warn("[Voice] recognition error:", e.error);
         if (e.error === "not-allowed" || e.error === "service-not-allowed") {
+          cancelSpeech();
           setVoiceState("error");
-          setErrorMessage("Microphone blocked in browser");
-        } else if (!isAbortedRef.current && !isProcessingRef.current) {
+          setErrorMessage("Microphone permission blocked");
+          if (mediaStreamRef.current) {
+            try {
+              mediaStreamRef.current.getTracks().forEach((t) => t.stop());
+            } catch {}
+            mediaStreamRef.current = null;
+          }
+        } else if (!isAbortedRef.current && !isProcessingRef.current && voiceState === "listening") {
           setTimeout(() => {
-            if (!isAbortedRef.current && !isProcessingRef.current) {
+            if (!isAbortedRef.current && !isProcessingRef.current && voiceState === "listening") {
               try {
                 recognition.start();
               } catch {}
@@ -265,7 +276,8 @@ export function VoiceAssistant() {
 
       recognitionRef.current = recognition;
       recognition.start();
-    } catch {
+    } catch (err) {
+      console.error("[Voice] recognition start error:", err);
       setVoiceState("error");
       setErrorMessage("Microphone access failed");
     }
@@ -368,42 +380,45 @@ export function VoiceAssistant() {
     setErrorMessage("");
     setLiveTranscript("");
 
-    // State 1: requesting_permission (Requirement 10)
+    // State 1: requesting_permission
     setVoiceState("requesting_permission");
 
-    let micPermitted = false;
-    if (typeof navigator !== "undefined" && navigator?.mediaDevices?.getUserMedia) {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        // Release immediate test stream, speech recognition will open audio channel
-        stream.getTracks().forEach((t) => t.stop());
-        micPermitted = true;
-      } catch (err) {
-        console.warn("[voice] microphone permission denied:", err);
-        setVoiceState("error");
-        setErrorMessage("Microphone blocked — allow in browser address bar");
-        return;
+    if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+      setVoiceState("error");
+      setErrorMessage("Microphone not supported in this browser");
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      console.log("[Voice] Microphone permission granted");
+      mediaStreamRef.current = stream;
+
+      // Only NOW proceed to start voice greeting and listening
+      const pageCtx = getVoicePageContext();
+      const target = pageCtx.stock?.symbol || pageCtx.stock?.companyName;
+      const greeting = target
+        ? `I'm listening. Ask me anything about ${target}.`
+        : "I'm listening. What stock or metric would you like to explore?";
+
+      speakAndListen(greeting);
+    } catch (error: any) {
+      console.error("[Voice] Microphone error:", error);
+      setVoiceState("error");
+
+      if (error?.name === "NotAllowedError" || error?.name === "PermissionDeniedError") {
+        setErrorMessage("Microphone blocked (click 🔒 to allow)");
+      } else if (error?.name === "NotFoundError" || error?.name === "DevicesNotFoundError") {
+        setErrorMessage("No microphone detected");
+      } else if (error?.name === "NotReadableError" || error?.name === "TrackStartError") {
+        setErrorMessage("Microphone in use by another app");
+      } else {
+        setErrorMessage("Microphone permission failed");
       }
-    } else {
-      setVoiceState("error");
-      setErrorMessage("Microphone not available");
+
+      // CRITICAL FIX: NEVER proceed to speakAndListen if microphone access failed!
       return;
     }
-
-    if (!micPermitted) {
-      setVoiceState("error");
-      setErrorMessage("Microphone access required");
-      return;
-    }
-
-    // Context-Aware Greeting based on CURRENT page
-    const pageCtx = getVoicePageContext();
-    const target = pageCtx.stock?.symbol || pageCtx.stock?.companyName;
-    const greeting = target
-      ? `I'm listening. Ask me anything about ${target}.`
-      : "I'm listening. What stock or metric would you like to explore?";
-
-    speakAndListen(greeting);
   }, [speakAndListen]);
 
   // Stop session & hang up
@@ -417,6 +432,13 @@ export function VoiceAssistant() {
         recognitionRef.current.abort();
       } catch {}
       recognitionRef.current = null;
+    }
+
+    if (mediaStreamRef.current) {
+      try {
+        mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+      } catch {}
+      mediaStreamRef.current = null;
     }
 
     setVoiceState("idle");
@@ -434,6 +456,12 @@ export function VoiceAssistant() {
         try {
           recognitionRef.current.abort();
         } catch {}
+      }
+      if (mediaStreamRef.current) {
+        try {
+          mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+        } catch {}
+        mediaStreamRef.current = null;
       }
     };
   }, [cancelSpeech]);
@@ -480,7 +508,7 @@ export function VoiceAssistant() {
             transition={{ type: "spring", stiffness: 380, damping: 26 }}
             className={`flex items-center gap-3 rounded-full bg-panel/95 backdrop-blur-xl border shadow-2xl pl-3.5 pr-2 py-2 transition-colors ${
               voiceState === "error"
-                ? "border-rose-500/40 shadow-rose-500/20"
+                ? "border-rose-500/50 shadow-rose-500/20"
                 : "border-[#C57708]/40 shadow-[#C57708]/25"
             }`}
           >
@@ -512,7 +540,7 @@ export function VoiceAssistant() {
                   voiceState === "speaking"
                     ? "bg-[#C57708] text-white shadow-lg shadow-[#C57708]/40"
                     : voiceState === "error"
-                    ? "bg-rose-500/15 text-rose-500"
+                    ? "bg-rose-500/20 text-rose-500 hover:bg-rose-500/30"
                     : "bg-[#C57708]/20 text-[#C57708]"
                 }`}
                 title={
@@ -561,7 +589,7 @@ export function VoiceAssistant() {
             )}
 
             {/* Live Status & Transcript Display */}
-            <div className="flex flex-col min-w-[90px] max-w-[210px]">
+            <div className="flex flex-col min-w-[90px] max-w-[220px]">
               <span className="text-xs font-bold text-fg truncate">
                 {voiceState === "requesting_permission"
                   ? "Allowing mic…"
@@ -574,15 +602,24 @@ export function VoiceAssistant() {
                   : voiceState === "speaking"
                   ? "Speaking…"
                   : voiceState === "error"
-                  ? "Microphone Error"
+                  ? "Microphone Blocked"
                   : "Voice Active"}
               </span>
 
               {voiceState === "error" ? (
-                <span className="text-[10px] text-rose-500 font-semibold truncate flex items-center gap-1">
-                  <AlertCircle className="w-3 h-3 shrink-0" />
-                  {errorMessage || "Click to retry mic"}
-                </span>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <span className="text-[10px] text-rose-500 font-semibold truncate flex items-center gap-1">
+                    <AlertCircle className="w-3 h-3 shrink-0" />
+                    {errorMessage || "Click 🔒 in URL bar"}
+                  </span>
+                  <button
+                    onClick={startSession}
+                    className="text-[9px] font-bold uppercase tracking-wider bg-rose-500 text-white px-1.5 py-0.5 rounded-full hover:bg-rose-600 transition-colors cursor-pointer shrink-0"
+                    title="Retry microphone"
+                  >
+                    Retry
+                  </button>
+                </div>
               ) : liveTranscript ? (
                 <span className="text-[10px] text-muted truncate">
                   &quot;{liveTranscript}&quot;
