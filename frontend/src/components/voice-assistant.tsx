@@ -622,16 +622,16 @@ export function VoiceAssistant() {
             )}
 
             {/* Live Status & Transcript Display */}
-            <div className="flex flex-col min-w-[90px] max-w-[220px]">
+            <div className="flex flex-col min-w-[120px] max-w-[280px]">
               <span className="text-xs font-bold text-fg truncate">
                 {voiceState === "requesting_permission"
                   ? "Allowing mic…"
                   : voiceState === "listening"
                   ? currentSymbolRef.current
                     ? `Listening (${currentSymbolRef.current})…`
-                    : "Listening to you…"
+                    : "Listening…"
                   : voiceState === "thinking"
-                  ? "Nemotron thinking…"
+                  ? "Thinking…"
                   : voiceState === "speaking"
                   ? "Speaking…"
                   : voiceState === "error"
@@ -654,10 +654,14 @@ export function VoiceAssistant() {
                   </button>
                 </div>
               ) : liveTranscript ? (
-                <span className="text-[10px] text-muted truncate">
-                  &quot;{liveTranscript}&quot;
+                <span className="text-[10px] text-muted truncate" title={liveTranscript}>
+                  {liveTranscript}
                 </span>
-              ) : null}
+              ) : (
+                <span className="text-[10px] text-muted/70 truncate">
+                  {voiceState === "listening" ? "Speak anytime…" : ""}
+                </span>
+              )}
             </div>
 
             {/* End Call Button (✕) */}
