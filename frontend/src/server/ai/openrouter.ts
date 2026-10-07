@@ -69,9 +69,11 @@ export async function generateViaOpenRouter(
     }
 
     const data = await res.json();
+    console.log("[openrouter] response data:", JSON.stringify(data).slice(0, 300));
     const rawContent = data.choices?.[0]?.message?.content;
 
     if (typeof rawContent !== "string") {
+      console.warn("[openrouter] rawContent is not string:", data.choices?.[0]);
       return null;
     }
 

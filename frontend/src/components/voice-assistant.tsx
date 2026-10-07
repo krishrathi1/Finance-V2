@@ -111,10 +111,10 @@ export function VoiceAssistant() {
 
   // Query AI Backend with User Question + Complete Structured Page Context + History
   const processVoiceInput = useCallback(
-    async (userSpeech: string) => {
+    async (userSpeech: string, speechEndTimeMs?: number) => {
+      const speechEnd = speechEndTimeMs || Date.now();
       const trimmed = userSpeech.trim();
       if (!trimmed || isAbortedRef.current || isProcessingRef.current) {
-        console.log("[Voice] Ignored empty or duplicate processVoiceInput call", { trimmed, aborted: isAbortedRef.current, processing: isProcessingRef.current });
         return;
       }
 
@@ -128,7 +128,10 @@ export function VoiceAssistant() {
         } catch {}
       }
 
-      console.log("[Voice] Sending AI request for:", trimmed);
+      const aiRequestStart = Date.now();
+      console.log("[Voice] speech_end:", speechEnd);
+      console.log("[Voice] ai_request_start:", aiRequestStart);
+      console.log("[Voice] AI request started for:", trimmed);
       setVoiceState("thinking");
       setLiveTranscript(trimmed);
 
@@ -141,11 +144,6 @@ export function VoiceAssistant() {
       try {
         // Retrieve live structured page context
         const pageContext: VoicePageContext = getVoicePageContext();
-        console.log("[Voice] Page context attached:", {
-          route: pageContext.route,
-          symbol: pageContext.stock?.symbol,
-          price: pageContext.price?.current,
-        });
 
         const res = await fetch("/api/v1/ai/copilot", {
           method: "POST",
@@ -171,6 +169,8 @@ export function VoiceAssistant() {
           json.reply ||
           "Data on this page has been verified. The numbers are up to date.";
 
+        const aiComplete = Date.now();
+        console.log("[Voice] ai_complete:", aiComplete, `(took ${aiComplete - aiRequestStart}ms)`);
         console.log("[Voice] AI response received:", reply);
 
         // Record assistant turn in memory
@@ -180,12 +180,12 @@ export function VoiceAssistant() {
         }
 
         if (!isAbortedRef.current) {
-          speakAndListen(reply);
+          speakAndListen(reply, speechEnd);
         }
       } catch (err) {
         console.error("[Voice] Copilot request failed:", err);
         if (!isAbortedRef.current) {
-          speakAndListen("Please ask again, I will check the live screen data.");
+          speakAndListen("Please ask again, I will check the live screen data.", speechEnd);
         }
       } finally {
         isProcessingRef.current = false;
@@ -221,13 +221,13 @@ export function VoiceAssistant() {
       console.log("[Voice] Recognition started");
       const recognition = new SpeechRecognition();
       recognition.lang = "en-IN";
-      // Using single-turn mode avoids Chromium continuous hanging issues
       recognition.continuous = false;
       recognition.interimResults = true;
       recognition.maxAlternatives = 1;
 
       let recognizedFinal = "";
       let recognizedInterim = "";
+      let lastSpeechTimestamp = Date.now();
 
       recognition.onstart = () => {
         if (!isAbortedRef.current) {
@@ -252,6 +252,8 @@ export function VoiceAssistant() {
           }
         }
 
+        lastSpeechTimestamp = Date.now();
+
         if (final) {
           recognizedFinal = final;
           console.log("[Voice] Final transcript:", final);
@@ -275,8 +277,6 @@ export function VoiceAssistant() {
             } catch {}
             mediaStreamRef.current = null;
           }
-        } else if (e.error === "no-speech") {
-          // Normal timeout if user was quiet; onend will restart if still listening
         }
       };
 
@@ -286,14 +286,13 @@ export function VoiceAssistant() {
 
         const candidate = (recognizedFinal || recognizedInterim).trim();
         if (candidate && !isProcessingRef.current) {
-          processVoiceInput(candidate);
+          processVoiceInput(candidate, lastSpeechTimestamp);
         } else if (!isProcessingRef.current && voiceState === "listening") {
-          // Restart listening loop if nothing was said and session still active
           setTimeout(() => {
             if (!isAbortedRef.current && !isProcessingRef.current) {
               listen();
             }
-          }, 200);
+          }, 150);
         }
       };
 
@@ -308,7 +307,7 @@ export function VoiceAssistant() {
 
   // Speak voice response and immediately loop back to listening
   const speakAndListen = useCallback(
-    (text: string) => {
+    (text: string, speechEndTimeMs?: number) => {
       cancelSpeech();
 
       if (typeof window === "undefined" || !("speechSynthesis" in window)) {
@@ -336,7 +335,9 @@ export function VoiceAssistant() {
         return;
       }
 
-      console.log("[Voice] Starting TTS for:", cleanText);
+      const ttsStart = Date.now();
+      console.log("[Voice] tts_start:", ttsStart);
+      console.log("[Voice] TTS started for:", cleanText);
       setLiveTranscript(text);
       setVoiceState("speaking");
 
@@ -348,9 +349,9 @@ export function VoiceAssistant() {
       } catch {}
 
       const utterance = new SpeechSynthesisUtterance(cleanText);
-      utterance.volume = 1.0; // Maximum volume
-      utterance.rate = 1.25;  // Fast and responsive speech delivery
-      utterance.pitch = 1.05; // Clear presence and pitch
+      utterance.volume = 1.0; // Clear volume
+      utterance.rate = 1.22;  // Call-like natural responsive speed (1.22x)
+      utterance.pitch = 1.02; // Natural presence
 
       try {
         const voices = window.speechSynthesis.getVoices();
@@ -369,6 +370,17 @@ export function VoiceAssistant() {
       utteranceRef.current = utterance;
       (window as any).__voiceUtterance = utterance;
 
+      let started = false;
+      utterance.onstart = () => {
+        if (started) return;
+        started = true;
+        const audioStart = Date.now();
+        console.log("[Voice] audio_start:", audioStart);
+        if (speechEndTimeMs) {
+          console.log(`[Voice] Time-to-first-audio latency: ${audioStart - speechEndTimeMs}ms`);
+        }
+      };
+
       let finished = false;
       const onComplete = () => {
         if (finished) return;
@@ -384,7 +396,7 @@ export function VoiceAssistant() {
           (window as any).__voiceUtterance = null;
         }
 
-        console.log("[Voice] TTS finished, returning to listening");
+        console.log("[Voice] Audio playback completed, returning to listening");
         if (!isAbortedRef.current) {
           listen();
         }
@@ -397,7 +409,7 @@ export function VoiceAssistant() {
       };
 
       // Deterministic safety timer so state NEVER hangs in "speaking"
-      const maxMs = Math.min(8000, Math.max(1800, cleanText.length * 60) + 800);
+      const maxMs = Math.min(7500, Math.max(1600, cleanText.length * 55) + 600);
       safetyTimerRef.current = setTimeout(onComplete, maxMs);
 
       try {
