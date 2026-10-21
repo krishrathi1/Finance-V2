@@ -38,13 +38,72 @@ export function FloatingVoiceAssistant() {
 
   const gatherPageContext = () => {
     if (typeof window === "undefined") return {};
+    const path = window.location.pathname;
+    const title = document.title;
+
+    let symbol = "";
+    let companyName = "";
+    let price = "";
+    let change = "";
+    let pe = "";
+    let smartScore = "";
+
+    // Check if on a stock page
+    if (path.includes("/stocks/")) {
+      const parts = path.split("/stocks/")[1]?.split("/") || [];
+      symbol = (parts[0] || "").toUpperCase();
+
+      const h1 = document.querySelector("h1");
+      if (h1) companyName = h1.textContent?.trim() || "";
+
+      // Extract price from visible DOM
+      const priceCandidates = Array.from(
+        document.querySelectorAll("[data-price], [class*='text-2xl'], [class*='text-3xl']")
+      );
+      for (const el of priceCandidates) {
+        const txt = el.textContent?.trim() || "";
+        if (txt.includes("₹") || /^[0-9,]+(\.[0-9]{1,2})?$/.test(txt)) {
+          price = txt.replace("₹", "").trim();
+          break;
+        }
+      }
+
+      // Extract PE or score
+      const bodyText = document.body.innerText || "";
+      const peMatch = bodyText.match(/P\/E\s*[:\s]*([0-9.]+)/i);
+      if (peMatch) pe = peMatch[1];
+      const scoreMatch = bodyText.match(/(?:Smart|Forensic)\s*Score\s*[:\s]*([0-9.]+)/i);
+      if (scoreMatch) smartScore = scoreMatch[1];
+    }
+
+    // Scrape visible headings and content preview
+    const headings = Array.from(document.querySelectorAll("h1, h2, h3"))
+      .slice(0, 4)
+      .map((el) => el.textContent?.trim())
+      .filter(Boolean)
+      .join(" | ");
+
+    const mainEl = document.querySelector("main") || document.body;
+    const visibleExcerpt = (mainEl?.innerText || "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 400);
+
     return {
-      route: window.location.pathname,
-      title: document.title,
+      route: path,
+      title,
+      symbol,
+      companyName,
+      price,
+      change,
+      pe,
+      smartScore,
+      headings,
+      visibleExcerpt,
     };
   };
 
-  const playAudio = useCallback((base64Data: string, mimeType = "audio/wav", fallbackText?: string) => {
+  const playAudio = useCallback((base64Data: string, mimeType = "audio/mpeg", fallbackText?: string) => {
     if (base64Data) {
       try {
         const audioUrl = `data:${mimeType};base64,${base64Data}`;
@@ -110,10 +169,9 @@ export function FloatingVoiceAssistant() {
     window.speechSynthesis.speak(utterance);
   };
 
-  const sendAudioToGemini = async (audioBlob: Blob, transcribedText?: string) => {
+  const sendAudioToBackend = async (audioBlob: Blob, transcribedText?: string) => {
     setVoiceState("thinking");
 
-    // Convert audio to Base64
     const reader = new FileReader();
     reader.readAsDataURL(audioBlob);
     reader.onloadend = async () => {
@@ -143,10 +201,10 @@ export function FloatingVoiceAssistant() {
           historyRef.current.push({ role: "assistant", text: data.textReply });
         }
 
-        playAudio(data.audioBase64, data.audioMimeType, data.textReply);
+        playAudio(data.audioBase64, data.audioMimeType || "audio/mpeg", data.textReply);
       } catch (err: any) {
         console.error("[voice] process error:", err);
-        setErrorText("Gemini connection error");
+        setErrorText("Voice connection error");
         setVoiceState("error");
       }
     };
@@ -177,7 +235,7 @@ export function FloatingVoiceAssistant() {
         stream.getTracks().forEach((track) => track.stop());
         const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
         if (audioBlob.size > 1000) {
-          sendAudioToGemini(audioBlob);
+          sendAudioToBackend(audioBlob);
         } else {
           setVoiceState("listening");
           startRecording();
@@ -187,7 +245,7 @@ export function FloatingVoiceAssistant() {
       recorder.start();
       setVoiceState("listening");
 
-      // Optional: automatically stop after 4.5 seconds of user utterance
+      // Optional: stop after 4.5 seconds of utterance
       setTimeout(() => {
         if (recorder.state === "recording") {
           recorder.stop();
@@ -228,7 +286,7 @@ export function FloatingVoiceAssistant() {
     <div className="fixed bottom-5 right-5 z-50">
       <AnimatePresence mode="popLayout" initial={false}>
         {!active ? (
-          /* ── Collapsed: Modern Floating Button from Downloads/voice ── */
+          /* ── Collapsed: Modern Floating Button ── */
           <motion.button
             key="btn"
             layout
@@ -238,7 +296,7 @@ export function FloatingVoiceAssistant() {
             whileTap={{ scale: 0.94 }}
             transition={{ type: "spring", stiffness: 400, damping: 28 }}
             onClick={handleStartCall}
-            aria-label="Talk to Gemini Assistant"
+            aria-label="Talk to Voice Assistant"
             className="flex items-center gap-2.5 rounded-full bg-[#C57708] hover:bg-[#A85F00] text-white pl-4 pr-5 py-3.5 shadow-2xl shadow-[#C57708]/30 transition-all border border-amber-400/20"
           >
             <span className="relative flex">
@@ -251,7 +309,7 @@ export function FloatingVoiceAssistant() {
             </span>
           </motion.button>
         ) : (
-          /* ── Active: Morphs in place into sleek Voice Pill with Equalizer ── */
+          /* ── Active: Sleek Voice Pill with Equalizer ── */
           <motion.div
             key="pill"
             layout
@@ -265,7 +323,7 @@ export function FloatingVoiceAssistant() {
               <>
                 <span className="w-4 h-4 border-2 border-[#C57708]/30 border-t-[#C57708] rounded-full animate-spin" />
                 <span className="text-xs font-semibold text-zinc-800 dark:text-zinc-200 pr-1">
-                  Gemini thinking…
+                  AI thinking…
                 </span>
               </>
             ) : voiceState === "speaking" ? (
@@ -298,7 +356,7 @@ export function FloatingVoiceAssistant() {
                   ))}
                 </div>
                 <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
-                  Gemini speaking…
+                  ElevenLabs speaking…
                 </span>
               </>
             ) : (

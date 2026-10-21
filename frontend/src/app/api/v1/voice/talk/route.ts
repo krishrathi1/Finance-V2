@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { synthesizeSpeech } from "@/lib/elevenlabs";
 
 export const dynamic = "force-dynamic";
 
@@ -9,36 +10,38 @@ export async function POST(req: NextRequest) {
     const { message, audioData, mimeType, history, pageContext } = await req.json();
 
     if (!message && !audioData) {
-      return NextResponse.json({ error: "Either message or audioData is required" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Either message or audioData is required" },
+        { status: 400 }
+      );
     }
 
-    if (!GEMINI_API_KEY) {
-      return NextResponse.json({ error: "Gemini API key is not configured" }, { status: 500 });
-    }
-
-    // Prepare system instructions and financial context
-    let systemInstruction = `You are an elite, crisp, and intelligent financial voice assistant for Indian stock markets (NSE/BSE).
-Guidelines:
-1. Speak naturally, concisely, and helpfully like a live voice call.
-2. Keep spoken replies to 1-3 short sentences (under 40-50 words) unless detailed explanation is asked.
-3. Prioritize key financial numbers (CMP, P/E, 52W High/Low, Smart Score).
-4. Do not use markdown symbols like *, #, or bullets in your speech.
-5. If the user speaks in Hindi or Hinglish, reply naturally in conversational Hinglish. If in English, reply in crisp English.`;
+    // System instruction: Human conversational financial copilot with page sight
+    let systemInstruction = `You are a real-time conversational financial voice assistant for Indian stock markets (NSE/BSE).
+Tone & Personality:
+1. Speak naturally like a sharp, friendly human financial expert in a live voice conversation.
+2. Keep spoken replies strictly to 1-3 short, punchy sentences (under 35-45 words) so it sounds like natural speech.
+3. You have live vision of the user's current webpage/screen.
+4. If the user asks "What am I looking at?", "Explain this", or asks about this stock/page, reference their current screen directly.
+5. Do NOT use markdown symbols (*, #, _, backticks) or bullet lists, as this text will be spoken aloud by ElevenLabs voice AI.
+6. If the user speaks in Hindi or Hinglish, reply naturally in conversational Hinglish. If English, reply in crisp, clear English.`;
 
     if (pageContext) {
-      systemInstruction += `\n\nCURRENT USER SCREEN / STOCK CONTEXT:
+      systemInstruction += `\n\nCURRENT USER SCREEN CONTEXT:
 - Route: ${pageContext.route || "/"}
-- Title: ${pageContext.title || "Finance Dashboard"}
-${pageContext.symbol ? `- Active Stock: ${pageContext.symbol} (${pageContext.companyName || ""})` : ""}
+- Page Title: ${pageContext.title || "Finance Platform"}
+${pageContext.symbol ? `- Active Stock Ticker: ${pageContext.symbol}` : ""}
+${pageContext.companyName ? `- Company Name: ${pageContext.companyName}` : ""}
 ${pageContext.price ? `- Current CMP: ₹${pageContext.price}` : ""}
+${pageContext.change ? `- Day Change: ${pageContext.change}` : ""}
 ${pageContext.pe ? `- P/E Ratio: ${pageContext.pe}` : ""}
-${pageContext.smartScore ? `- AI Score: ${pageContext.smartScore}` : ""}`;
+${pageContext.smartScore ? `- Smart Score: ${pageContext.smartScore}` : ""}
+${pageContext.headings ? `- Page Headings: ${pageContext.headings}` : ""}
+${pageContext.visibleExcerpt ? `- Visible Content: ${pageContext.visibleExcerpt}` : ""}`;
     }
 
-    // Format contents for Gemini
+    // Format conversation history
     const contents: any[] = [];
-
-    // History (last 4 turns)
     if (Array.isArray(history) && history.length > 0) {
       const recent = history.slice(-4);
       for (const turn of recent) {
@@ -70,70 +73,71 @@ ${pageContext.smartScore ? `- AI Score: ${pageContext.smartScore}` : ""}`;
       parts: currentParts,
     });
 
-    // 1. Try Gemini 3.8 Flash TTS / 3.8 Flash
-    const primaryModel = process.env.GEMINI_MODEL || "gemini-3.8-flash-tts";
-    const fallbackModel = "gemini-3.1-flash-lite";
+    // 1. Generate text response with Gemini Flash
+    let textReply = "";
+    if (GEMINI_API_KEY) {
+      const candidateModels = ["gemini-2.5-flash", "gemini-3.1-flash-lite", "gemini-1.5-flash"];
+      for (const modelName of candidateModels) {
+        try {
+          const res = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${GEMINI_API_KEY}`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                contents,
+                systemInstruction: { parts: [{ text: systemInstruction }] },
+                generationConfig: {
+                  temperature: 0.4,
+                  maxOutputTokens: 180,
+                },
+              }),
+            }
+          );
 
-    async function callGemini(modelName: string, isAudioModel: boolean) {
-      const payload: any = {
-        contents,
-        systemInstruction: { parts: [{ text: systemInstruction }] },
-        generationConfig: {
-          temperature: 0.4,
-          maxOutputTokens: isAudioModel ? 2048 : 200,
-        },
-      };
-
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${GEMINI_API_KEY}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
+          if (res.ok) {
+            const json = await res.json();
+            textReply = json?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+            if (textReply.trim()) break;
+          }
+        } catch {
+          // try next model
         }
-      );
-
-      if (!res.ok) {
-        const errText = await res.text();
-        throw new Error(`Model ${modelName} failed with ${res.status}: ${errText.slice(0, 200)}`);
       }
-
-      return await res.json();
     }
 
-    let resultJson: any = null;
+    if (!textReply.trim()) {
+      if (pageContext?.symbol) {
+        textReply = `Aap ${pageContext.symbol} ka page dekh rahe hain. Current market price lagbhag ${pageContext.price || "screen par visible"} hai. Iske baare me aapko kya detail chahiye?`;
+      } else {
+        textReply = "Hello! Main aapki screen dekh raha hoon. Aap market ya kisi stock ke baare me kya janna chahte hain?";
+      }
+    }
+
+    // Clean text reply of any symbols for voice synthesis
+    textReply = textReply.replace(/[*#_`~]/g, "").trim();
+
+    // 2. Synthesize lifelike speech via ElevenLabs
     let audioBase64: string | null = null;
-    let audioMimeType: string | null = null;
-    let textReply: string = "";
+    let audioMimeType: string = "audio/mpeg";
 
     try {
-      // First attempt with 3.8 Flash TTS
-      resultJson = await callGemini(primaryModel, true);
-      const cand = resultJson?.candidates?.[0]?.content?.parts || [];
-      for (const p of cand) {
-        if (p.inlineData?.data) {
-          audioBase64 = p.inlineData.data;
-          audioMimeType = p.inlineData.mimeType || "audio/wav";
-        }
-        if (p.text) {
-          textReply += p.text;
-        }
-      }
-    } catch (e: any) {
-      console.warn("[gemini-voice] primary model failed, falling back to 3.1-flash-lite:", e?.message);
-      // Fallback to text model
-      resultJson = await callGemini(fallbackModel, false);
-      textReply = resultJson?.candidates?.[0]?.content?.parts?.[0]?.text || "Main aapki awaaz sun raha hoon. Aap market ke baare me kya janna chahte hain?";
+      const speech = await synthesizeSpeech(textReply);
+      audioBase64 = speech.audioBase64;
+      audioMimeType = speech.mimeType;
+    } catch (err: any) {
+      console.warn("[voice/talk] ElevenLabs synthesis fallback:", err?.message);
     }
 
     return NextResponse.json({
       success: true,
+      provider: audioBase64 ? "elevenlabs" : "fallback",
       audioBase64,
       audioMimeType,
-      textReply: textReply.trim(),
+      textReply,
     });
   } catch (err: any) {
-    console.error("[gemini-voice] error:", err);
+    console.error("[voice/talk] error:", err);
     return NextResponse.json(
       { error: err?.message || "Internal server error" },
       { status: 500 }
