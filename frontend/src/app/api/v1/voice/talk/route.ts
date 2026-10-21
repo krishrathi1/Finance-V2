@@ -135,7 +135,7 @@ ${retrieved.groundingContext}
     // 6. Generate answer via Gemini Flash
     let textReply = "";
     if (GEMINI_API_KEY) {
-      const candidateModels = ["gemini-flash-lite-latest", "gemini-3-flash-preview", "gemini-flash-latest"];
+      const candidateModels = ["gemini-flash-lite-latest", "gemini-3.8-flash", "gemini-3-flash-preview"];
       for (const modelName of candidateModels) {
         try {
           const res = await fetch(
