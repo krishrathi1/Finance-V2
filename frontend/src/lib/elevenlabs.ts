@@ -13,21 +13,24 @@ export interface SynthesizeOptions {
 
 /**
  * Converts text into natural, lifelike conversational speech using ElevenLabs.
- * Default model: 'eleven_flash_v2_5' (~75ms low latency, multilingual).
- * Default voice: 'JBFqnCBsd6RMkjVDRZzb' (clear, friendly conversational voice).
+ * Default voice: Indian Female accent ('2F1KINpxsttim2WfMbVs' or 'pFZP5JQG7iQjIQuC4Bku' / Lily).
+ * Default model: 'eleven_multilingual_v2' for authentic Indian English/Hindi accent and emotional cadence.
  */
 export async function synthesizeSpeech(
   text: string,
   options?: SynthesizeOptions
 ): Promise<{ audioBase64: string; mimeType: string }> {
+  // Indian female voice with natural Desi / Hindi conversational accent
+  // Can be overridden via ELEVENLABS_VOICE_ID env variable
   const voiceId =
     options?.voiceId ||
     process.env.ELEVENLABS_VOICE_ID ||
-    "JBFqnCBsd6RMkjVDRZzb";
+    "2F1KINpxsttim2WfMbVs"; // DB - Indian Hindi / Desi Voice (Female)
 
-  const modelId = options?.modelId || "eleven_flash_v2_5";
+  // eleven_multilingual_v2 delivers the most authentic human accent for Indian English and Hindi
+  const modelId = options?.modelId || "eleven_multilingual_v2";
 
-  // Strip markdown formatting symbols so ElevenLabs speaks cleanly
+  // Strip markdown formatting symbols so ElevenLabs speaks cleanly like a human
   const cleanedText = text
     .replace(/[*#_`~]/g, "")
     .replace(/\[.*?\]/g, "")
@@ -37,11 +40,30 @@ export async function synthesizeSpeech(
     throw new Error("Cannot synthesize empty text");
   }
 
-  const audioStream = await elevenlabs.textToSpeech.convert(voiceId, {
-    text: cleanedText,
-    modelId,
-    outputFormat: "mp3_44100_128",
-  });
+  // Convert to natural speech
+  let audioStream: any = null;
+  try {
+    audioStream = await elevenlabs.textToSpeech.convert(voiceId, {
+      text: cleanedText,
+      modelId,
+      outputFormat: "mp3_44100_128",
+      voiceSettings: {
+        stability: 0.45,
+        similarityBoost: 0.85,
+        style: 0.2,
+        useSpeakerBoost: true,
+      },
+    });
+  } catch (err: any) {
+    // If the primary voice is unavailable, try the popular multilingual fallback voice
+    console.warn(`[elevenlabs] voice ${voiceId} failed, trying fallback:`, err?.message);
+    const fallbackVoice = "pFZP5JQG7iQjIQuC4Bku"; // Lily / Florence
+    audioStream = await elevenlabs.textToSpeech.convert(fallbackVoice, {
+      text: cleanedText,
+      modelId: "eleven_multilingual_v2",
+      outputFormat: "mp3_44100_128",
+    });
+  }
 
   const reader = audioStream.getReader();
   const chunks: Uint8Array[] = [];

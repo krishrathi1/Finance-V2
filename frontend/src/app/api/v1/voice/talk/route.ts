@@ -16,15 +16,15 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // System instruction: Human conversational financial copilot with page sight
-    let systemInstruction = `You are a real-time conversational financial voice assistant for Indian stock markets (NSE/BSE).
-Tone & Personality:
-1. Speak naturally like a sharp, friendly human financial expert in a live voice conversation.
-2. Keep spoken replies strictly to 1-3 short, punchy sentences (under 35-45 words) so it sounds like natural speech.
-3. You have live vision of the user's current webpage/screen.
-4. If the user asks "What am I looking at?", "Explain this", or asks about this stock/page, reference their current screen directly.
-5. Do NOT use markdown symbols (*, #, _, backticks) or bullet lists, as this text will be spoken aloud by ElevenLabs voice AI.
-6. If the user speaks in Hindi or Hinglish, reply naturally in conversational Hinglish. If English, reply in crisp, clear English.`;
+    // Persona: Indian Financial Voice Expert with natural human Indian accent & screen awareness
+    let systemInstruction = `You are Priya, a friendly, sharp, and expert Indian financial copilot for Indian stock markets (NSE/BSE).
+Tone, Accent & Style:
+1. Speak warmly and naturally like an intelligent Indian colleague on a phone call.
+2. Use conversational Indian English with natural Hindi/Hinglish touches (e.g. "CMP", "levels", "breakout", "theek hai", "bilkul") when appropriate.
+3. Keep spoken replies strictly to 1-2 punchy sentences (under 30-40 words) so it feels like a real human voice call.
+4. You have live vision of the user's current screen data. Refer to numbers directly from what's displayed on their screen.
+5. Never use markdown symbols like *, #, bullet points or brackets because this text is read aloud by ElevenLabs voice AI.
+6. If the user asks in Hindi, reply in warm conversational Hinglish. If in English, reply in natural Indian English.`;
 
     if (pageContext) {
       systemInstruction += `\n\nCURRENT USER SCREEN CONTEXT:
@@ -88,8 +88,8 @@ ${pageContext.visibleExcerpt ? `- Visible Content: ${pageContext.visibleExcerpt}
                 contents,
                 systemInstruction: { parts: [{ text: systemInstruction }] },
                 generationConfig: {
-                  temperature: 0.4,
-                  maxOutputTokens: 180,
+                  temperature: 0.45,
+                  maxOutputTokens: 160,
                 },
               }),
             }
@@ -108,16 +108,16 @@ ${pageContext.visibleExcerpt ? `- Visible Content: ${pageContext.visibleExcerpt}
 
     if (!textReply.trim()) {
       if (pageContext?.symbol) {
-        textReply = `Aap ${pageContext.symbol} ka page dekh rahe hain. Current market price lagbhag ${pageContext.price || "screen par visible"} hai. Iske baare me aapko kya detail chahiye?`;
+        textReply = `Aap abhi ${pageContext.symbol} dekh rahe hain, jiska CMP ₹${pageContext.price || "screen par visible"} hai. Iske levels ya fundamentals me kya check karna hai?`;
       } else {
-        textReply = "Hello! Main aapki screen dekh raha hoon. Aap market ya kisi stock ke baare me kya janna chahte hain?";
+        textReply = "Hello! Main aapki screen dekh rahi hoon. Aap kis stock ya market trend ke baare me puchna chahte hain?";
       }
     }
 
     // Clean text reply of any symbols for voice synthesis
     textReply = textReply.replace(/[*#_`~]/g, "").trim();
 
-    // 2. Synthesize lifelike speech via ElevenLabs
+    // 2. Synthesize lifelike speech via ElevenLabs with Indian accent
     let audioBase64: string | null = null;
     let audioMimeType: string = "audio/mpeg";
 

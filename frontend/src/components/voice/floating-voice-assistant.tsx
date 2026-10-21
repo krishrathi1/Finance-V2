@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { MessageCircle, Mic, MicOff, X } from "lucide-react";
+import { MessageCircle, Mic, X } from "lucide-react";
 
 export type VoiceState = "idle" | "listening" | "thinking" | "speaking" | "error";
 
@@ -15,14 +15,17 @@ export function FloatingVoiceAssistant() {
   const [voiceState, setVoiceState] = useState<VoiceState>("idle");
   const [errorText, setErrorText] = useState("");
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
   const speechRecognitionRef = useRef<any>(null);
   const lastTranscriptRef = useRef<string>("");
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const recordingTimerRef = useRef<any>(null);
   const historyRef = useRef<ChatTurn[]>([]);
   const isMutedRef = useRef(false);
 
-  // Initialize SpeechRecognition if available (for instant text fallback/transcript)
+  // Initialize SpeechRecognition & cache voices on load
   useEffect(() => {
     if (typeof window !== "undefined") {
       const SpeechRecognition =
@@ -41,6 +44,14 @@ export function FloatingVoiceAssistant() {
         };
 
         speechRecognitionRef.current = recognition;
+      }
+
+      // Pre-warm browser speech synthesis voices if fallback is needed
+      if ("speechSynthesis" in window) {
+        window.speechSynthesis.getVoices();
+        window.speechSynthesis.onvoiceschanged = () => {
+          window.speechSynthesis.getVoices();
+        };
       }
     }
   }, []);
@@ -112,7 +123,26 @@ export function FloatingVoiceAssistant() {
     };
   };
 
+  // Find best natural Indian Female voice for browser fallback
+  const getIndianFemaleVoice = (): SpeechSynthesisVoice | null => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return null;
+    const voices = window.speechSynthesis.getVoices();
+    if (!voices || voices.length === 0) return null;
+
+    return (
+      // Natural / Neural Indian voices (Edge / Chrome)
+      voices.find((v) => (v.name.includes("Neerja") || v.name.includes("Swara")) && v.lang.includes("IN")) ||
+      voices.find((v) => v.name.includes("Natural") && (v.lang.includes("en-IN") || v.lang.includes("hi-IN"))) ||
+      voices.find((v) => v.lang === "hi-IN" || v.lang === "hi_IN") ||
+      voices.find((v) => v.lang === "en-IN" || v.lang === "en_IN") ||
+      voices.find((v) => v.lang.includes("IN") || v.lang.includes("hi")) ||
+      null
+    );
+  };
+
   const playAudio = useCallback((base64Data: string, mimeType = "audio/mpeg", fallbackText?: string) => {
+    if (isMutedRef.current) return;
+
     if (base64Data) {
       try {
         const audioUrl = `data:${mimeType};base64,${base64Data}`;
@@ -121,56 +151,69 @@ export function FloatingVoiceAssistant() {
         }
         const audio = audioPlayerRef.current;
         audio.src = audioUrl;
+        audio.currentTime = 0;
         setVoiceState("speaking");
 
         audio.onended = () => {
+          if (isMutedRef.current) return;
           setVoiceState("listening");
           startRecording();
         };
 
         audio.onerror = () => {
+          if (isMutedRef.current) return;
           fallbackSpeechSynthesis(fallbackText);
         };
 
         audio.play().catch(() => {
+          if (isMutedRef.current) return;
           fallbackSpeechSynthesis(fallbackText);
         });
         return;
       } catch {
-        // fallback to browser synth
+        // fallback
       }
     }
 
     if (fallbackText) {
       fallbackSpeechSynthesis(fallbackText);
     } else {
+      if (isMutedRef.current) return;
       setVoiceState("listening");
       startRecording();
     }
   }, []);
 
   const fallbackSpeechSynthesis = (text?: string) => {
-    if (!text || typeof window === "undefined" || !("speechSynthesis" in window)) {
-      setVoiceState("listening");
-      startRecording();
+    if (isMutedRef.current || !text || typeof window === "undefined" || !("speechSynthesis" in window)) {
+      if (!isMutedRef.current) {
+        setVoiceState("listening");
+        startRecording();
+      }
       return;
     }
 
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = "en-IN";
-    utterance.rate = 1.05;
+    utterance.rate = 1.0;
+    utterance.pitch = 1.05;
 
-    const voices = window.speechSynthesis.getVoices();
-    const indVoice = voices.find((v) => v.lang.includes("en-IN") || v.lang.includes("hi"));
-    if (indVoice) utterance.voice = indVoice;
+    const indVoice = getIndianFemaleVoice();
+    if (indVoice) {
+      utterance.voice = indVoice;
+    }
 
     setVoiceState("speaking");
+
     utterance.onend = () => {
+      if (isMutedRef.current) return;
       setVoiceState("listening");
       startRecording();
     };
+
     utterance.onerror = () => {
+      if (isMutedRef.current) return;
       setVoiceState("listening");
       startRecording();
     };
@@ -179,18 +222,25 @@ export function FloatingVoiceAssistant() {
   };
 
   const sendAudioToBackend = async (audioBlob: Blob, transcribedText?: string) => {
+    if (isMutedRef.current) return;
     setVoiceState("thinking");
 
     const reader = new FileReader();
     reader.readAsDataURL(audioBlob);
+
     reader.onloadend = async () => {
+      if (isMutedRef.current) return;
+
       try {
         const base64Data = (reader.result as string)?.split(",")[1];
         const textQuery = transcribedText || lastTranscriptRef.current || "";
 
+        abortControllerRef.current = new AbortController();
+
         const res = await fetch("/api/v1/voice/talk", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          signal: abortControllerRef.current.signal,
           body: JSON.stringify({
             audioData: base64Data,
             mimeType: audioBlob.type || "audio/webm",
@@ -200,11 +250,15 @@ export function FloatingVoiceAssistant() {
           }),
         });
 
+        if (isMutedRef.current) return;
+
         if (!res.ok) {
           throw new Error(`HTTP ${res.status}`);
         }
 
         const data = await res.json();
+        if (isMutedRef.current) return;
+
         if (textQuery) {
           historyRef.current.push({ role: "user", text: textQuery });
         }
@@ -214,6 +268,9 @@ export function FloatingVoiceAssistant() {
 
         playAudio(data.audioBase64, data.audioMimeType || "audio/mpeg", data.textReply);
       } catch (err: any) {
+        if (err.name === "AbortError" || isMutedRef.current) {
+          return;
+        }
         console.error("[voice] process error:", err);
         setErrorText("Voice connection error");
         setVoiceState("error");
@@ -223,12 +280,13 @@ export function FloatingVoiceAssistant() {
 
   const startRecording = useCallback(async () => {
     if (isMutedRef.current) return;
+
     try {
       lastTranscriptRef.current = "";
       try {
         speechRecognitionRef.current?.start();
       } catch {
-        // Recognition might already be running
+        // already started
       }
 
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -239,6 +297,12 @@ export function FloatingVoiceAssistant() {
         },
       });
 
+      if (isMutedRef.current) {
+        stream.getTracks().forEach((t) => t.stop());
+        return;
+      }
+
+      mediaStreamRef.current = stream;
       audioChunksRef.current = [];
       const recorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
       mediaRecorderRef.current = recorder;
@@ -253,7 +317,12 @@ export function FloatingVoiceAssistant() {
         try {
           speechRecognitionRef.current?.stop();
         } catch {}
+
         stream.getTracks().forEach((track) => track.stop());
+        mediaStreamRef.current = null;
+
+        if (isMutedRef.current) return;
+
         const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
         if (audioBlob.size > 1000) {
           sendAudioToBackend(audioBlob, lastTranscriptRef.current);
@@ -266,8 +335,11 @@ export function FloatingVoiceAssistant() {
       recorder.start();
       setVoiceState("listening");
 
-      // Automatically finalize chunk after user speaking window (4 seconds)
-      setTimeout(() => {
+      // Auto finalize 4s recording window
+      if (recordingTimerRef.current) {
+        clearTimeout(recordingTimerRef.current);
+      }
+      recordingTimerRef.current = setTimeout(() => {
         if (recorder.state === "recording") {
           recorder.stop();
         }
@@ -287,21 +359,68 @@ export function FloatingVoiceAssistant() {
     startRecording();
   };
 
-  const handleEndCall = () => {
+  // Instant full stop on Cross button click
+  const handleEndCall = (e?: React.MouseEvent) => {
+    if (e) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+
+    // 1. Immediately mute all flags
     isMutedRef.current = true;
-    try {
-      speechRecognitionRef.current?.stop();
-    } catch {}
+
+    // 2. Abort any active backend network fetch immediately
+    if (abortControllerRef.current) {
+      try {
+        abortControllerRef.current.abort();
+      } catch {}
+      abortControllerRef.current = null;
+    }
+
+    // 3. Clear recording timers
+    if (recordingTimerRef.current) {
+      clearTimeout(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
+
+    // 4. Abort speech recognition
+    if (speechRecognitionRef.current) {
+      try {
+        speechRecognitionRef.current.abort?.();
+        speechRecognitionRef.current.stop?.();
+      } catch {}
+    }
+
+    // 5. Stop microphone recording and turn off hardware mic track
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
-      mediaRecorderRef.current.stop();
+      try {
+        mediaRecorderRef.current.stop();
+      } catch {}
     }
+    if (mediaStreamRef.current) {
+      try {
+        mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+      } catch {}
+      mediaStreamRef.current = null;
+    }
+
+    // 6. Instantly silence HTML5 audio player
     if (audioPlayerRef.current) {
-      audioPlayerRef.current.pause();
-      audioPlayerRef.current.src = "";
+      try {
+        audioPlayerRef.current.pause();
+        audioPlayerRef.current.currentTime = 0;
+        audioPlayerRef.current.src = "";
+      } catch {}
     }
+
+    // 7. Instantly cancel all browser speech synthesis utterances
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
-      window.speechSynthesis.cancel();
+      try {
+        window.speechSynthesis.cancel();
+      } catch {}
     }
+
+    // 8. Snap state immediately back to idle
     setVoiceState("idle");
   };
 
@@ -334,7 +453,7 @@ export function FloatingVoiceAssistant() {
             </span>
           </motion.button>
         ) : (
-          /* ── Active: Sleek Voice Pill with Equalizer ── */
+          /* ── Active: Sleek Voice Pill with Equalizer and Large Stop Button ── */
           <motion.div
             key="pill"
             layout
@@ -342,13 +461,13 @@ export function FloatingVoiceAssistant() {
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.7, opacity: 0 }}
             transition={{ type: "spring", stiffness: 380, damping: 26 }}
-            className="flex items-center gap-3.5 rounded-2xl bg-white dark:bg-zinc-900 border border-[#C57708]/40 shadow-2xl shadow-black/20 pl-3.5 pr-2.5 py-2.5 backdrop-blur-xl"
+            className="flex items-center gap-3.5 rounded-2xl bg-white dark:bg-zinc-900 border border-[#C57708]/40 shadow-2xl shadow-black/20 pl-4 pr-3 py-2.5 backdrop-blur-xl"
           >
             {voiceState === "thinking" ? (
               <>
                 <span className="w-4 h-4 border-2 border-[#C57708]/30 border-t-[#C57708] rounded-full animate-spin" />
                 <span className="text-xs font-semibold text-zinc-800 dark:text-zinc-200 pr-1">
-                  AI thinking…
+                  Priya thinking…
                 </span>
               </>
             ) : voiceState === "speaking" ? (
@@ -381,7 +500,7 @@ export function FloatingVoiceAssistant() {
                   ))}
                 </div>
                 <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
-                  ElevenLabs speaking…
+                  Priya speaking…
                 </span>
               </>
             ) : (
@@ -419,13 +538,15 @@ export function FloatingVoiceAssistant() {
               </>
             )}
 
-            {/* End Call Button */}
+            {/* Instant Cut-off Stop / Cross Button */}
             <button
+              type="button"
               onClick={handleEndCall}
-              aria-label="End call"
-              className="ml-1 w-7 h-7 rounded-full bg-red-500/10 text-red-500 hover:bg-red-500/20 flex items-center justify-center transition-colors"
+              aria-label="Stop and end call"
+              title="Stop voice assistant"
+              className="ml-2 w-8 h-8 rounded-full bg-red-500/15 text-red-500 hover:bg-red-500 hover:text-white flex items-center justify-center transition-all cursor-pointer shadow-sm active:scale-90"
             >
-              <X className="w-4 h-4" />
+              <X className="w-4 h-4 stroke-[2.5]" />
             </button>
           </motion.div>
         )}
