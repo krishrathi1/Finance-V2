@@ -18,6 +18,7 @@ export function FloatingVoiceAssistant() {
   const audioChunksRef = useRef<Blob[]>([]);
   const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
   const speechRecognitionRef = useRef<any>(null);
+  const lastTranscriptRef = useRef<string>("");
   const historyRef = useRef<ChatTurn[]>([]);
   const isMutedRef = useRef(false);
 
@@ -31,6 +32,14 @@ export function FloatingVoiceAssistant() {
         recognition.continuous = false;
         recognition.interimResults = false;
         recognition.lang = "en-IN";
+
+        recognition.onresult = (event: any) => {
+          const transcript = event.results?.[0]?.[0]?.transcript;
+          if (transcript) {
+            lastTranscriptRef.current = transcript;
+          }
+        };
+
         speechRecognitionRef.current = recognition;
       }
     }
@@ -177,13 +186,15 @@ export function FloatingVoiceAssistant() {
     reader.onloadend = async () => {
       try {
         const base64Data = (reader.result as string)?.split(",")[1];
+        const textQuery = transcribedText || lastTranscriptRef.current || "";
+
         const res = await fetch("/api/v1/voice/talk", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             audioData: base64Data,
             mimeType: audioBlob.type || "audio/webm",
-            message: transcribedText || "",
+            message: textQuery,
             history: historyRef.current,
             pageContext: gatherPageContext(),
           }),
@@ -194,8 +205,8 @@ export function FloatingVoiceAssistant() {
         }
 
         const data = await res.json();
-        if (transcribedText) {
-          historyRef.current.push({ role: "user", text: transcribedText });
+        if (textQuery) {
+          historyRef.current.push({ role: "user", text: textQuery });
         }
         if (data.textReply) {
           historyRef.current.push({ role: "assistant", text: data.textReply });
@@ -213,6 +224,13 @@ export function FloatingVoiceAssistant() {
   const startRecording = useCallback(async () => {
     if (isMutedRef.current) return;
     try {
+      lastTranscriptRef.current = "";
+      try {
+        speechRecognitionRef.current?.start();
+      } catch {
+        // Recognition might already be running
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: true,
@@ -232,10 +250,13 @@ export function FloatingVoiceAssistant() {
       };
 
       recorder.onstop = () => {
+        try {
+          speechRecognitionRef.current?.stop();
+        } catch {}
         stream.getTracks().forEach((track) => track.stop());
         const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
         if (audioBlob.size > 1000) {
-          sendAudioToBackend(audioBlob);
+          sendAudioToBackend(audioBlob, lastTranscriptRef.current);
         } else {
           setVoiceState("listening");
           startRecording();
@@ -245,12 +266,12 @@ export function FloatingVoiceAssistant() {
       recorder.start();
       setVoiceState("listening");
 
-      // Optional: stop after 4.5 seconds of utterance
+      // Automatically finalize chunk after user speaking window (4 seconds)
       setTimeout(() => {
         if (recorder.state === "recording") {
           recorder.stop();
         }
-      }, 4500);
+      }, 4000);
     } catch {
       setErrorText("Mic blocked — tap to retry");
       setVoiceState("error");
@@ -261,12 +282,16 @@ export function FloatingVoiceAssistant() {
     setErrorText("");
     isMutedRef.current = false;
     historyRef.current = [];
+    lastTranscriptRef.current = "";
     setVoiceState("listening");
     startRecording();
   };
 
   const handleEndCall = () => {
     isMutedRef.current = true;
+    try {
+      speechRecognitionRef.current?.stop();
+    } catch {}
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
       mediaRecorderRef.current.stop();
     }
