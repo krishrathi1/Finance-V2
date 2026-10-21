@@ -1,84 +1,104 @@
-import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
-
 /**
- * ElevenLabs Client instance.
- * Automatically reads ELEVENLABS_API_KEY from process.env.
+ * ElevenLabs Speech Synthesis integration.
+ * Produces lifelike, high-clarity spoken audio with natural conversational Indian accent.
  */
-export const elevenlabs = new ElevenLabsClient();
 
 export interface SynthesizeOptions {
   voiceId?: string;
   modelId?: string;
+  stability?: number;
+  similarityBoost?: number;
 }
 
 /**
  * Converts text into natural, lifelike conversational speech using ElevenLabs.
- * Default voice: Indian Female accent ('2F1KINpxsttim2WfMbVs' or 'pFZP5JQG7iQjIQuC4Bku' / Lily).
+ * Default voice: 'pFZP5JQG7iQjIQuC4Bku' (Lily - verified natural multilingual voice).
  * Default model: 'eleven_multilingual_v2' for authentic Indian English/Hindi accent and emotional cadence.
  */
 export async function synthesizeSpeech(
   text: string,
   options?: SynthesizeOptions
 ): Promise<{ audioBase64: string; mimeType: string }> {
-  // Indian female voice with natural Desi / Hindi conversational accent
-  // Can be overridden via ELEVENLABS_VOICE_ID env variable
+  const apiKey = (process.env.ELEVENLABS_API_KEY || "").trim();
+  if (!apiKey) {
+    throw new Error("ELEVENLABS_API_KEY is not configured");
+  }
+
+  // Voice ID precedence: option > env > Lily (verified working multilingual voice)
   const voiceId =
     options?.voiceId ||
     process.env.ELEVENLABS_VOICE_ID ||
-    "pFZP5JQG7iQjIQuC4Bku"; // Lily - Verified working premade multilingual voice
+    "pFZP5JQG7iQjIQuC4Bku";
 
-  // eleven_multilingual_v2 delivers the most authentic human accent for Indian English and Hindi
   const modelId = options?.modelId || "eleven_multilingual_v2";
 
-  // Strip markdown formatting symbols so ElevenLabs speaks cleanly like a human
+  // Clean markdown and non-verbal tokens for crisp, natural human speech
   const cleanedText = text
     .replace(/[*#_`~]/g, "")
     .replace(/\[.*?\]/g, "")
+    .replace(/₹/g, " rupees ")
+    .replace(/\s+/g, " ")
     .trim();
 
   if (!cleanedText) {
     throw new Error("Cannot synthesize empty text");
   }
 
-  // Convert to natural speech
-  let audioStream: any = null;
-  try {
-    audioStream = await elevenlabs.textToSpeech.convert(voiceId, {
-      text: cleanedText,
-      modelId,
-      outputFormat: "mp3_44100_128",
-      voiceSettings: {
-        stability: 0.45,
-        similarityBoost: 0.85,
-        style: 0.2,
-        useSpeakerBoost: true,
-      },
-    });
-  } catch (err: any) {
-    // If the primary voice is unavailable, try the popular multilingual fallback voice
-    console.warn(`[elevenlabs] voice ${voiceId} failed, trying fallback:`, err?.message);
-    const fallbackVoice = "pFZP5JQG7iQjIQuC4Bku"; // Lily / Florence
-    audioStream = await elevenlabs.textToSpeech.convert(fallbackVoice, {
-      text: cleanedText,
-      modelId: "eleven_multilingual_v2",
-      outputFormat: "mp3_44100_128",
-    });
-  }
-
-  const reader = audioStream.getReader();
-  const chunks: Uint8Array[] = [];
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    if (value) {
-      chunks.push(typeof value === "string" ? Buffer.from(value) : value);
-    }
-  }
-
-  const audioBuffer = Buffer.concat(chunks);
-  return {
-    audioBase64: audioBuffer.toString("base64"),
-    mimeType: "audio/mpeg",
+  const payload = {
+    text: cleanedText,
+    model_id: modelId,
+    voice_settings: {
+      stability: options?.stability ?? 0.5,
+      similarity_boost: options?.similarityBoost ?? 0.8,
+      style: 0.15,
+      use_speaker_boost: true,
+    },
   };
+
+  try {
+    const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+      method: "POST",
+      headers: {
+        "xi-api-key": apiKey,
+        "Content-Type": "application/json",
+        Accept: "audio/mpeg",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      // If primary voice is unavailable, retry with verified default Lily
+      if (voiceId !== "pFZP5JQG7iQjIQuC4Bku") {
+        console.warn(`[elevenlabs] voice ${voiceId} returned ${res.status}, retrying with default voice`);
+        const fallbackRes = await fetch("https://api.elevenlabs.io/v1/text-to-speech/pFZP5JQG7iQjIQuC4Bku", {
+          method: "POST",
+          headers: {
+            "xi-api-key": apiKey,
+            "Content-Type": "application/json",
+            Accept: "audio/mpeg",
+          },
+          body: JSON.stringify(payload),
+        });
+
+        if (fallbackRes.ok) {
+          const arrayBuf = await fallbackRes.arrayBuffer();
+          return {
+            audioBase64: Buffer.from(arrayBuf).toString("base64"),
+            mimeType: "audio/mpeg",
+          };
+        }
+      }
+      throw new Error(`ElevenLabs API error (${res.status}): ${errText.slice(0, 200)}`);
+    }
+
+    const arrayBuf = await res.arrayBuffer();
+    return {
+      audioBase64: Buffer.from(arrayBuf).toString("base64"),
+      mimeType: "audio/mpeg",
+    };
+  } catch (err: any) {
+    console.error("[elevenlabs] synthesizeSpeech error:", err?.message);
+    throw err;
+  }
 }

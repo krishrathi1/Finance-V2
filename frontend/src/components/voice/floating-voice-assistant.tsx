@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { MessageCircle, Mic, Square, X, AlertCircle } from "lucide-react";
+import { MessageCircle, Mic, Square, X, AlertCircle, Send, Sparkles } from "lucide-react";
 import { extractClientScreenSnapshot } from "@/lib/voice/context-extractor";
 import { ChatTurn, ScreenSnapshot, VoiceState, VoiceTalkResponse } from "@/lib/voice/types";
 
@@ -10,6 +10,8 @@ export function FloatingVoiceAssistant() {
   const [voiceState, setVoiceState] = useState<VoiceState>("idle");
   const [statusMessage, setStatusMessage] = useState<string>("");
   const [liveTranscript, setLiveTranscript] = useState<string>("");
+  const [typedInput, setTypedInput] = useState<string>("");
+  const [showInput, setShowInput] = useState<boolean>(false);
 
   const sessionIdRef = useRef<string>("");
   const historyRef = useRef<ChatTurn[]>([]);
@@ -21,6 +23,7 @@ export function FloatingVoiceAssistant() {
   const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
   const speechRecognitionRef = useRef<any>(null);
 
+  const currentUtteranceRef = useRef<string>("");
   const finalTranscriptRef = useRef<string>("");
   const abortControllerRef = useRef<AbortController | null>(null);
   const silenceTimerRef = useRef<any>(null);
@@ -40,37 +43,45 @@ export function FloatingVoiceAssistant() {
         recognition.lang = "en-IN";
 
         recognition.onresult = (event: any) => {
-          let interim = "";
-          let final = "";
-
-          for (let i = event.resultIndex; i < event.results.length; i++) {
-            const transcript = event.results[i][0].transcript;
-            if (event.results[i].isFinal) {
-              final += transcript + " ";
-            } else {
-              interim += transcript;
+          let fullTranscript = "";
+          for (let i = 0; i < event.results.length; i++) {
+            const item = event.results[i];
+            if (item && item[0]) {
+              fullTranscript += item[0].transcript + " ";
             }
           }
 
-          if (final) {
-            finalTranscriptRef.current = (finalTranscriptRef.current + " " + final).trim();
+          const clean = fullTranscript.trim();
+          if (clean) {
+            currentUtteranceRef.current = clean;
+            setLiveTranscript(clean);
+
+            // Reset silence timer on every new word
+            if (silenceTimerRef.current) {
+              clearTimeout(silenceTimerRef.current);
+            }
+
+            // Auto-submit after 1.6s of silence once at least 2 words have been spoken
+            if (clean.split(/\s+/).length >= 2) {
+              silenceTimerRef.current = setTimeout(() => {
+                if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+                  mediaRecorderRef.current.stop();
+                }
+              }, 1600);
+            }
           }
+        };
 
-          const currentText = (finalTranscriptRef.current + " " + interim).trim();
-          setLiveTranscript(currentText);
-
-          // Reset silence timer on each new speech chunk
-          if (silenceTimerRef.current) {
-            clearTimeout(silenceTimerRef.current);
-          }
-
-          // If user stopped speaking for 1.4s after saying at least 2 words, auto-commit utterance
-          if (currentText.split(/\s+/).length >= 2) {
-            silenceTimerRef.current = setTimeout(() => {
-              if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
-                mediaRecorderRef.current.stop();
-              }
-            }, 1400);
+        recognition.onend = () => {
+          // Keep recognition alive if still recording and not muted
+          if (
+            !isMutedRef.current &&
+            mediaRecorderRef.current &&
+            mediaRecorderRef.current.state === "recording"
+          ) {
+            try {
+              recognition.start();
+            } catch {}
           }
         };
 
@@ -324,6 +335,7 @@ export function FloatingVoiceAssistant() {
     setVoiceState("requesting_permission");
     setStatusMessage("Listening…");
     setLiveTranscript("");
+    currentUtteranceRef.current = "";
     finalTranscriptRef.current = "";
 
     try {
@@ -385,7 +397,7 @@ export function FloatingVoiceAssistant() {
 
         if (isMutedRef.current) return;
 
-        const spokenText = finalTranscriptRef.current.trim();
+        const spokenText = (currentUtteranceRef.current || finalTranscriptRef.current || "").trim();
         const audioBlob =
           audioChunksRef.current.length > 0
             ? new Blob(audioChunksRef.current, { type: recorder.mimeType || "audio/webm" })
@@ -393,10 +405,8 @@ export function FloatingVoiceAssistant() {
 
         // Validation: verify that the user actually spoke something
         if (!spokenText && (!audioBlob || audioBlob.size < 1200)) {
-          // Nothing audible was said; stay ready and prompt user
           setStatusMessage("Didn't catch that. Tap mic and speak.");
           setVoiceState("listening");
-          // Re-listen automatically without sending empty requests
           startListening();
           return;
         }
@@ -408,7 +418,7 @@ export function FloatingVoiceAssistant() {
       recorder.start(250); // Emit chunks every 250ms
       setVoiceState("listening");
 
-      // Safety guard: max 12 seconds per utterance to prevent runaway recording
+      // Safety guard: max 12 seconds per utterance
       if (maxRecordingTimerRef.current) {
         clearTimeout(maxRecordingTimerRef.current);
       }
@@ -449,6 +459,33 @@ export function FloatingVoiceAssistant() {
     }
   };
 
+  const handleQuickQuestion = (queryText: string) => {
+    if (speechRecognitionRef.current) {
+      try {
+        speechRecognitionRef.current.stop();
+      } catch {}
+    }
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+      try {
+        mediaRecorderRef.current.stop();
+      } catch {}
+    }
+    if (mediaStreamRef.current) {
+      try {
+        mediaStreamRef.current.getTracks().forEach((t) => t.stop());
+      } catch {}
+    }
+    sendUtteranceToBackend(null, queryText);
+  };
+
+  const handleSendTyped = (e: React.FormEvent) => {
+    e.preventDefault();
+    const query = typedInput.trim();
+    if (!query) return;
+    setTypedInput("");
+    handleQuickQuestion(query);
+  };
+
   const active = voiceState !== "idle";
 
   return (
@@ -486,9 +523,10 @@ export function FloatingVoiceAssistant() {
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.7, opacity: 0 }}
             transition={{ type: "spring", stiffness: 380, damping: 26 }}
-            className="flex flex-col gap-1.5 rounded-2xl bg-white/95 dark:bg-zinc-900/95 border border-[#C57708]/40 shadow-2xl shadow-black/25 p-3 backdrop-blur-xl max-w-sm"
+            className="flex flex-col gap-2 rounded-2xl bg-white/95 dark:bg-zinc-900/95 border border-[#C57708]/40 shadow-2xl shadow-black/25 p-3.5 backdrop-blur-xl w-80 sm:w-96"
           >
-            <div className="flex items-center gap-3">
+            {/* Top Bar with Status and Instant Stop/Cross Button */}
+            <div className="flex items-center gap-2.5">
               {voiceState === "requesting_permission" ? (
                 <>
                   <span className="w-4 h-4 border-2 border-[#C57708]/30 border-t-[#C57708] rounded-full animate-spin" />
@@ -499,8 +537,8 @@ export function FloatingVoiceAssistant() {
               ) : voiceState === "processing" || voiceState === "thinking" ? (
                 <>
                   <span className="w-4 h-4 border-2 border-[#C57708]/30 border-t-[#C57708] rounded-full animate-spin" />
-                  <span className="text-xs font-semibold text-zinc-800 dark:text-zinc-200">
-                    {statusMessage || "Priya thinking…"}
+                  <span className="text-xs font-semibold text-zinc-800 dark:text-zinc-200 truncate">
+                    {statusMessage || "Priya analyzing screen…"}
                   </span>
                 </>
               ) : voiceState === "speaking" ? (
@@ -538,7 +576,7 @@ export function FloatingVoiceAssistant() {
               ) : voiceState === "error" ? (
                 <>
                   <AlertCircle className="w-4 h-4 text-red-500" />
-                  <span className="text-xs font-semibold text-red-500">
+                  <span className="text-xs font-semibold text-red-500 truncate">
                     {statusMessage || "Error"}
                   </span>
                 </>
@@ -547,7 +585,7 @@ export function FloatingVoiceAssistant() {
                 <>
                   <span className="relative flex items-center justify-center">
                     <motion.span
-                      className="absolute w-8 h-8 rounded-full bg-[#25AB21]/20"
+                      className="absolute w-7 h-7 rounded-full bg-[#25AB21]/20"
                       animate={{ scale: [1, 1.6], opacity: [0.55, 0] }}
                       transition={{ duration: 1.4, repeat: Infinity, ease: "easeOut" }}
                     />
@@ -555,8 +593,8 @@ export function FloatingVoiceAssistant() {
                       <Mic className="w-3.5 h-3.5 text-[#25AB21]" />
                     </span>
                   </span>
-                  <div className="flex items-end gap-[3px] h-4">
-                    {[0, 1, 2, 3].map((i) => (
+                  <div className="flex items-end gap-[2px] h-4">
+                    {[0, 1, 2].map((i) => (
                       <motion.span
                         key={i}
                         className="w-[2.5px] rounded-full bg-[#25AB21]"
@@ -571,10 +609,10 @@ export function FloatingVoiceAssistant() {
                     ))}
                   </div>
                   <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
-                    Listening… (speak anytime)
+                    Listening…
                   </span>
 
-                  {/* Tap-to-done shortcut button */}
+                  {/* Tap-to-done button */}
                   <button
                     type="button"
                     onClick={handleStopSpeakingAndSubmit}
@@ -599,11 +637,63 @@ export function FloatingVoiceAssistant() {
               </button>
             </div>
 
-            {/* Live Transcription / Subtitle Area */}
+            {/* Live Subtitle Area */}
             {liveTranscript && (
-              <p className="text-[11px] leading-relaxed text-zinc-500 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-800/60 p-2 rounded-lg max-h-20 overflow-y-auto italic">
+              <p className="text-[11px] leading-relaxed text-zinc-600 dark:text-zinc-300 bg-zinc-100 dark:bg-zinc-800/70 p-2 rounded-lg max-h-24 overflow-y-auto italic">
                 &ldquo;{liveTranscript}&rdquo;
               </p>
+            )}
+
+            {/* Quick Screen Context Questions */}
+            <div className="flex items-center gap-1.5 overflow-x-auto py-1 scrollbar-none text-[10px]">
+              <button
+                type="button"
+                onClick={() => handleQuickQuestion("What is the current CMP and day change of this stock?")}
+                className="whitespace-nowrap px-2 py-1 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-[#C57708]/15 hover:text-[#C57708] transition-all font-medium border border-zinc-200 dark:border-zinc-700 flex items-center gap-1"
+              >
+                <Sparkles className="w-2.5 h-2.5 text-[#C57708]" /> Price & Change
+              </button>
+              <button
+                type="button"
+                onClick={() => handleQuickQuestion("What is the PE ratio and valuation status?")}
+                className="whitespace-nowrap px-2 py-1 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-[#C57708]/15 hover:text-[#C57708] transition-all font-medium border border-zinc-200 dark:border-zinc-700"
+              >
+                P/E & Valuation
+              </button>
+              <button
+                type="button"
+                onClick={() => handleQuickQuestion("Is this stock financially safe based on screen metrics?")}
+                className="whitespace-nowrap px-2 py-1 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-[#C57708]/15 hover:text-[#C57708] transition-all font-medium border border-zinc-200 dark:border-zinc-700"
+              >
+                Smart Score
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowInput(!showInput)}
+                className="whitespace-nowrap px-2 py-1 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 hover:bg-amber-500/20 transition-all font-medium"
+              >
+                {showInput ? "Hide text" : "Type question"}
+              </button>
+            </div>
+
+            {/* Optional Type Query Input */}
+            {showInput && (
+              <form onSubmit={handleSendTyped} className="flex items-center gap-1.5 pt-1">
+                <input
+                  type="text"
+                  value={typedInput}
+                  onChange={(e) => setTypedInput(e.target.value)}
+                  placeholder="Ask Priya anything about this screen…"
+                  className="flex-1 px-2.5 py-1 text-xs rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-[#C57708]"
+                />
+                <button
+                  type="submit"
+                  disabled={!typedInput.trim()}
+                  className="p-1.5 rounded-lg bg-[#C57708] text-white hover:bg-[#A85F00] disabled:opacity-40 transition-all"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                </button>
+              </form>
             )}
           </motion.div>
         )}

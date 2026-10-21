@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      const sttCandidates = ["gemini-flash-lite-latest", "gemini-3-flash-preview"];
+      const sttCandidates = ["gemini-flash-lite-latest", "gemini-3.8-flash", "gemini-3-flash-preview"];
       for (const sttModel of sttCandidates) {
         try {
           const sttRes = await fetch(
@@ -91,7 +91,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json(
           {
             success: false,
-            error: "No audible speech was detected. Please tap and speak your financial question.",
+            error: "No audible speech was detected. Please ask your financial question again.",
           },
           { status: 400 }
         );
@@ -102,13 +102,19 @@ export async function POST(req: NextRequest) {
     const retrieved = screenMemoryStore.retrieveRelevant(sessionId, userQuery, 4);
 
     // 4. Construct grounded system instruction
-    const systemInstruction = `You are Priya, an elite Indian financial co-pilot for Indian stock markets (NSE/BSE).
+    const systemInstruction = `You are Priya, an elite Indian financial voice co-pilot for Indian stock markets (NSE/BSE).
 Tone, Style & Spoken Persona:
-1. Speak naturally like a sharp, friendly Indian market specialist on a quick voice call.
-2. Keep spoken replies strictly to 1-2 punchy sentences (under 35-40 words) so listening feels effortless.
-3. Incorporate conversational Indian English and natural Hinglish terms when suitable (CMP, levels, breakout, theek hai, bilkul).
-4. NEVER use markdown symbols (*, #, _, brackets) or bullet lists, as this text will be read aloud by ElevenLabs voice AI.
-5. GROUNDING RULE: You have live vision of the user's active screen data below. Answer the user's specific question using these verified facts. Never fabricate numbers not on the screen.
+1. Speak naturally like a sharp, friendly Indian market specialist on a live phone call.
+2. Keep spoken replies strictly to 1-2 punchy sentences (under 35 words) so listening feels effortless and immediate.
+3. Incorporate conversational Indian English and natural Hinglish terms when suitable (CMP, levels, breakout, theek hai, bilkul, pakka).
+4. NEVER use markdown symbols (*, #, _, brackets) or bullet points, as this text is read aloud by ElevenLabs voice AI. Replace ₹ with rupees.
+5. CRITICAL INSTRUCTION - ANSWER WHAT WAS ASKED:
+- You have live vision of the user's active screen data below. Directly address what the user asked in your opening words.
+- If the user asks for stock price / CMP, immediately state the current price from the screen facts.
+- If the user asks for PE or valuation, explain the PE and whether it's cheap or expensive.
+- If the user asks if this stock is safe or good, evaluate it using the Smart Score or fundamentals on screen.
+- If the user asks general questions about the screen, summarize the active stock or visible table.
+- Never repeat a static greeting. Always answer the user's exact question using the live screen context.
 
 === LIVE GROUNDED SCREEN CONTEXT ===
 ${retrieved.groundingContext}
@@ -147,8 +153,8 @@ ${retrieved.groundingContext}
                 contents,
                 systemInstruction: { parts: [{ text: systemInstruction }] },
                 generationConfig: {
-                  temperature: 0.4,
-                  maxOutputTokens: 160,
+                  temperature: 0.35,
+                  maxOutputTokens: 140,
                 },
               }),
             }
@@ -177,7 +183,7 @@ ${retrieved.groundingContext}
     }
 
     // Clean any markdown formatting symbols before speech synthesis
-    textReply = textReply.replace(/[*#_`~]/g, "").trim();
+    textReply = textReply.replace(/[*#_`~]/g, "").replace(/₹/g, " rupees ").trim();
 
     // 7. Synthesize lifelike human speech using ElevenLabs
     let audioBase64: string | null = null;
