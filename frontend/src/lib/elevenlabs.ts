@@ -25,7 +25,7 @@ export async function synthesizeSpeech(
   const voiceId =
     options?.voiceId ||
     process.env.ELEVENLABS_VOICE_ID ||
-    "2F1KINpxsttim2WfMbVs"; // DB - Indian Hindi / Desi Voice (Female)
+    "pFZP5JQG7iQjIQuC4Bku"; // Lily - Verified working premade multilingual voice
 
   // eleven_multilingual_v2 delivers the most authentic human accent for Indian English and Hindi
   const modelId = options?.modelId || "eleven_multilingual_v2";
