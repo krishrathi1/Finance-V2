@@ -1,10 +1,19 @@
 import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
 
-/**
- * ElevenLabs Client instance.
- * Automatically reads ELEVENLABS_API_KEY from process.env.
- */
-export const elevenlabs = new ElevenLabsClient();
+let elevenlabs: ElevenLabsClient | null = null;
+
+function getElevenLabsClient(): ElevenLabsClient {
+  const apiKey = (process.env.ELEVENLABS_API_KEY || "").trim();
+  if (!apiKey) {
+    throw new Error("Missing ELEVENLABS_API_KEY");
+  }
+
+  if (!elevenlabs) {
+    elevenlabs = new ElevenLabsClient({ apiKey });
+  }
+
+  return elevenlabs;
+}
 
 export interface SynthesizeOptions {
   voiceId?: string;
@@ -37,7 +46,7 @@ export async function synthesizeSpeech(
     throw new Error("Cannot synthesize empty text");
   }
 
-  const audioStream = await elevenlabs.textToSpeech.convert(voiceId, {
+  const audioStream = await getElevenLabsClient().textToSpeech.convert(voiceId, {
     text: cleanedText,
     modelId,
     outputFormat: "mp3_44100_128",
