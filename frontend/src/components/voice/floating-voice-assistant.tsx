@@ -261,10 +261,15 @@ export function FloatingVoiceAssistant() {
 
       if (audioBlob && audioBlob.size > 800) {
         mimeType = audioBlob.type || "audio/webm";
-        const buffer = await audioBlob.arrayBuffer();
-        base64Audio = btoa(
-          new Uint8Array(buffer).reduce((data, byte) => data + String.fromCharCode(byte), "")
-        );
+        base64Audio = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            const res = (reader.result as string)?.split(",")[1] || "";
+            resolve(res);
+          };
+          reader.onerror = reject;
+          reader.readAsDataURL(audioBlob);
+        });
       }
 
       // Extract fresh live screen snapshot

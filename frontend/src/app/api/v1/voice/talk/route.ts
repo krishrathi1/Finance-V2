@@ -41,41 +41,49 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      const sttRes = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [
-              {
-                role: "user",
-                parts: [
+      const sttCandidates = ["gemini-flash-lite-latest", "gemini-3-flash-preview"];
+      for (const sttModel of sttCandidates) {
+        try {
+          const sttRes = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/${sttModel}:generateContent?key=${GEMINI_API_KEY}`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                contents: [
                   {
-                    inlineData: {
-                      mimeType: mimeType || "audio/webm",
-                      data: audioData,
-                    },
-                  },
-                  {
-                    text: "Transcribe the user's speech in this audio clip. Output ONLY the transcribed words. If there is no discernible speech or only background silence, output [SILENCE].",
+                    role: "user",
+                    parts: [
+                      {
+                        inlineData: {
+                          mimeType: mimeType || "audio/webm",
+                          data: audioData,
+                        },
+                      },
+                      {
+                        text: "Transcribe the user's speech in this audio clip. Output ONLY the transcribed words. If there is no discernible speech or only background silence, output [SILENCE].",
+                      },
+                    ],
                   },
                 ],
-              },
-            ],
-            generationConfig: {
-              temperature: 0.1,
-              maxOutputTokens: 100,
-            },
-          }),
-        }
-      );
+                generationConfig: {
+                  temperature: 0.1,
+                  maxOutputTokens: 100,
+                },
+              }),
+            }
+          );
 
-      if (sttRes.ok) {
-        const sttJson = await sttRes.json();
-        const candidate = sttJson?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "";
-        if (candidate && !candidate.includes("[SILENCE]")) {
-          userQuery = candidate;
+          if (sttRes.ok) {
+            const sttJson = await sttRes.json();
+            const candidate = sttJson?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "";
+            if (candidate && !candidate.includes("[SILENCE]")) {
+              userQuery = candidate;
+              break;
+            }
+          }
+        } catch {
+          // try next stt model
         }
       }
 
@@ -127,7 +135,7 @@ ${retrieved.groundingContext}
     // 6. Generate answer via Gemini Flash
     let textReply = "";
     if (GEMINI_API_KEY) {
-      const candidateModels = ["gemini-2.5-flash", "gemini-3.1-flash-lite", "gemini-1.5-flash"];
+      const candidateModels = ["gemini-flash-lite-latest", "gemini-3-flash-preview", "gemini-flash-latest"];
       for (const modelName of candidateModels) {
         try {
           const res = await fetch(

@@ -56,8 +56,8 @@ ${retrieved.groundingContext}
     }
     contents.push({ role: "user", parts: [{ text: message }] });
 
-    // Stream with gemini-2.5-flash / 3.1-flash-lite
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse&key=${GEMINI_API_KEY}`;
+    // Stream with gemini-flash-lite-latest / gemini-3-flash-preview
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:streamGenerateContent?alt=sse&key=${GEMINI_API_KEY}`;
 
     const geminiRes = await fetch(geminiUrl, {
       method: "POST",
