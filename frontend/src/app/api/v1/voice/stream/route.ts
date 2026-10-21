@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { screenMemoryStore } from "@/lib/voice/screen-memory-store";
 
 export const dynamic = "force-dynamic";
 
@@ -6,7 +7,7 @@ const GEMINI_API_KEY = (process.env.GEMINI_API_KEY || "").trim();
 
 export async function POST(req: NextRequest) {
   try {
-    const { message, history, pageContext } = await req.json();
+    const { sessionId, message, history, screenSnapshot } = await req.json();
 
     if (!message || typeof message !== "string") {
       return new Response(JSON.stringify({ error: "Message query is required" }), {
@@ -22,48 +23,24 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Instant Zero-Latency Conversational Filter for common greetings
-    const trimmedLower = message.trim().toLowerCase().replace(/[?!.]/g, "");
-    const greetings: Record<string, string> = {
-      hello: "Hello! Main sun raha hoon. Aap market ya kisi stock ke baare me kya janna chahte hain?",
-      hi: "Hey! Main sun raha hoon. Aap kis stock ya company ke baare me puchna chahte hain?",
-      hey: "Hello! Aap bataiye, aaj market ya aapke portfolio me kya check karna hai?",
-      namaste: "Namaste! Main aapka financial AI copilot hoon. Kaise madad kar sakta hoon?",
-      "kya haal hai": "Sab badiya! Market live updates ke sath taiyaar hoon. Aap bataiye?",
-      "hello sir": "Hello! Main sun raha hoon. Kis stock ka price ya analysis dekhna hai?",
-    };
-
-    if (greetings[trimmedLower]) {
-      const instantReply = greetings[trimmedLower];
-      const encoder = new TextEncoder();
-      const stream = new ReadableStream({
-        start(controller) {
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text: instantReply })}\n\n`));
-          controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-          controller.close();
-        },
-      });
-
-      return new Response(stream, {
-        headers: {
-          "Content-Type": "text/event-stream; charset=utf-8",
-          "Cache-Control": "no-cache, no-transform",
-          Connection: "keep-alive",
-        },
-      });
+    if (screenSnapshot) {
+      screenMemoryStore.saveSnapshot(screenSnapshot);
     }
 
-    // Context & System Instruction
-    let systemInstruction = `You are a real-time financial voice copilot for Indian markets (NSE/BSE).
-Speak naturally and quickly like a phone conversation.
-Keep replies strictly to 1-2 short sentences and under 30-40 words.
-Give the main number or verdict immediately.
-Do not use markdown (*, #, bullet points).
-If the user speaks in Hindi or Hinglish, reply naturally in conversational Hinglish. If English, reply in crisp English.`;
+    // Retrieve screen memory grounding
+    const retrieved = sessionId
+      ? screenMemoryStore.retrieveRelevant(sessionId, message, 3)
+      : { groundingContext: "No active screen memory recorded." };
 
-    if (pageContext) {
-      systemInstruction += `\nScreen Context: ${pageContext.title || ""} (${pageContext.route || "/"})`;
-    }
+    let systemInstruction = `You are Priya, a real-time conversational financial voice co-pilot for Indian markets (NSE/BSE).
+Guidelines:
+1. Speak naturally like a sharp, friendly financial expert in a voice call.
+2. Keep replies strictly to 1-2 short sentences (under 30-40 words).
+3. Ground your answer in the verified screen context provided below:
+
+=== SCREEN CONTEXT ===
+${retrieved.groundingContext}
+=== END OF CONTEXT ===`;
 
     // Format conversation history
     const contents: any[] = [];
@@ -71,7 +48,7 @@ If the user speaks in Hindi or Hinglish, reply naturally in conversational Hingl
       for (const turn of history.slice(-4)) {
         if (turn.role && turn.text) {
           contents.push({
-            role: turn.role === "assistant" || turn.role === "model" ? "model" : "user",
+            role: turn.role === "assistant" ? "model" : "user",
             parts: [{ text: turn.text }],
           });
         }
@@ -79,8 +56,8 @@ If the user speaks in Hindi or Hinglish, reply naturally in conversational Hingl
     }
     contents.push({ role: "user", parts: [{ text: message }] });
 
-    // Call Gemini Stream with gemini-3.1-flash-lite (fastest sub-300ms model)
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:streamGenerateContent?alt=sse&key=${GEMINI_API_KEY}`;
+    // Stream with gemini-2.5-flash / 3.1-flash-lite
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse&key=${GEMINI_API_KEY}`;
 
     const geminiRes = await fetch(geminiUrl, {
       method: "POST",
@@ -89,8 +66,8 @@ If the user speaks in Hindi or Hinglish, reply naturally in conversational Hingl
         contents,
         systemInstruction: { parts: [{ text: systemInstruction }] },
         generationConfig: {
-          temperature: 0.3,
-          maxOutputTokens: 80,
+          temperature: 0.35,
+          maxOutputTokens: 120,
         },
       }),
     });
@@ -134,7 +111,7 @@ If the user speaks in Hindi or Hinglish, reply naturally in conversational Hingl
                   );
                 }
               } catch {
-                // Ignore parse errors on SSE boundary
+                // ignore SSE boundary parsing
               }
             }
           }

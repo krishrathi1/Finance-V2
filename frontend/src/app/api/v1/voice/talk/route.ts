@@ -1,79 +1,130 @@
 import { NextRequest, NextResponse } from "next/server";
 import { synthesizeSpeech } from "@/lib/elevenlabs";
+import { screenMemoryStore } from "@/lib/voice/screen-memory-store";
+import { VoiceTalkRequest, VoiceTalkResponse } from "@/lib/voice/types";
 
 export const dynamic = "force-dynamic";
 
-const GEMINI_API_KEY = (process.env.GEMINI_API_KEY || "").trim();
-
 export async function POST(req: NextRequest) {
   try {
-    const { message, audioData, mimeType, history, pageContext } = await req.json();
+    const GEMINI_API_KEY = (process.env.GEMINI_API_KEY || "").trim();
+    const body: VoiceTalkRequest = await req.json();
+    const { sessionId, message, audioData, mimeType, history, screenSnapshot } = body;
 
-    if (!message && !audioData) {
+    if (!sessionId) {
       return NextResponse.json(
-        { error: "Either message or audioData is required" },
+        { success: false, error: "sessionId is required for session-scoped voice memory" },
         { status: 400 }
       );
     }
 
-    // Persona: Indian Financial Voice Expert with natural human Indian accent & screen awareness
-    let systemInstruction = `You are Priya, a friendly, sharp, and expert Indian financial copilot for Indian stock markets (NSE/BSE).
-Tone, Accent & Style:
-1. Speak warmly and naturally like an intelligent Indian colleague on a phone call.
-2. Use conversational Indian English with natural Hindi/Hinglish touches (e.g. "CMP", "levels", "breakout", "theek hai", "bilkul") when appropriate.
-3. Keep spoken replies strictly to 1-2 punchy sentences (under 30-40 words) so it feels like a real human voice call.
-4. You have live vision of the user's current screen data. Refer to numbers directly from what's displayed on their screen.
-5. Never use markdown symbols like *, #, bullet points or brackets because this text is read aloud by ElevenLabs voice AI.
-6. If the user asks in Hindi, reply in warm conversational Hinglish. If in English, reply in natural Indian English.`;
-
-    if (pageContext) {
-      systemInstruction += `\n\nCURRENT USER SCREEN CONTEXT:
-- Route: ${pageContext.route || "/"}
-- Page Title: ${pageContext.title || "Finance Platform"}
-${pageContext.symbol ? `- Active Stock Ticker: ${pageContext.symbol}` : ""}
-${pageContext.companyName ? `- Company Name: ${pageContext.companyName}` : ""}
-${pageContext.price ? `- Current CMP: ₹${pageContext.price}` : ""}
-${pageContext.change ? `- Day Change: ${pageContext.change}` : ""}
-${pageContext.pe ? `- P/E Ratio: ${pageContext.pe}` : ""}
-${pageContext.smartScore ? `- Smart Score: ${pageContext.smartScore}` : ""}
-${pageContext.headings ? `- Page Headings: ${pageContext.headings}` : ""}
-${pageContext.visibleExcerpt ? `- Visible Content: ${pageContext.visibleExcerpt}` : ""}`;
+    if (!message && !audioData) {
+      return NextResponse.json(
+        { success: false, error: "Either message text or audioData payload is required" },
+        { status: 400 }
+      );
     }
 
-    // Format conversation history
+    // 1. Update session-scoped screen memory if new snapshot was submitted
+    if (screenSnapshot) {
+      screenMemoryStore.saveSnapshot(screenSnapshot);
+    }
+
+    let userQuery = (message || "").trim();
+
+    // 2. Transcribe audio if message is empty but audioData is present
+    if (!userQuery && audioData) {
+      if (!GEMINI_API_KEY) {
+        return NextResponse.json(
+          { success: false, error: "Speech-to-text requires configured GEMINI_API_KEY" },
+          { status: 500 }
+        );
+      }
+
+      const sttRes = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [
+              {
+                role: "user",
+                parts: [
+                  {
+                    inlineData: {
+                      mimeType: mimeType || "audio/webm",
+                      data: audioData,
+                    },
+                  },
+                  {
+                    text: "Transcribe the user's speech in this audio clip. Output ONLY the transcribed words. If there is no discernible speech or only background silence, output [SILENCE].",
+                  },
+                ],
+              },
+            ],
+            generationConfig: {
+              temperature: 0.1,
+              maxOutputTokens: 100,
+            },
+          }),
+        }
+      );
+
+      if (sttRes.ok) {
+        const sttJson = await sttRes.json();
+        const candidate = sttJson?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "";
+        if (candidate && !candidate.includes("[SILENCE]")) {
+          userQuery = candidate;
+        }
+      }
+
+      if (!userQuery) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "No audible speech was detected. Please tap and speak your financial question.",
+          },
+          { status: 400 }
+        );
+      }
+    }
+
+    // 3. Retrieve relevant screen-memory chunks for the user's query
+    const retrieved = screenMemoryStore.retrieveRelevant(sessionId, userQuery, 4);
+
+    // 4. Construct grounded system instruction
+    const systemInstruction = `You are Priya, an elite Indian financial co-pilot for Indian stock markets (NSE/BSE).
+Tone, Style & Spoken Persona:
+1. Speak naturally like a sharp, friendly Indian market specialist on a quick voice call.
+2. Keep spoken replies strictly to 1-2 punchy sentences (under 35-40 words) so listening feels effortless.
+3. Incorporate conversational Indian English and natural Hinglish terms when suitable (CMP, levels, breakout, theek hai, bilkul).
+4. NEVER use markdown symbols (*, #, _, brackets) or bullet lists, as this text will be read aloud by ElevenLabs voice AI.
+5. GROUNDING RULE: You have live vision of the user's active screen data below. Answer the user's specific question using these verified facts. Never fabricate numbers not on the screen.
+
+=== LIVE GROUNDED SCREEN CONTEXT ===
+${retrieved.groundingContext}
+=== END OF CONTEXT ===`;
+
+    // 5. Build conversation history
     const contents: any[] = [];
     if (Array.isArray(history) && history.length > 0) {
-      const recent = history.slice(-4);
-      for (const turn of recent) {
+      for (const turn of history.slice(-4)) {
         if (turn.role && turn.text) {
           contents.push({
-            role: turn.role === "assistant" || turn.role === "model" ? "model" : "user",
+            role: turn.role === "assistant" ? "model" : "user",
             parts: [{ text: turn.text }],
           });
         }
       }
     }
 
-    // Current turn parts
-    const currentParts: any[] = [];
-    if (audioData) {
-      currentParts.push({
-        inlineData: {
-          mimeType: mimeType || "audio/webm;codecs=opus",
-          data: audioData,
-        },
-      });
-    }
-    if (message) {
-      currentParts.push({ text: message });
-    }
-
     contents.push({
       role: "user",
-      parts: currentParts,
+      parts: [{ text: userQuery }],
     });
 
-    // 1. Generate text response with Gemini Flash
+    // 6. Generate answer via Gemini Flash
     let textReply = "";
     if (GEMINI_API_KEY) {
       const candidateModels = ["gemini-2.5-flash", "gemini-3.1-flash-lite", "gemini-1.5-flash"];
@@ -88,7 +139,7 @@ ${pageContext.visibleExcerpt ? `- Visible Content: ${pageContext.visibleExcerpt}
                 contents,
                 systemInstruction: { parts: [{ text: systemInstruction }] },
                 generationConfig: {
-                  temperature: 0.45,
+                  temperature: 0.4,
                   maxOutputTokens: 160,
                 },
               }),
@@ -106,40 +157,48 @@ ${pageContext.visibleExcerpt ? `- Visible Content: ${pageContext.visibleExcerpt}
       }
     }
 
+    // Never substitute a hardcoded greeting for a failed model response
     if (!textReply.trim()) {
-      if (pageContext?.symbol) {
-        textReply = `Aap abhi ${pageContext.symbol} dekh rahe hain, jiska CMP ₹${pageContext.price || "screen par visible"} hai. Iske levels ya fundamentals me kya check karna hai?`;
-      } else {
-        textReply = "Hello! Main aapki screen dekh rahi hoon. Aap kis stock ya market trend ke baare me puchna chahte hain?";
-      }
+      return NextResponse.json(
+        {
+          success: false,
+          error: "AI model could not formulate a response. Please rephrase or try again in a moment.",
+        },
+        { status: 502 }
+      );
     }
 
-    // Clean text reply of any symbols for voice synthesis
+    // Clean any markdown formatting symbols before speech synthesis
     textReply = textReply.replace(/[*#_`~]/g, "").trim();
 
-    // 2. Synthesize lifelike speech via ElevenLabs with Indian accent
+    // 7. Synthesize lifelike human speech using ElevenLabs
     let audioBase64: string | null = null;
-    let audioMimeType: string = "audio/mpeg";
+    let audioMimeType = "audio/mpeg";
 
     try {
       const speech = await synthesizeSpeech(textReply);
       audioBase64 = speech.audioBase64;
       audioMimeType = speech.mimeType;
     } catch (err: any) {
-      console.warn("[voice/talk] ElevenLabs synthesis fallback:", err?.message);
+      console.warn("[voice/talk] ElevenLabs synthesis failed, using client fallback:", err?.message);
     }
 
-    return NextResponse.json({
+    const response: VoiceTalkResponse = {
       success: true,
+      sessionId,
+      userQuery,
+      textReply,
       provider: audioBase64 ? "elevenlabs" : "fallback",
       audioBase64,
       audioMimeType,
-      textReply,
-    });
+      retrievedChunksCount: retrieved.chunks.length,
+    };
+
+    return NextResponse.json(response);
   } catch (err: any) {
-    console.error("[voice/talk] error:", err);
+    console.error("[voice/talk] unhandled error:", err);
     return NextResponse.json(
-      { error: err?.message || "Internal server error" },
+      { success: false, error: err?.message || "Internal server error" },
       { status: 500 }
     );
   }
