@@ -169,22 +169,43 @@ export function buildScreenSnapshot(raw: RawScreenInput): ScreenSnapshot {
     }
   }
 
-  // 5. Fallback Page Excerpt if chunks are otherwise empty
-  if (chunks.length === 0 && raw.visibleExcerpt) {
-    const cleanExcerpt = raw.visibleExcerpt.replace(/\s+/g, " ").trim();
-    if (cleanExcerpt.length > 0) {
-      chunks.push({
-        id: `chunk_${raw.sessionId}_${chunkSeq++}`,
-        type: "section_text",
-        title: raw.pageTitle || "Page Overview",
-        content: cleanExcerpt,
-        keywords: raw.pageTitle.toLowerCase().split(/\s+/),
-        metadata: {
-          route: raw.route,
-          source: "visible_excerpt",
-          timestamp,
-        },
-      });
+  // 5. Add bounded chunks from the active page even when structured metrics
+  // or tables were found. This lets the assistant answer questions about any
+  // page's cards, selected tab, and other visible content, not only stocks.
+  if (raw.visibleExcerpt) {
+    const cleanExcerpt = raw.visibleExcerpt.replace(/[ \t]+/g, " ").trim();
+    const maxLen = 700;
+    const overlap = 90;
+    const baseKeywords = [
+      raw.pageTitle.toLowerCase(),
+      ...raw.route.toLowerCase().split(/[^a-z0-9]+/).filter((word) => word.length > 2),
+    ];
+
+    for (let start = 0; start < cleanExcerpt.length;) {
+      let end = Math.min(start + maxLen, cleanExcerpt.length);
+      if (end < cleanExcerpt.length) {
+        const boundary = cleanExcerpt.lastIndexOf(" ", end);
+        if (boundary > start + Math.floor(maxLen * 0.65)) end = boundary;
+      }
+      const text = cleanExcerpt.slice(start, end).trim();
+      if (text) {
+        const words = text.toLowerCase().split(/[^a-z0-9]+/).filter((word) => word.length > 3);
+        chunks.push({
+          id: `chunk_${raw.sessionId}_${chunkSeq++}`,
+          type: "section_text",
+          title: `Current page content: ${raw.pageTitle || raw.route}`,
+          content: `Visible page content: ${text}`,
+          keywords: Array.from(new Set([...baseKeywords, ...words])).slice(0, 80),
+          metadata: {
+            route: raw.route,
+            source: "visible_page",
+            timestamp,
+            symbol: raw.stock?.symbol,
+          },
+        });
+      }
+      if (end >= cleanExcerpt.length) break;
+      start = Math.max(start + 1, end - overlap);
     }
   }
 

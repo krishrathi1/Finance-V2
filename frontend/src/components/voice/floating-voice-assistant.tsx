@@ -15,10 +15,14 @@ export function FloatingVoiceAssistant() {
 
   const sessionIdRef = useRef<string>("");
   const historyRef = useRef<ChatTurn[]>([]);
+  const lastRouteRef = useRef<string>("");
+  const speechRecognitionFailedRef = useRef<boolean>(false);
   const isMutedRef = useRef<boolean>(false);
 
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const audioMeterIntervalRef = useRef<any>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
   const speechRecognitionRef = useRef<any>(null);
@@ -76,6 +80,7 @@ export function FloatingVoiceAssistant() {
           // Keep recognition alive if still recording and not muted
           if (
             !isMutedRef.current &&
+            !speechRecognitionFailedRef.current &&
             mediaRecorderRef.current &&
             mediaRecorderRef.current.state === "recording"
           ) {
@@ -86,9 +91,13 @@ export function FloatingVoiceAssistant() {
         };
 
         recognition.onerror = (e: any) => {
-          if (e.error !== "no-speech") {
-            console.warn("[voice] speech recognition error:", e.error);
-          }
+          if (e.error === "no-speech" || speechRecognitionFailedRef.current) return;
+          console.warn("[voice] speech recognition error:", e.error);
+          // Keep MediaRecorder running: the browser can report `network`
+          // before the user has finished speaking. Audio-level silence
+          // detection below will submit a complete clip to Groq Whisper.
+          speechRecognitionFailedRef.current = true;
+          setStatusMessage("Listening for your question; Whisper will transcribe it.");
         };
 
         speechRecognitionRef.current = recognition;
@@ -136,6 +145,15 @@ export function FloatingVoiceAssistant() {
     if (silenceTimerRef.current) {
       clearTimeout(silenceTimerRef.current);
       silenceTimerRef.current = null;
+    }
+
+    if (audioMeterIntervalRef.current) {
+      clearInterval(audioMeterIntervalRef.current);
+      audioMeterIntervalRef.current = null;
+    }
+    if (audioContextRef.current) {
+      void audioContextRef.current.close().catch(() => {});
+      audioContextRef.current = null;
     }
 
     if (maxRecordingTimerRef.current) {
@@ -283,8 +301,14 @@ export function FloatingVoiceAssistant() {
         });
       }
 
-      // Extract fresh live screen snapshot
+      // Extract fresh page context for every question, not only when the call
+      // starts. If navigation changed during the call, drop old-page history
+      // so answers stay grounded in the page the user is looking at now.
       const screenSnapshot: ScreenSnapshot = extractClientScreenSnapshot(sessionIdRef.current);
+      if (lastRouteRef.current && lastRouteRef.current !== screenSnapshot.route) {
+        historyRef.current = [];
+      }
+      lastRouteRef.current = screenSnapshot.route;
 
       const res = await fetch("/api/v1/voice/talk", {
         method: "POST",
@@ -340,12 +364,49 @@ export function FloatingVoiceAssistant() {
 
     try {
       // 1. Acquire microphone stream
-      const stream = await navigator.mediaDevices.getUserMedia({
+      if (!window.isSecureContext) {
+        throw new Error("Microphone access requires HTTPS or localhost.");
+      }
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error("This browser does not support microphone capture. Try Chrome or Edge.");
+      }
+      if (typeof MediaRecorder === "undefined") {
+        throw new Error("This browser cannot record microphone audio. Try Chrome or Edge.");
+      }
+
+      let permissionTimedOut = false;
+      const micRequest = navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true,
         },
+      });
+      const stream = await new Promise<MediaStream>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          permissionTimedOut = true;
+          reject(new Error("Microphone request timed out. Check the browser permission prompt and try again."));
+        }, 8000);
+
+        micRequest.then(
+          (receivedStream) => {
+            clearTimeout(timeout);
+            // A browser can resolve getUserMedia after our timeout or after
+            // the user ended the call. In either case, release the late stream.
+            if (permissionTimedOut) {
+              receivedStream.getTracks().forEach((track) => track.stop());
+              return;
+            }
+            if (isMutedRef.current) {
+              receivedStream.getTracks().forEach((track) => track.stop());
+            }
+            resolve(receivedStream);
+          },
+          (error) => {
+            clearTimeout(timeout);
+            reject(error);
+          }
+        );
       });
 
       if (isMutedRef.current) {
@@ -355,16 +416,8 @@ export function FloatingVoiceAssistant() {
 
       mediaStreamRef.current = stream;
 
-      // 2. Start SpeechRecognition
-      if (speechRecognitionRef.current) {
-        try {
-          speechRecognitionRef.current.start();
-        } catch {
-          // might be active
-        }
-      }
-
-      // 3. Start MediaRecorder
+      // 2. Start MediaRecorder before SpeechRecognition so recognition's
+      // onend handler can always see an active recorder and restart itself.
       audioChunksRef.current = [];
       const supportedMime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
         ? "audio/webm;codecs=opus"
@@ -386,6 +439,14 @@ export function FloatingVoiceAssistant() {
 
       recorder.onstop = async () => {
         // Clean up speech recognition & tracks
+        if (audioMeterIntervalRef.current) {
+          clearInterval(audioMeterIntervalRef.current);
+          audioMeterIntervalRef.current = null;
+        }
+        if (audioContextRef.current) {
+          void audioContextRef.current.close().catch(() => {});
+          audioContextRef.current = null;
+        }
         if (speechRecognitionRef.current) {
           try {
             speechRecognitionRef.current.stop();
@@ -417,6 +478,68 @@ export function FloatingVoiceAssistant() {
 
       recorder.start(250); // Emit chunks every 250ms
       setVoiceState("listening");
+      setStatusMessage("Listening…");
+
+      // Detect the end of speech from the microphone signal as well as from
+      // SpeechRecognition. This keeps Whisper usable when the browser's
+      // recognition service is unavailable or offline.
+      const AudioContextConstructor = window.AudioContext || (window as any).webkitAudioContext;
+      if (AudioContextConstructor) {
+        try {
+          const audioContext: AudioContext = new AudioContextConstructor();
+          audioContextRef.current = audioContext;
+          const source = audioContext.createMediaStreamSource(stream);
+          const analyser = audioContext.createAnalyser();
+          analyser.fftSize = 512;
+          source.connect(analyser);
+          const samples = new Uint8Array(analyser.fftSize);
+          let speechStartedAt = 0;
+          let lastVoiceAt = 0;
+          void audioContext.resume().catch(() => {});
+
+          audioMeterIntervalRef.current = setInterval(() => {
+            if (recorder.state !== "recording" || isMutedRef.current) {
+              if (audioMeterIntervalRef.current) clearInterval(audioMeterIntervalRef.current);
+              audioMeterIntervalRef.current = null;
+              return;
+            }
+
+            analyser.getByteTimeDomainData(samples);
+            const sumSquares = samples.reduce((sum, sample) => {
+              const centered = (sample - 128) / 128;
+              return sum + centered * centered;
+            }, 0);
+            const rms = Math.sqrt(sumSquares / samples.length);
+            const now = Date.now();
+
+            if (rms >= 0.025) {
+              if (!speechStartedAt) speechStartedAt = now;
+              lastVoiceAt = now;
+            } else if (
+              speechStartedAt &&
+              now - speechStartedAt >= 500 &&
+              now - lastVoiceAt >= 1800
+            ) {
+              if (audioMeterIntervalRef.current) clearInterval(audioMeterIntervalRef.current);
+              audioMeterIntervalRef.current = null;
+              if (recorder.state === "recording") recorder.stop();
+            }
+          }, 100);
+        } catch (error) {
+          console.warn("[voice] audio-level detection unavailable; use Done or the recording limit:", error);
+        }
+      }
+
+      // 3. Start SpeechRecognition only after the recorder is ready. If the
+      // browser speech service is unavailable, audio-level detection still
+      // ends the recording and lets the server transcribe it with Whisper.
+      if (speechRecognitionRef.current && !speechRecognitionFailedRef.current) {
+        try {
+          speechRecognitionRef.current.start();
+        } catch {
+          // It may already be active; MediaRecorder still provides audio STT.
+        }
+      }
 
       // Safety guard: max 12 seconds per utterance
       if (maxRecordingTimerRef.current) {
@@ -427,8 +550,20 @@ export function FloatingVoiceAssistant() {
           recorder.stop();
         }
       }, 12000);
-    } catch {
-      setStatusMessage("Microphone permission denied");
+    } catch (error: any) {
+      const errorName = String(error?.name || "");
+      const errorMessage = String(error?.message || "");
+      if (/timed out/i.test(errorMessage)) {
+        setStatusMessage(errorMessage);
+      } else if (["NotAllowedError", "PermissionDeniedError", "SecurityError"].includes(errorName)) {
+        setStatusMessage("Microphone access is blocked. Allow it for this site in your browser settings.");
+      } else if (errorName === "NotFoundError" || errorName === "DevicesNotFoundError") {
+        setStatusMessage("No microphone was found. Connect a microphone and try again.");
+      } else if (["NotReadableError", "TrackStartError", "AbortError"].includes(errorName)) {
+        setStatusMessage("The microphone is busy or unavailable. Close other apps using it and try again.");
+      } else {
+        setStatusMessage(errorMessage || "Could not open the microphone. Check browser permissions and try again.");
+      }
       setVoiceState("error");
     }
   }, []);
@@ -437,6 +572,8 @@ export function FloatingVoiceAssistant() {
     cleanupAllAudio();
     isMutedRef.current = false;
     historyRef.current = [];
+    lastRouteRef.current = "";
+    speechRecognitionFailedRef.current = false;
     sessionIdRef.current = `sess_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
     startListening();
   };

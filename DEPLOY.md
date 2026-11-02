@@ -70,6 +70,7 @@ Every other key is optional and **degrades rather than breaks**:
 | `FMP_API_KEY` | Falls back to NSE and Yahoo; some fundamentals and the IPO calendar go quiet |
 | `NEWS_API_KEY` | Falls back to Google News RSS |
 | `GEMINI_API_KEY` | Every AI feature falls back to its rule-based version |
+| `GROQ_API_KEY` | Voice uses browser speech recognition when available; Groq Whisper transcription is disabled |
 | `SMTP_*` | Signup works, but no verification or reset email is sent |
 | `ALERTS_CRON_SECRET` | Alerts only evaluate while the alerts page is open |
 | `UPSTASH_REDIS_*` | Fine on one container; see scaling below |

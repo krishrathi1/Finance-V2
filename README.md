@@ -27,7 +27,7 @@ Single application: **Next.js 14 (App Router)** serves both the UI and the entir
 - **UI**: Tailwind CSS, Framer Motion, Radix UI, Recharts, TradingView Widget
 - **API/backend logic**: Next.js route handlers + `frontend/lib/backend/` (dashboard assembly, scoring engine, provider fetchers, AI features)
 - **Database**: MySQL 8 (`mysql2` pool) — users, sessions, premium requests, watchlists, portfolios, price alerts
-- **AI**: Gemini API (explanations, reports) with rule-based fallbacks
+- **AI**: Gemini API for explanations and reports; Groq Whisper for voice transcription; ElevenLabs with browser speech fallback for voice output
 - **Data providers**: NSE India, Trendlyne, Financial Modeling Prep, Yahoo Finance, Google News RSS, NewsAPI
 - **Email**: SMTP via nodemailer (verification, password-reset OTP, price alert notifications)
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { synthesizeSpeech } from "@/lib/elevenlabs";
 import { screenMemoryStore } from "@/lib/voice/screen-memory-store";
+import { transcribeWithGroq } from "@/server/ai/groq-whisper";
 import { VoiceTalkRequest, VoiceTalkResponse } from "@/lib/voice/types";
 
 export const dynamic = "force-dynamic";
@@ -32,74 +33,41 @@ export async function POST(req: NextRequest) {
 
     let userQuery = (message || "").trim();
 
-    // 2. Transcribe audio if message is empty but audioData is present
-    if (!userQuery && audioData) {
-      if (!GEMINI_API_KEY) {
-        return NextResponse.json(
-          { success: false, error: "Speech-to-text requires configured GEMINI_API_KEY" },
-          { status: 500 }
-        );
-      }
-
-      const sttCandidates = ["gemini-flash-lite-latest", "gemini-3.8-flash", "gemini-3-flash-preview"];
-      for (const sttModel of sttCandidates) {
-        try {
-          const sttRes = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/${sttModel}:generateContent?key=${GEMINI_API_KEY}`,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                contents: [
-                  {
-                    role: "user",
-                    parts: [
-                      {
-                        inlineData: {
-                          mimeType: mimeType || "audio/webm",
-                          data: audioData,
-                        },
-                      },
-                      {
-                        text: "Transcribe the user's speech in this audio clip. Output ONLY the transcribed words. If there is no discernible speech or only background silence, output [SILENCE].",
-                      },
-                    ],
-                  },
-                ],
-                generationConfig: {
-                  temperature: 0.1,
-                  maxOutputTokens: 100,
-                },
-              }),
-            }
-          );
-
-          if (sttRes.ok) {
-            const sttJson = await sttRes.json();
-            const candidate = sttJson?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "";
-            if (candidate && !candidate.includes("[SILENCE]")) {
-              userQuery = candidate;
-              break;
-            }
+    // 2. Prefer Groq Whisper for every recorded utterance. Browser speech
+    // recognition text remains a fallback if Whisper is unavailable.
+    if (audioData) {
+      try {
+        const transcript = await transcribeWithGroq(audioData, mimeType || "audio/webm");
+        if (transcript) userQuery = transcript;
+      } catch (error) {
+        console.warn("[voice/talk] Groq transcription failed; using browser transcript if available:", String(error));
+        if (!userQuery) {
+          const errorText = String(error);
+          let userMessage = "Could not transcribe that recording. Please try speaking again.";
+          if (/GROQ_API_KEY is not configured|\(401\)|\(403\)/i.test(errorText)) {
+            userMessage = "Groq speech transcription is not configured correctly.";
+          } else if (/\(429\)/i.test(errorText)) {
+            userMessage = "Speech transcription is temporarily rate limited. Please try again shortly.";
+          } else if (/invalid_media_file|could not process file|\(400\)/i.test(errorText)) {
+            userMessage = "The microphone recording was incomplete. Please speak after the mic starts, then pause or tap Done.";
           }
-        } catch {
-          // try next stt model
+          return NextResponse.json(
+            { success: false, error: userMessage },
+            { status: 502 }
+          );
         }
-      }
-
-      if (!userQuery) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: "No audible speech was detected. Please ask your financial question again.",
-          },
-          { status: 400 }
-        );
       }
     }
 
+    if (!userQuery) {
+      return NextResponse.json(
+        { success: false, error: "No audible speech was detected. Please ask your financial question again." },
+        { status: 400 }
+      );
+    }
+
     // 3. Retrieve relevant screen-memory chunks for the user's query
-    const retrieved = screenMemoryStore.retrieveRelevant(sessionId, userQuery, 4);
+    const retrieved = screenMemoryStore.retrieveRelevant(sessionId, userQuery, 6);
 
     // 4. Construct grounded system instruction
     const systemInstruction = `You are Priya, an elite Indian financial voice co-pilot for Indian stock markets (NSE/BSE).
@@ -109,16 +77,16 @@ Tone, Style & Spoken Persona:
 3. Incorporate conversational Indian English and natural Hinglish terms when suitable (CMP, levels, breakout, theek hai, bilkul, pakka).
 4. NEVER use markdown symbols (*, #, _, brackets) or bullet points, as this text is read aloud by ElevenLabs voice AI. Replace ₹ with rupees.
 5. CRITICAL INSTRUCTION - ANSWER WHAT WAS ASKED:
-- You have live vision of the user's active screen data below. Directly address what the user asked in your opening words.
-- If the user asks for stock price / CMP, immediately state the current price from the screen facts.
-- If the user asks for PE or valuation, explain the PE and whether it's cheap or expensive.
-- If the user asks if this stock is safe or good, evaluate it using the Smart Score or fundamentals on screen.
-- If the user asks general questions about the screen, summarize the active stock or visible table.
-- Never repeat a static greeting. Always answer the user's exact question using the live screen context.
+- The context below describes the page currently open for the user. It may be a stock, portfolio, watchlist, screener, calculator, or another page.
+- For page-specific questions, use only facts present in that context. Do not invent values or claim that a value is live if it is not shown there.
+- If the requested detail is not present, say it is not visible in the captured page and ask what the user wants to inspect.
+- If the user asks for stock price / CMP, state the current price only when it appears in the screen facts.
+- If the user asks about a non-stock page, explain the visible page data directly instead of assuming they are on a stock page.
+- Never repeat a static greeting. Address the user's exact question in the opening words.
 
-=== LIVE GROUNDED SCREEN CONTEXT ===
+=== CURRENT PAGE SCREEN CONTEXT ===
 ${retrieved.groundingContext}
-=== END OF CONTEXT ===`;
+=== END OF CURRENT PAGE CONTEXT ===`;
 
     // 5. Build conversation history
     const contents: any[] = [];

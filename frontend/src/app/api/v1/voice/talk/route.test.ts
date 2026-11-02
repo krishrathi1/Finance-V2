@@ -2,6 +2,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { NextRequest } from "next/server";
 import { POST } from "./route";
 
+const { transcribeWithGroq } = vi.hoisted(() => ({ transcribeWithGroq: vi.fn() }));
+
+vi.mock("@/server/ai/groq-whisper", () => ({ transcribeWithGroq }));
+
 // Mock ElevenLabs synthesis
 vi.mock("@/lib/elevenlabs", () => ({
   synthesizeSpeech: vi.fn().mockResolvedValue({
@@ -97,6 +101,53 @@ describe("POST /api/v1/voice/talk", () => {
     expect(data.userQuery).toBe("What is the CMP and PE of this stock?");
     expect(data.textReply).toContain("TCS");
     expect(data.audioBase64).toBe("dGVzdC1hdWRpby1ieXRlcw==");
+  });
+
+  it("uses Groq Whisper audio transcription instead of a partial browser transcript", async () => {
+    transcribeWithGroq.mockResolvedValueOnce("What is the price of Reliance?");
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ candidates: [{ content: { parts: [{ text: "Reliance is shown at 2,500 rupees." }] } }] }),
+    });
+
+    const req = new NextRequest("http://localhost/api/v1/voice/talk", {
+      method: "POST",
+      body: JSON.stringify({
+        sessionId: "sess-groq-123",
+        message: "What is the price of",
+        audioData: "dGVzdC1hdWRpby1ieXRlcw==",
+        mimeType: "audio/webm;codecs=opus",
+      }),
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(transcribeWithGroq).toHaveBeenCalledWith("dGVzdC1hdWRpby1ieXRlcw==", "audio/webm;codecs=opus");
+    expect(data.userQuery).toBe("What is the price of Reliance?");
+  });
+
+  it("falls back to browser transcript if Groq transcription fails", async () => {
+    transcribeWithGroq.mockRejectedValueOnce(new Error("Groq unavailable"));
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ candidates: [{ content: { parts: [{ text: "Fallback response." }] } }] }),
+    });
+
+    const req = new NextRequest("http://localhost/api/v1/voice/talk", {
+      method: "POST",
+      body: JSON.stringify({
+        sessionId: "sess-groq-fallback-123",
+        message: "Browser transcript fallback",
+        audioData: "dGVzdC1hdWRpby1ieXRlcw==",
+        mimeType: "audio/webm",
+      }),
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.userQuery).toBe("Browser transcript fallback");
   });
 
   it("returns 502 error when Gemini model fails instead of substituting a fake greeting", async () => {

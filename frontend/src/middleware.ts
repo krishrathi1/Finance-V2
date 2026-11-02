@@ -13,6 +13,9 @@ const STRICT_AUTH_API = /^\/api\/v1\/auth\/(login|register|forgot-password|verif
 // LLM-backed endpoints: expensive per call, keep abuse bounded.
 const AI_API =
   /^\/api\/v1\/stocks\/(screener\/ai|compare-analysis|portfolio-risk|portfolio-roast|ipo\/[^/]+\/ai-analysis|[^/]+\/(swot|earnings-tldr|competitor-verdict|news-analysis|watchlist-analysis|research-report))$/;
+// Voice transcription uses a metered external speech API, so bound anonymous
+// requests per client IP as well as the model-backed stock endpoints above.
+const VOICE_API = /^\/api\/v1\/voice\/talk$/;
 // CPU/memory-heavy document parsing (PDF/DOCX extraction) — no auth required
 // (portfolio import is intentionally usable without a login) but must be
 // rate-limited so it can't be used as a resource-exhaustion vector.
@@ -47,6 +50,9 @@ export async function middleware(request: NextRequest) {
       // AI-backed endpoints are rate-limited to prevent abuse while allowing
       // both authenticated users and guests to access stock analysis features.
       const result = await rateLimit(`ai:${ip}`, 20, 60_000);
+      if (!result.ok) return tooManyRequests(result.retryAfterSeconds);
+    } else if (VOICE_API.test(pathname) && request.method === "POST") {
+      const result = await rateLimit(`voice:${ip}`, 20, 60_000);
       if (!result.ok) return tooManyRequests(result.retryAfterSeconds);
     } else if (DOCUMENT_PARSE_API.test(pathname) && request.method === "POST") {
       const result = await rateLimit(`doc-parse:${ip}`, 10, 5 * 60_000);
@@ -105,5 +111,6 @@ export const config = {
     "/api/v1/auth/:path*",
     "/api/v1/stocks/:path*",
     "/api/v1/portfolio/:path*",
+    "/api/v1/voice/:path*",
   ],
 };

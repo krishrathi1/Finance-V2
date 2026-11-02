@@ -132,27 +132,38 @@ export function extractClientScreenSnapshot(sessionId: string): ScreenSnapshot {
     }
   }
 
-  // 3. Extract Key Headings and Content Blocks
-  const headings = Array.from(document.querySelectorAll("h1, h2, h3")).slice(0, 5);
+  const mainEl = document.querySelector("main") || document.body;
+
+  // 3. Capture content following visible headings. Many app pages use cards
+  // and divs rather than semantic sections, so collect sibling blocks until
+  // the next heading instead of only looking for one paragraph.
+  const headings = Array.from(mainEl.querySelectorAll("h1, h2, h3")).slice(0, 16);
   for (const h of headings) {
     const title = h.textContent?.trim() || "";
     if (!title) continue;
 
-    const parent = h.parentElement;
-    const pEl = parent?.querySelector("p");
-    const text = pEl?.textContent?.trim() || "";
+    const blocks: string[] = [];
+    let sibling = h.nextElementSibling;
+    while (sibling && !/^H[1-3]$/.test(sibling.tagName) && blocks.join(" ").length < 1800) {
+      const text = (sibling as HTMLElement).innerText?.trim();
+      if (text) blocks.push(text);
+      sibling = sibling.nextElementSibling;
+    }
+    const text = blocks.join(" ").slice(0, 1800);
 
     if (text) {
       sections.push({ title, text });
     }
   }
 
-  // 4. Capture visible excerpt from main container
-  const mainEl = document.querySelector("main") || document.body;
+  // 4. Always capture the active page's visible text. This covers pages built
+  // from cards, tabs, and custom layouts that do not expose useful <table> or
+  // paragraph markup. Keep a bounded excerpt so snapshots stay small.
   const visibleExcerpt = (mainEl?.innerText || "")
-    .replace(/\s+/g, " ")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n{2,}/g, "\n")
     .trim()
-    .slice(0, 800);
+    .slice(0, 8000);
 
   return buildScreenSnapshot({
     sessionId,
