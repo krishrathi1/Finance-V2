@@ -8,6 +8,7 @@ import { PageHero } from "@/components/page-hero";
 import { DashboardAutoRefresh } from "@/components/sections/dashboard-auto-refresh";
 import { LiveStockDetails } from "@/components/sections/live-stock-details";
 import { StockSectionTabs } from "@/components/sections/stock-section-tabs";
+import { ViewModeProvider } from "@/context/view-mode-context";
 // Server-side data access, not the HTTP client in lib/api.ts. This page runs
 // on the server, so it calls the dashboard builder directly instead of making
 // the app issue an HTTP request to its own API — that round trip broke
@@ -496,23 +497,25 @@ export default async function StockDetailsPage({ params, searchParams }: Props) 
 
       <DashboardAutoRefresh symbol={symbol} active={shouldAutoRefresh} warning={refreshWarning} />
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(280px,340px)_minmax(0,1fr)] 2xl:grid-cols-[minmax(300px,360px)_minmax(0,1fr)]">
-        <aside className="min-w-0">
-          <PriceSidebar data={data} />
-        </aside>
+      <ViewModeProvider>
+        <div className="grid gap-4 lg:grid-cols-[minmax(280px,340px)_minmax(0,1fr)] 2xl:grid-cols-[minmax(300px,360px)_minmax(0,1fr)]">
+          <aside className="min-w-0">
+            <PriceSidebar data={data} />
+          </aside>
 
-        <section className="min-w-0 space-y-4">
-          <StockSectionTabs />
+          <section className="min-w-0 space-y-4">
+            <StockSectionTabs />
 
-          {/* key={symbol} forces a full remount on navigation between stocks —
-              LiveStockDetails and its children (SWOT, earnings TL;DR,
-              competitor verdict, news, AI chat) all seed local state from
-              props via useState with no resync effect, so without this they
-              silently keep showing the previous symbol's content/AI answers
-              after a client-side navigation. */}
-          <LiveStockDetails key={symbol} initialData={data} symbol={symbol} exchange={data.exchange || exchange} />
-        </section>
-      </div>
+            {/* key={symbol} forces a full remount on navigation between stocks —
+                LiveStockDetails and its children (SWOT, earnings TL;DR,
+                competitor verdict, news, AI chat) all seed local state from
+                props via useState with no resync effect, so without this they
+                silently keep showing the previous symbol's content/AI answers
+                after a client-side navigation. */}
+            <LiveStockDetails key={symbol} initialData={data} symbol={symbol} exchange={data.exchange || exchange} />
+          </section>
+        </div>
+      </ViewModeProvider>
     </div>
     </>
   );

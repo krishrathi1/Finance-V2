@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Area,
   AreaChart,
@@ -24,6 +24,11 @@ type TabKey = "price-dma" | "financials" | "shareholding" | "drawdown" | "sip";
 
 export function InteractiveChartsSuite({ data }: { data: DashboardData }) {
   const [activeTab, setActiveTab] = useState<TabKey>("price-dma");
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const handleTabChange = (newTab: TabKey) => {
     setActiveTab(newTab);
@@ -203,145 +208,153 @@ export function InteractiveChartsSuite({ data }: { data: DashboardData }) {
         </div>
       </div>
 
-      {/* Chart Display Container - Minimal Margin to Stick Flush to Borders */}
-      <div className="mt-3 h-[350px] w-full -mx-1">
-        {activeTab === "price-dma" && (
-          priceChartData.length ? (
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={priceChartData} margin={{ top: 10, right: 5, left: -20, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="priceGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.4} />
-                    <stop offset="95%" stopColor="#f59e0b" stopOpacity={0.0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.07)" />
-                <XAxis dataKey="date" tick={{ fill: "#9ca3af", fontSize: 11 }} tickLine={false} />
-                <YAxis domain={["auto", "auto"]} tick={{ fill: "#9ca3af", fontSize: 11 }} tickLine={false} />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: "#18181b",
-                    borderColor: "#27272a",
-                    borderRadius: 12,
-                    fontSize: 12,
-                  }}
-                />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Area type="monotone" dataKey="price" name="Share Price (₹)" stroke="#f59e0b" strokeWidth={2.5} fill="url(#priceGrad)" />
-                <Line type="monotone" dataKey="sma50" name="50-Day DMA" stroke="#10b981" strokeWidth={2} dot={false} />
-                <Line type="monotone" dataKey="sma200" name="200-Day DMA" stroke="#6366f1" strokeWidth={2} dot={false} />
-              </AreaChart>
-            </ResponsiveContainer>
-          ) : (
-            <div className="flex h-full items-center justify-center text-xs text-muted">Price history chart unavailable.</div>
-          )
-        )}
+      {/* Chart Display Container */}
+      <div className="mt-3 h-[350px] w-full min-w-0">
+        {!mounted ? (
+          <div className="flex h-full w-full items-center justify-center rounded-2xl bg-panel/40 animate-pulse text-xs text-muted">
+            Loading interactive chart...
+          </div>
+        ) : (
+          <>
+            {activeTab === "price-dma" && (
+              priceChartData.length ? (
+                <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={300}>
+                  <AreaChart data={priceChartData} margin={{ top: 10, right: 5, left: -20, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="priceGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.4} />
+                        <stop offset="95%" stopColor="#f59e0b" stopOpacity={0.0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.07)" />
+                    <XAxis dataKey="date" tick={{ fill: "#9ca3af", fontSize: 11 }} tickLine={false} />
+                    <YAxis domain={["auto", "auto"]} tick={{ fill: "#9ca3af", fontSize: 11 }} tickLine={false} />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: "#18181b",
+                        borderColor: "#27272a",
+                        borderRadius: 12,
+                        fontSize: 12,
+                      }}
+                    />
+                    <Legend wrapperStyle={{ fontSize: 12 }} />
+                    <Area type="monotone" dataKey="price" name="Share Price (₹)" stroke="#f59e0b" strokeWidth={2.5} fill="url(#priceGrad)" />
+                    <Line type="monotone" dataKey="sma50" name="50-Day DMA" stroke="#10b981" strokeWidth={2} dot={false} />
+                    <Line type="monotone" dataKey="sma200" name="200-Day DMA" stroke="#6366f1" strokeWidth={2} dot={false} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex h-full items-center justify-center text-xs text-muted">Price history chart unavailable.</div>
+              )
+            )}
 
-        {activeTab === "financials" && (
-          financialGrowthData.length ? (
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={financialGrowthData} margin={{ top: 10, right: 5, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.07)" />
-                <XAxis dataKey="period" tick={{ fill: "#9ca3af", fontSize: 11 }} tickLine={false} />
-                <YAxis tick={{ fill: "#9ca3af", fontSize: 11 }} tickLine={false} />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: "#18181b",
-                    borderColor: "#27272a",
-                    borderRadius: 12,
-                    fontSize: 12,
-                  }}
-                />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Bar dataKey="revenue" name="Total Revenue (Cr)" fill="#3b82f6" radius={[6, 6, 0, 0]} />
-                <Bar dataKey="netProfit" name="Net Profit (Cr)" fill="#10b981" radius={[6, 6, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          ) : (
-            <div className="flex h-full items-center justify-center text-xs text-muted">Financial growth chart data unavailable.</div>
-          )
-        )}
+            {activeTab === "financials" && (
+              financialGrowthData.length ? (
+                <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={300}>
+                  <BarChart data={financialGrowthData} margin={{ top: 10, right: 5, left: -20, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.07)" />
+                    <XAxis dataKey="period" tick={{ fill: "#9ca3af", fontSize: 11 }} tickLine={false} />
+                    <YAxis tick={{ fill: "#9ca3af", fontSize: 11 }} tickLine={false} />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: "#18181b",
+                        borderColor: "#27272a",
+                        borderRadius: 12,
+                        fontSize: 12,
+                      }}
+                    />
+                    <Legend wrapperStyle={{ fontSize: 12 }} />
+                    <Bar dataKey="revenue" name="Total Revenue (Cr)" fill="#3b82f6" radius={[6, 6, 0, 0]} />
+                    <Bar dataKey="netProfit" name="Net Profit (Cr)" fill="#10b981" radius={[6, 6, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex h-full items-center justify-center text-xs text-muted">Financial growth chart data unavailable.</div>
+              )
+            )}
 
-        {activeTab === "shareholding" && (
-          shareholdingData.length ? (
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={shareholdingData} margin={{ top: 10, right: 5, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.07)" />
-                <XAxis dataKey="quarter" tick={{ fill: "#9ca3af", fontSize: 11 }} tickLine={false} />
-                <YAxis domain={[0, 100]} tick={{ fill: "#9ca3af", fontSize: 11 }} tickLine={false} unit="%" />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: "#18181b",
-                    borderColor: "#27272a",
-                    borderRadius: 12,
-                    fontSize: 12,
-                  }}
-                />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Area type="monotone" dataKey="Promoters" stackId="1" stroke="#f59e0b" fill="#f59e0b" fillOpacity={0.6} />
-                <Area type="monotone" dataKey="FII" stackId="1" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.6} />
-                <Area type="monotone" dataKey="DII" stackId="1" stroke="#10b981" fill="#10b981" fillOpacity={0.6} />
-                <Area type="monotone" dataKey="Public" stackId="1" stroke="#a855f7" fill="#a855f7" fillOpacity={0.6} />
-              </AreaChart>
-            </ResponsiveContainer>
-          ) : (
-            <div className="flex h-full items-center justify-center text-xs text-muted">Shareholding trend chart unavailable.</div>
-          )
-        )}
+            {activeTab === "shareholding" && (
+              shareholdingData.length ? (
+                <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={300}>
+                  <AreaChart data={shareholdingData} margin={{ top: 10, right: 5, left: -20, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.07)" />
+                    <XAxis dataKey="quarter" tick={{ fill: "#9ca3af", fontSize: 11 }} tickLine={false} />
+                    <YAxis domain={[0, 100]} tick={{ fill: "#9ca3af", fontSize: 11 }} tickLine={false} unit="%" />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: "#18181b",
+                        borderColor: "#27272a",
+                        borderRadius: 12,
+                        fontSize: 12,
+                      }}
+                    />
+                    <Legend wrapperStyle={{ fontSize: 12 }} />
+                    <Area type="monotone" dataKey="Promoters" stackId="1" stroke="#f59e0b" fill="#f59e0b" fillOpacity={0.6} />
+                    <Area type="monotone" dataKey="FII" stackId="1" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.6} />
+                    <Area type="monotone" dataKey="DII" stackId="1" stroke="#10b981" fill="#10b981" fillOpacity={0.6} />
+                    <Area type="monotone" dataKey="Public" stackId="1" stroke="#a855f7" fill="#a855f7" fillOpacity={0.6} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex h-full items-center justify-center text-xs text-muted">Shareholding trend chart unavailable.</div>
+              )
+            )}
 
-        {activeTab === "drawdown" && (
-          drawdownData.length ? (
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={drawdownData} margin={{ top: 10, right: 5, left: -20, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="drawdownGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#ef4444" stopOpacity={0.1} />
-                    <stop offset="95%" stopColor="#ef4444" stopOpacity={0.5} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.07)" />
-                <XAxis dataKey="date" tick={{ fill: "#9ca3af", fontSize: 11 }} tickLine={false} />
-                <YAxis domain={["auto", 0]} tick={{ fill: "#9ca3af", fontSize: 11 }} tickLine={false} unit="%" />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: "#18181b",
-                    borderColor: "#27272a",
-                    borderRadius: 12,
-                    fontSize: 12,
-                  }}
-                />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Area type="monotone" dataKey="drawdown" name="Drawdown from Peak (%)" stroke="#ef4444" strokeWidth={2.5} fill="url(#drawdownGrad)" />
-              </AreaChart>
-            </ResponsiveContainer>
-          ) : (
-            <div className="flex h-full items-center justify-center text-xs text-muted">Drawdown risk data unavailable.</div>
-          )
-        )}
+            {activeTab === "drawdown" && (
+              drawdownData.length ? (
+                <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={300}>
+                  <AreaChart data={drawdownData} margin={{ top: 10, right: 5, left: -20, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="drawdownGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#ef4444" stopOpacity={0.1} />
+                        <stop offset="95%" stopColor="#ef4444" stopOpacity={0.5} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.07)" />
+                    <XAxis dataKey="date" tick={{ fill: "#9ca3af", fontSize: 11 }} tickLine={false} />
+                    <YAxis domain={["auto", 0]} tick={{ fill: "#9ca3af", fontSize: 11 }} tickLine={false} unit="%" />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: "#18181b",
+                        borderColor: "#27272a",
+                        borderRadius: 12,
+                        fontSize: 12,
+                      }}
+                    />
+                    <Legend wrapperStyle={{ fontSize: 12 }} />
+                    <Area type="monotone" dataKey="drawdown" name="Drawdown from Peak (%)" stroke="#ef4444" strokeWidth={2.5} fill="url(#drawdownGrad)" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex h-full items-center justify-center text-xs text-muted">Drawdown risk data unavailable.</div>
+              )
+            )}
 
-        {activeTab === "sip" && (
-          sipGrowthData.length ? (
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={sipGrowthData} margin={{ top: 10, right: 5, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.07)" />
-                <XAxis dataKey="date" tick={{ fill: "#9ca3af", fontSize: 11 }} tickLine={false} />
-                <YAxis tick={{ fill: "#9ca3af", fontSize: 11 }} tickLine={false} />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: "#18181b",
-                    borderColor: "#27272a",
-                    borderRadius: 12,
-                    fontSize: 12,
-                  }}
-                />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Line type="monotone" dataKey="invested" name="Invested Principal (₹)" stroke="#6b7280" strokeWidth={2} strokeDasharray="5 5" dot={false} />
-                <Line type="monotone" dataKey="value" name="Portfolio Value (₹)" stroke="#10b981" strokeWidth={2.5} dot={false} />
-              </LineChart>
-            </ResponsiveContainer>
-          ) : (
-            <div className="flex h-full items-center justify-center text-xs text-muted">SIP simulation data unavailable.</div>
-          )
+            {activeTab === "sip" && (
+              sipGrowthData.length ? (
+                <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={300}>
+                  <LineChart data={sipGrowthData} margin={{ top: 10, right: 5, left: -20, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.07)" />
+                    <XAxis dataKey="date" tick={{ fill: "#9ca3af", fontSize: 11 }} tickLine={false} />
+                    <YAxis tick={{ fill: "#9ca3af", fontSize: 11 }} tickLine={false} />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: "#18181b",
+                        borderColor: "#27272a",
+                        borderRadius: 12,
+                        fontSize: 12,
+                      }}
+                    />
+                    <Legend wrapperStyle={{ fontSize: 12 }} />
+                    <Line type="monotone" dataKey="invested" name="Invested Principal (₹)" stroke="#6b7280" strokeWidth={2} strokeDasharray="5 5" dot={false} />
+                    <Line type="monotone" dataKey="value" name="Portfolio Value (₹)" stroke="#10b981" strokeWidth={2.5} dot={false} />
+                  </LineChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex h-full items-center justify-center text-xs text-muted">SIP simulation data unavailable.</div>
+              )
+            )}
+          </>
         )}
       </div>
     </Card>

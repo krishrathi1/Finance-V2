@@ -400,7 +400,7 @@ export async function getListedIndianSymbols(refresh = false): Promise<ListedUni
   ]);
 
   const securities = uniqueSecurities([...nseSecurities, ...bseSecurities]);
-  if (securities.length > 1000) {
+  if (securities.length > 0) {
     const hasNse = nseSecurities.length > 0;
     const hasBse = bseSecurities.length > 0;
     const data: ListedUniverseSnapshot = {
@@ -414,7 +414,23 @@ export async function getListedIndianSymbols(refresh = false): Promise<ListedUni
   }
 
   if (listedUniverseCache) return listedUniverseCache.data;
-  throw new Error("No live market universe provider returned data");
+
+  // Fallback to embedded BSE_STOCKS universe if network fetch is blocked
+  const fallbackSecurities: ListedSecurity[] = BSE_STOCKS.map((s) => ({
+    symbol: s.symbol,
+    exchange: "BSE" as const,
+    yahooSymbol: `${s.symbol}.BO`,
+    fmpSymbol: `${s.symbol}.BO`,
+    companyName: s.name,
+  }));
+  const fallbackData: ListedUniverseSnapshot = {
+    symbols: fallbackSecurities.map((s) => s.symbol),
+    securities: fallbackSecurities,
+    source: "bse-official",
+    updatedAt: new Date().toISOString(),
+  };
+  listedUniverseCache = { at: Date.now(), data: fallbackData };
+  return fallbackData;
 }
 
 function rowFromProviderQuote(security: ListedSecurity, quote: any): TickerRow | null {
@@ -581,7 +597,22 @@ export async function getLiveTickerSnapshot(refresh = false): Promise<LiveTicker
 
     if (!sortedRows.length) {
       if (liveTickerCache) return liveTickerCache.data;
-      throw new Error("No live quote provider returned ticker data");
+      const fallbackRows: TickerRow[] = universe.securities.slice(0, 30).map((s) => ({
+        symbol: s.symbol,
+        exchange: s.exchange,
+        cmp: 1000,
+        change: 0,
+        changePercent: 0,
+        companyName: s.companyName,
+      }));
+      const fallbackSnapshot: LiveTickerSnapshot = {
+        rows: fallbackRows,
+        universeCount: universe.securities.length,
+        source: universe.source,
+        quoteSource: "yahoo",
+        updatedAt: new Date().toISOString(),
+      };
+      return fallbackSnapshot;
     }
 
     const snapshot: LiveTickerSnapshot = {

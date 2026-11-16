@@ -1,5 +1,5 @@
 /**
- * ElevenLabs Speech Synthesis integration.
+ * ElevenLabs & Sarvam AI Speech Synthesis integration.
  * Produces lifelike, high-clarity spoken audio with natural conversational Indian accent.
  */
 
@@ -11,27 +11,14 @@ export interface SynthesizeOptions {
 }
 
 /**
- * Converts text into natural, lifelike conversational speech using ElevenLabs.
- * Default voice: 'pFZP5JQG7iQjIQuC4Bku' (Lily - verified natural multilingual voice).
- * Default model: 'eleven_multilingual_v2' for authentic Indian English/Hindi accent and emotional cadence.
+ * Converts text into natural, lifelike conversational speech.
+ * Primary: Sarvam AI Indian Text-to-Speech (native en-IN, speaker 'priya').
+ * Fallback: ElevenLabs ('eleven_multilingual_v2', Lily / custom voice).
  */
 export async function synthesizeSpeech(
   text: string,
   options?: SynthesizeOptions
 ): Promise<{ audioBase64: string; mimeType: string }> {
-  const apiKey = (process.env.ELEVENLABS_API_KEY || "").trim();
-  if (!apiKey) {
-    throw new Error("ELEVENLABS_API_KEY is not configured");
-  }
-
-  // Voice ID precedence: option > env > Lily (verified working multilingual voice)
-  const voiceId =
-    options?.voiceId ||
-    process.env.ELEVENLABS_VOICE_ID ||
-    "pFZP5JQG7iQjIQuC4Bku";
-
-  const modelId = options?.modelId || "eleven_multilingual_v2";
-
   // Clean markdown and non-verbal tokens for crisp, natural human speech
   const cleanedText = text
     .replace(/[*#_`~]/g, "")
@@ -44,61 +31,92 @@ export async function synthesizeSpeech(
     throw new Error("Cannot synthesize empty text");
   }
 
-  const payload = {
-    text: cleanedText,
-    model_id: modelId,
-    voice_settings: {
-      stability: options?.stability ?? 0.5,
-      similarity_boost: options?.similarityBoost ?? 0.8,
-      style: 0.15,
-      use_speaker_boost: true,
-    },
-  };
+  const sarvamKey = (process.env.SARVAM_API_KEY || "").trim();
+  const elevenlabsKey = (process.env.ELEVENLABS_API_KEY || "").trim();
 
-  try {
-    const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
-      method: "POST",
-      headers: {
-        "xi-api-key": apiKey,
-        "Content-Type": "application/json",
-        Accept: "audio/mpeg",
-      },
-      body: JSON.stringify(payload),
-    });
+  // 1. Try Sarvam AI Indian Text-to-Speech if configured
+  if (sarvamKey) {
+    try {
+      const speaker = process.env.SARVAM_SPEAKER || "priya";
+      const res = await fetch("https://api.sarvam.ai/text-to-speech", {
+        method: "POST",
+        headers: {
+          "api-subscription-key": sarvamKey,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          inputs: [cleanedText],
+          target_language_code: "en-IN",
+          speaker,
+        }),
+        signal: AbortSignal.timeout(4500),
+      });
 
-    if (!res.ok) {
-      const errText = await res.text();
-      // If primary voice is unavailable, retry with verified default Lily
-      if (voiceId !== "pFZP5JQG7iQjIQuC4Bku") {
-        console.warn(`[elevenlabs] voice ${voiceId} returned ${res.status}, retrying with default voice`);
-        const fallbackRes = await fetch("https://api.elevenlabs.io/v1/text-to-speech/pFZP5JQG7iQjIQuC4Bku", {
-          method: "POST",
-          headers: {
-            "xi-api-key": apiKey,
-            "Content-Type": "application/json",
-            Accept: "audio/mpeg",
-          },
-          body: JSON.stringify(payload),
-        });
-
-        if (fallbackRes.ok) {
-          const arrayBuf = await fallbackRes.arrayBuffer();
+      if (res.ok) {
+        const data = await res.json();
+        const audioBase64 = data.audios?.[0];
+        if (audioBase64) {
           return {
-            audioBase64: Buffer.from(arrayBuf).toString("base64"),
-            mimeType: "audio/mpeg",
+            audioBase64,
+            mimeType: "audio/wav",
           };
         }
+      } else {
+        const errText = await res.text();
+        console.warn(`[sarvam-tts] API error (${res.status}): ${errText.slice(0, 150)}`);
       }
-      throw new Error(`ElevenLabs API error (${res.status}): ${errText.slice(0, 200)}`);
+    } catch (err: any) {
+      console.warn("[sarvam-tts] request failed:", err?.message);
     }
-
-    const arrayBuf = await res.arrayBuffer();
-    return {
-      audioBase64: Buffer.from(arrayBuf).toString("base64"),
-      mimeType: "audio/mpeg",
-    };
-  } catch (err: any) {
-    console.error("[elevenlabs] synthesizeSpeech error:", err?.message);
-    throw err;
   }
+
+  // 2. Try ElevenLabs if configured
+  if (elevenlabsKey) {
+    // Voice ID precedence: option > env > Lily (verified working multilingual voice)
+    const voiceId =
+      options?.voiceId ||
+      process.env.ELEVENLABS_VOICE_ID ||
+      "pFZP5JQG7iQjIQuC4Bku";
+
+    const modelId = options?.modelId || "eleven_multilingual_v2";
+
+    const payload = {
+      text: cleanedText,
+      model_id: modelId,
+      voice_settings: {
+        stability: options?.stability ?? 0.5,
+        similarity_boost: options?.similarityBoost ?? 0.8,
+        style: 0.15,
+        use_speaker_boost: true,
+      },
+    };
+
+    try {
+      const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+        method: "POST",
+        headers: {
+          "xi-api-key": elevenlabsKey,
+          "Content-Type": "application/json",
+          Accept: "audio/mpeg",
+        },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(4500),
+      });
+
+      if (res.ok) {
+        const arrayBuf = await res.arrayBuffer();
+        return {
+          audioBase64: Buffer.from(arrayBuf).toString("base64"),
+          mimeType: "audio/mpeg",
+        };
+      } else {
+        const errText = await res.text();
+        console.warn(`[elevenlabs] API error (${res.status}): ${errText.slice(0, 150)}`);
+      }
+    } catch (err: any) {
+      console.warn("[elevenlabs] request failed:", err?.message);
+    }
+  }
+
+  throw new Error("Neither SARVAM_API_KEY nor ELEVENLABS_API_KEY is configured or reachable for speech synthesis");
 }

@@ -137,6 +137,32 @@ export function StockReportModal({
           </div>
         </div>
 
+        {/* Dynamic AI Quantitative & Risk Explanation */}
+        {(data.smartScore?.aiExplanation || data.riskScore?.aiExplanation) && (
+          <div className="p-4 rounded-2xl border border-primary/40 bg-primary/5 mb-6 print:border-gray-300 print:bg-gray-50">
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-primary">
+                AI Qualitative Thesis &amp; Risk Appraisal
+              </h4>
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-primary/10 text-primary font-semibold">
+                Powered by Gemini AI
+              </span>
+            </div>
+            {data.smartScore?.aiExplanation && (
+              <p className="text-xs leading-relaxed text-fg print:text-black mb-2">
+                <strong className="text-primary font-semibold">Smart Score Analysis: </strong>
+                {data.smartScore.aiExplanation}
+              </p>
+            )}
+            {data.riskScore?.aiExplanation && (
+              <p className="text-xs leading-relaxed text-fg print:text-black">
+                <strong className="text-danger font-semibold">Risk Rating Context: </strong>
+                {data.riskScore.aiExplanation}
+              </p>
+            )}
+          </div>
+        )}
+
         {/* Forensic & Accounting Audit Section */}
         <div className="p-4 rounded-2xl border border-border/70 bg-secondary/30 mb-6 print:border-gray-300 print:bg-gray-50">
           <h4 className="text-xs font-bold uppercase tracking-wider text-primary mb-2">

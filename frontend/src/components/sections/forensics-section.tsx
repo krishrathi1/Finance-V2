@@ -105,9 +105,16 @@ export function ForensicsSection({
                 <span className={`px-2.5 py-0.5 text-xs font-semibold rounded-full uppercase tracking-wider ${verdictStyle.badge}`}>
                   {audit.compositeForensicVerdict.overallHealth}
                 </span>
+                <span className="hidden sm:inline-flex items-center gap-1 text-[11px] font-semibold text-accent/90 bg-accent/10 border border-accent/25 px-2 py-0.5 rounded-full">
+                  <Activity className="h-3 w-3" /> Fraud &amp; Bankruptcy Shield
+                </span>
               </div>
               <p className="mt-1 text-sm text-muted-fg max-w-2xl">
                 {audit.compositeForensicVerdict.summary}
+              </p>
+              <p className="mt-1.5 text-xs text-muted flex items-center gap-1.5">
+                <Info className="h-3.5 w-3.5 text-accent shrink-0" />
+                <span>Beginner rule: M-Score &lt; -1.78 means unlikely manipulation; Z-Score &gt; 2.99 indicates zero distress.</span>
               </p>
             </div>
           </div>

@@ -112,32 +112,55 @@ export function FinancialsSection({
   balanceSheet: Array<Record<string, string | number | null>>;
   cashFlow: Array<Record<string, string | number | null>>;
 }) {
-  const [perShare, setPerShare] = useState(false);
+  const [viewFormat, setViewFormat] = useState<"totals" | "perShare" | "commonSize">("totals");
   const shares = typeof outstandingSharesCr === "number" && outstandingSharesCr > 0 ? outstandingSharesCr : null;
   const perShareAvailable = shares !== null;
 
   /**
-   * Statement figures are in ₹ crore and share count in crore, so
-   * value / shares already yields rupees per share — no unit conversion.
-   * Period/date labels and any already-per-share or ratio column are left
-   * alone; dividing an EPS or a percentage by the share count would be wrong.
+   * Statement figures transformation:
+   * 1. perShare: value / shares
+   * 2. commonSize (% of Sales / Revenue): value / totalRevenue * 100
    */
-  const toPerShare = useCallback(
+  const transformRows = useCallback(
     (rows: Array<Record<string, string | number | null>>) => {
-      if (!perShare || shares === null) return rows;
-      const untouched = /period|quarter|date|eps|per\s*share|pct|percent|margin|ratio|yield/i;
+      if (viewFormat === "totals") return rows;
+      const untouched = /period|quarter|date|eps|ratio|yield|growth|pct|percent/i;
+
       return rows.map((row) => {
         const next: Record<string, string | number | null> = {};
+        
+        // Find total revenue or top-line figure in this row for common size
+        let baseRevenue = 0;
+        if (viewFormat === "commonSize") {
+          for (const [k, v] of Object.entries(row)) {
+            if (/revenue|sales|total_income|turnover/i.test(k) && typeof v === "number" && v > 0) {
+              baseRevenue = v;
+              break;
+            }
+          }
+          if (!baseRevenue && typeof row.revenue === "number") {
+            baseRevenue = row.revenue;
+          }
+        }
+
         for (const [key, value] of Object.entries(row)) {
-          next[key] =
-            typeof value === "number" && Number.isFinite(value) && !untouched.test(key)
-              ? Math.round((value / shares) * 100) / 100
-              : value;
+          if (typeof value === "number" && Number.isFinite(value) && !untouched.test(key)) {
+            if (viewFormat === "perShare" && shares !== null) {
+              next[key] = Math.round((value / shares) * 100) / 100;
+            } else if (viewFormat === "commonSize" && baseRevenue > 0) {
+              const pct = (value / baseRevenue) * 100;
+              next[key] = `${pct.toFixed(1)}%`;
+            } else {
+              next[key] = value;
+            }
+          } else {
+            next[key] = value;
+          }
         }
         return next;
       });
     },
-    [perShare, shares],
+    [viewFormat, shares],
   );
 
   const formatGrowthValue = (value: number | null) => {
@@ -201,30 +224,44 @@ export function FinancialsSection({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-lg font-semibold">
           Financial Statements{" "}
-          {/* Figures are crore; unlabelled they read as absolute rupees. */}
           <span className="text-xs font-normal text-muted">
-            ({perShare ? "₹ per share" : "₹ crore"})
+            ({viewFormat === "perShare" ? "₹ per share" : viewFormat === "commonSize" ? "% of Sales / Revenue" : "₹ crore"})
           </span>
         </h3>
-        {/* Per-share view (a StockAnalysis.com staple): dividing by share count
-            makes companies of very different size directly comparable. Hidden
-            when share count is unknown rather than shown inert. */}
-        {perShareAvailable ? (
-          <div className="flex items-center gap-1 rounded-lg border border-border/60 p-0.5 text-xs">
-            {([false, true] as const).map((mode) => (
-              <button
-                key={String(mode)}
-                type="button"
-                onClick={() => setPerShare(mode)}
-                className={`rounded-md px-2 py-1 font-medium transition ${
-                  perShare === mode ? "bg-primary/10 text-primary" : "text-muted hover:text-text"
-                }`}
-              >
-                {mode ? "Per share" : "Totals"}
-              </button>
-            ))}
-          </div>
-        ) : null}
+
+        {/* View Format Switcher: Totals vs Per Share vs % of Sales */}
+        <div className="flex items-center gap-1 rounded-xl border border-border/60 bg-panel/60 p-1 text-xs">
+          <button
+            type="button"
+            onClick={() => setViewFormat("totals")}
+            className={`rounded-lg px-2.5 py-1 font-medium transition ${
+              viewFormat === "totals" ? "bg-accent/15 text-accent font-bold border border-accent/30" : "text-muted hover:text-text"
+            }`}
+          >
+            Totals (₹ Cr)
+          </button>
+          {perShareAvailable ? (
+            <button
+              type="button"
+              onClick={() => setViewFormat("perShare")}
+              className={`rounded-lg px-2.5 py-1 font-medium transition ${
+                viewFormat === "perShare" ? "bg-accent/15 text-accent font-bold border border-accent/30" : "text-muted hover:text-text"
+              }`}
+            >
+              Per Share
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => setViewFormat("commonSize")}
+            className={`rounded-lg px-2.5 py-1 font-medium transition ${
+              viewFormat === "commonSize" ? "bg-accent/15 text-accent font-bold border border-accent/30" : "text-muted hover:text-text"
+            }`}
+            title="Express each line item as a percentage of total sales to easily identify margin trends"
+          >
+            % of Sales (Common-Size)
+          </button>
+        </div>
       </div>
       <Tabs defaultValue="income" className="mt-3">
         <TabsList>
@@ -235,7 +272,7 @@ export function FinancialsSection({
 
         <TabsContent value="income" className="space-y-3">
           <FinancialBarChart data={quarterly} firstKey="revenue" secondKey="profit" />
-          <DataTable rows={toPerShare(incomeStatement.length ? incomeStatement : quarterly)} csvName={perShare ? "income-statement-per-share" : "income-statement"} />
+          <DataTable rows={transformRows(incomeStatement.length ? incomeStatement : quarterly)} csvName={`income-statement-${viewFormat}`} />
         </TabsContent>
 
         <TabsContent value="balance" className="space-y-3">
@@ -243,15 +280,15 @@ export function FinancialsSection({
             <FinancialBarChart data={yearly} firstKey="assets" secondKey="profit" />
           ) : null}
           <DataTable
-            rows={toPerShare(balanceSheet.length ? balanceSheet : yearly)}
+            rows={transformRows(balanceSheet.length ? balanceSheet : yearly)}
             emptyMessage="Balance sheet data isn't available for this stock from our current data providers."
-            csvName={perShare ? "balance-sheet-per-share" : "balance-sheet"}
+            csvName={`balance-sheet-${viewFormat}`}
           />
         </TabsContent>
 
         <TabsContent value="cash" className="space-y-3">
           <FinancialBarChart data={yearly} firstKey="cashFlow" secondKey="profit" />
-          <DataTable rows={toPerShare(cashFlow.length ? cashFlow : yearly)} csvName={perShare ? "cash-flow-per-share" : "cash-flow"} />
+          <DataTable rows={transformRows(cashFlow.length ? cashFlow : yearly)} csvName={`cash-flow-${viewFormat}`} />
         </TabsContent>
       </Tabs>
     </Card>

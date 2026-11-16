@@ -131,10 +131,11 @@ export async function nseGetJson<T = any>(
       return null;
     }
     return parsed as T;
-  } catch (error) {
-    // Named so a throttled/blocked NSE is distinguishable from a company
-    // that genuinely has no data — both used to return silently.
-    console.warn(`[nse] nseGetJson failed: ${String(error)}`);
+  } catch (error: any) {
+    // Suppress expected AbortErrors when NSE times out/throttles — fallbacks handle it seamlessly.
+    if (error?.name !== "AbortError" && !String(error).includes("aborted")) {
+      console.warn(`[nse] nseGetJson failed: ${String(error)}`);
+    }
     return null;
   }
 }

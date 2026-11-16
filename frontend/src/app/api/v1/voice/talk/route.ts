@@ -34,56 +34,82 @@ export async function POST(req: NextRequest) {
 
     // 2. Transcribe audio if message is empty but audioData is present
     if (!userQuery && audioData) {
-      if (!GEMINI_API_KEY) {
-        return NextResponse.json(
-          { success: false, error: "Speech-to-text requires configured GEMINI_API_KEY" },
-          { status: 500 }
-        );
-      }
+      const GROQ_KEY = (process.env.GROQ_API_KEY || "").trim();
 
-      const sttCandidates = ["gemini-flash-lite-latest", "gemini-3.8-flash", "gemini-3-flash-preview"];
-      for (const sttModel of sttCandidates) {
+      // Priority 1: High-speed Groq Whisper (~150ms transcription)
+      if (GROQ_KEY) {
         try {
-          const sttRes = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/${sttModel}:generateContent?key=${GEMINI_API_KEY}`,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                contents: [
-                  {
-                    role: "user",
-                    parts: [
-                      {
-                        inlineData: {
-                          mimeType: mimeType || "audio/webm",
-                          data: audioData,
-                        },
-                      },
-                      {
-                        text: "Transcribe the user's speech in this audio clip. Output ONLY the transcribed words. If there is no discernible speech or only background silence, output [SILENCE].",
-                      },
-                    ],
-                  },
-                ],
-                generationConfig: {
-                  temperature: 0.1,
-                  maxOutputTokens: 100,
-                },
-              }),
-            }
-          );
+          const buffer = Buffer.from(audioData, "base64");
+          const formData = new FormData();
+          const blob = new Blob([buffer], { type: mimeType || "audio/webm" });
+          formData.append("file", blob, "audio.webm");
+          formData.append("model", "whisper-large-v3");
 
-          if (sttRes.ok) {
-            const sttJson = await sttRes.json();
-            const candidate = sttJson?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "";
-            if (candidate && !candidate.includes("[SILENCE]")) {
-              userQuery = candidate;
-              break;
+          const groqStt = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${GROQ_KEY}` },
+            body: formData,
+            signal: AbortSignal.timeout(3500),
+          });
+
+          if (groqStt.ok) {
+            const data = await groqStt.json();
+            if (data?.text?.trim()) {
+              userQuery = data.text.trim();
             }
           }
         } catch {
-          // try next stt model
+          // Groq STT error, fall through to Gemini
+        }
+      }
+
+      // Priority 2: Gemini STT Fallback
+      if (!userQuery && GEMINI_API_KEY) {
+        const sttCandidates = ["gemini-2.5-flash", "gemini-1.5-flash"];
+        for (const sttModel of sttCandidates) {
+          try {
+            const sttRes = await fetch(
+              `https://generativelanguage.googleapis.com/v1beta/models/${sttModel}:generateContent?key=${GEMINI_API_KEY}`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  contents: [
+                    {
+                      role: "user",
+                      parts: [
+                        {
+                          inlineData: {
+                            mimeType: mimeType || "audio/webm",
+                            data: audioData,
+                          },
+                        },
+                        {
+                          text: "Transcribe the user's speech in this audio clip. Output ONLY the transcribed words. If there is no discernible speech or only background silence, output [SILENCE].",
+                        },
+                      ],
+                    },
+                  ],
+                  generationConfig: {
+                    temperature: 0.1,
+                    maxOutputTokens: 100,
+                  },
+                }),
+                signal: AbortSignal.timeout(3000),
+              }
+            );
+
+            if (sttRes.ok) {
+              const sttJson = await sttRes.json();
+              const candidate = sttJson?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "";
+              if (candidate && !candidate.includes("[SILENCE]")) {
+                userQuery = candidate;
+                break;
+              }
+            }
+          } catch {
+            // try next stt model
+          }
         }
       }
 
@@ -138,10 +164,57 @@ ${retrieved.groundingContext}
       parts: [{ text: userQuery }],
     });
 
-    // 6. Generate answer via Gemini Flash
+    // 6. Generate answer via ultra-fast Groq LLM (Priority 1 for instant voice latency ~80ms)
     let textReply = "";
-    if (GEMINI_API_KEY) {
-      const candidateModels = ["gemini-flash-lite-latest", "gemini-3.8-flash", "gemini-3-flash-preview"];
+    const GROQ_API_KEY = (process.env.GROQ_API_KEY || "").trim();
+
+    if (GROQ_API_KEY) {
+      const groqModels = [
+        (process.env.GROQ_MODEL || "").trim(),
+        "llama-3.3-70b-versatile",
+        "llama-3.1-8b-instant",
+        "mixtral-8x7b-32768",
+      ].filter(Boolean);
+
+      for (const model of groqModels) {
+        try {
+          const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${GROQ_API_KEY}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              model,
+              messages: [
+                { role: "system", content: systemInstruction },
+                ...contents.map((c) => ({
+                  role: c.role === "model" ? "assistant" : "user",
+                  content: c.parts?.[0]?.text || "",
+                })),
+              ],
+              max_tokens: 140,
+              temperature: 0.3,
+            }),
+            signal: AbortSignal.timeout(3500),
+          });
+          if (groqRes.ok) {
+            const groqJson = await groqRes.json();
+            textReply = groqJson?.choices?.[0]?.message?.content?.trim() || "";
+            if (textReply) break;
+          } else {
+            const errTxt = await groqRes.text();
+            console.warn(`[voice/talk] Groq model ${model} error (${groqRes.status}):`, errTxt.slice(0, 150));
+          }
+        } catch {
+          // try next groq model
+        }
+      }
+    }
+
+    // Fallback: Gemini Flash if Groq is not configured or failed
+    if (!textReply.trim() && GEMINI_API_KEY) {
+      const candidateModels = ["gemini-2.5-flash", "gemini-1.5-flash"];
       for (const modelName of candidateModels) {
         try {
           const res = await fetch(
@@ -157,6 +230,7 @@ ${retrieved.groundingContext}
                   maxOutputTokens: 140,
                 },
               }),
+              signal: AbortSignal.timeout(4000),
             }
           );
 
@@ -202,7 +276,9 @@ ${retrieved.groundingContext}
       sessionId,
       userQuery,
       textReply,
-      provider: audioBase64 ? "elevenlabs" : "fallback",
+      provider: audioBase64
+        ? (process.env.SARVAM_API_KEY ? "sarvam" : "elevenlabs")
+        : "fallback",
       audioBase64,
       audioMimeType,
       retrievedChunksCount: retrieved.chunks.length,

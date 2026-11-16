@@ -192,41 +192,57 @@ export function returnsSummary(history: PricePoint[]): Array<{ label: string; va
 
 export function returnsHeatmap(history: PricePoint[]): Array<Record<string, number | null>> {
   const hist = Array.isArray(history) ? history : [];
-  // grouped[year][month] = closes[] (insertion order preserved).
-  const grouped = new Map<number, Map<number, number[]>>();
+  if (hist.length === 0) return [];
+
+  // Group by "YYYY-MM" retaining first and last close per month.
+  const monthData = new Map<string, { first: number; last: number; count: number }>();
+  const yearSet = new Set<number>();
+
   for (const point of hist) {
     if (!point) continue;
     const parsed = parseIsoDate(String((point as any).date ?? ""));
     if (!parsed) continue;
     const close = num((point as any).close);
-    if (close === null) continue;
-    let byMonth = grouped.get(parsed.year);
-    if (!byMonth) {
-      byMonth = new Map<number, number[]>();
-      grouped.set(parsed.year, byMonth);
+    if (close === null || close <= 0) continue;
+
+    yearSet.add(parsed.year);
+    const key = `${parsed.year}-${String(parsed.month).padStart(2, "0")}`;
+    const existing = monthData.get(key);
+    if (!existing) {
+      monthData.set(key, { first: close, last: close, count: 1 });
+    } else {
+      existing.last = close;
+      existing.count += 1;
     }
-    let arr = byMonth.get(parsed.month);
-    if (!arr) {
-      arr = [];
-      byMonth.set(parsed.month, arr);
-    }
-    arr.push(close);
   }
 
-  const years = Array.from(grouped.keys()).sort((a, b) => b - a).slice(0, 5);
+  // Calculate month-over-month returns across sorted consecutive months
+  const sortedMonthKeys = Array.from(monthData.keys()).sort();
+  const monthReturns = new Map<string, number | null>();
+
+  for (let i = 0; i < sortedMonthKeys.length; i++) {
+    const key = sortedMonthKeys[i];
+    const cur = monthData.get(key)!;
+    let ret: number | null = null;
+
+    if (i > 0) {
+      const prev = monthData.get(sortedMonthKeys[i - 1]);
+      if (prev && prev.last > 0) {
+        ret = round(((cur.last - prev.last) / prev.last) * 100, 2);
+      }
+    } else if (cur.count >= 2 && cur.first > 0) {
+      ret = round(((cur.last - cur.first) / cur.first) * 100, 2);
+    }
+    monthReturns.set(key, ret);
+  }
+
+  const years = Array.from(yearSet).sort((a, b) => b - a).slice(0, 5);
   const rows: Array<Record<string, number | null>> = [];
   for (const year of years) {
     const row: Record<string, number | null> = { year };
-    const byMonth = grouped.get(year);
     for (let month = 1; month <= 12; month++) {
-      const values = byMonth?.get(month);
-      if (!values || values.length < 2) {
-        row[String(month)] = null;
-        continue;
-      }
-      const first = values[0];
-      const last = values[values.length - 1];
-      row[String(month)] = first === 0 ? null : round(((last - first) / first) * 100, 2);
+      const key = `${year}-${String(month).padStart(2, "0")}`;
+      row[String(month)] = monthReturns.has(key) ? monthReturns.get(key)! : null;
     }
     rows.push(row);
   }

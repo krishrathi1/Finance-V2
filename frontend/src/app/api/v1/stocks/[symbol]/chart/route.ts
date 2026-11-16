@@ -101,62 +101,64 @@ export async function GET(
       });
     }
 
-    // Convert symbol to NSE format (e.g., RELIANCE -> RELIANCEEQN)
-    const nseSymbol = baseSymbol + 'EQN';
+    // Attempt direct NSE chart API fetch (best-effort)
+    let graphData: any[] = [];
+    let closePrice: number | null = quote?.cmp || null;
 
-    // Fetch from NSE API
-    const apiUrl = `https://www.nseindia.com/api/NextApi/apiClient/GetQuoteApi?functionName=getSymbolChartData&symbol=${encodeURIComponent(nseSymbol)}&days=${encodeURIComponent(days)}`;
+    try {
+      const nseSymbol = baseSymbol + 'EQN';
+      const apiUrl = `https://www.nseindia.com/api/NextApi/apiClient/GetQuoteApi?functionName=getSymbolChartData&symbol=${encodeURIComponent(nseSymbol)}&days=${encodeURIComponent(days)}`;
 
-    const response = await fetch(apiUrl, {
-      method: 'GET',
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Referer': 'https://www.nseindia.com',
-        'Accept': 'application/json',
-      },
-      signal: AbortSignal.timeout(8000),
-    });
+      const response = await fetch(apiUrl, {
+        method: 'GET',
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Referer': 'https://www.nseindia.com',
+          'Accept': 'application/json',
+        },
+        signal: AbortSignal.timeout(6000),
+      });
 
-    if (!response.ok) {
-      return NextResponse.json(
-        { detail: `Failed to fetch from NSE API: ${response.statusText}` },
-        { status: response.status }
-      );
+      if (response.ok) {
+        const data = await response.json();
+        graphData = data.grapthData || data.graphData || [];
+        if (data.closePrice) closePrice = data.closePrice;
+      }
+    } catch {
+      // Direct NSE chart fetch failed or timed out
     }
 
-    const data = await response.json();
-    const graphData = data.grapthData || data.graphData || [];
-
-    // Transform NSE graph data to PriceChart format
-    // NSE format: [timestamp, price, status, null, null]
-    // PriceChart format: { date: string, close: number }
     const transformedHistory = graphData.map((point: any[]) => {
       const timestamp = point[0];
       const price = point[1];
-      const date = new Date(timestamp).toISOString().split('T')[0]; // YYYY-MM-DD
+      const date = new Date(timestamp).toISOString().split('T')[0];
       return {
         date,
         close: Number(price) || 0,
       };
     });
 
-    // Return both formats - raw for API consumers, history for chart
-    const transformedData = {
-      identifier: nseSymbol,
-      name: symbol.toUpperCase(),
-      graphData: graphData, // Raw NSE format
-      history: transformedHistory, // Transformed for PriceChart
-      closePrice: data.closePrice || null,
+    return NextResponse.json({
+      identifier: marketSymbol,
+      name: baseSymbol,
+      graphData,
+      history: transformedHistory,
+      closePrice,
       timestamp: new Date().toISOString(),
-    };
-
-    return NextResponse.json(transformedData);
+      source: graphData.length ? 'nse' : 'fallback',
+    });
   } catch (error) {
-    console.error('Chart data error:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Failed to fetch chart data';
-    return NextResponse.json(
-      { detail: errorMessage },
-      { status: 500 }
-    );
+    console.warn('Chart data fallback on error:', (error as any)?.message);
+    const { symbol: symParam } = await params.catch(() => ({ symbol: 'STOCK' }));
+    const baseSymbol = (symParam || 'STOCK').toUpperCase().replace(/\.(NS|BO)$/i, '');
+    return NextResponse.json({
+      identifier: `${baseSymbol}.NS`,
+      name: baseSymbol,
+      graphData: [],
+      history: [],
+      closePrice: null,
+      timestamp: new Date().toISOString(),
+      source: 'fallback',
+    });
   }
 }

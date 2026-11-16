@@ -2,11 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
+import { ViewModeSwitcher } from "@/context/view-mode-context";
 
 const allSections = [
   { id: "overview", label: "Overview" },
-  { id: "forensics", label: "Forensics & M-Score" },
-  { id: "options-chain", label: "Options & Greeks" },
+  { id: "advanced-options", label: "Advanced Options" },
   { id: "corporate-actions", label: "Corporate Actions" },
   { id: "financials", label: "Financials" },
   { id: "shareholding", label: "Shareholding" },
@@ -50,7 +50,7 @@ export function StockSectionTabs() {
   return (
     <div
       style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
-      className="sticky top-[88px] z-30 -mx-1 overflow-x-auto no-scrollbar scrollbar-hide rounded-2xl border border-border/80 bg-panel/95 backdrop-blur-xl p-1.5 shadow-lg sm:-mx-0 sm:top-[90px] sm:p-2 md:top-[92px]"
+      className="sticky top-[88px] z-30 -mx-1 flex flex-wrap items-center justify-between gap-2 overflow-x-auto no-scrollbar scrollbar-hide rounded-2xl border border-border/80 bg-panel/95 backdrop-blur-xl p-1.5 shadow-lg sm:-mx-0 sm:top-[90px] sm:p-2 md:top-[92px]"
     >
       <div className="flex min-w-max items-center gap-1 sm:gap-1.5">
         {sections.map((item) => {
@@ -70,6 +70,10 @@ export function StockSectionTabs() {
             </a>
           );
         })}
+      </div>
+
+      <div className="shrink-0 pl-2">
+        <ViewModeSwitcher />
       </div>
     </div>
   );

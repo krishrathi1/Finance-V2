@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { MessageCircle, Mic, Square, X, AlertCircle, Send, Sparkles } from "lucide-react";
+import { MessageCircle, Mic, Square, X, AlertCircle, Send, Sparkles, Keyboard } from "lucide-react";
 import { extractClientScreenSnapshot } from "@/lib/voice/context-extractor";
 import { ChatTurn, ScreenSnapshot, VoiceState, VoiceTalkResponse } from "@/lib/voice/types";
 
@@ -11,7 +11,7 @@ export function FloatingVoiceAssistant() {
   const [statusMessage, setStatusMessage] = useState<string>("");
   const [liveTranscript, setLiveTranscript] = useState<string>("");
   const [typedInput, setTypedInput] = useState<string>("");
-  const [showInput, setShowInput] = useState<boolean>(false);
+  const [showInput, setShowInput] = useState<boolean>(true);
 
   const sessionIdRef = useRef<string>("");
   const historyRef = useRef<ChatTurn[]>([]);
@@ -61,13 +61,13 @@ export function FloatingVoiceAssistant() {
               clearTimeout(silenceTimerRef.current);
             }
 
-            // Auto-submit after 1.6s of silence once at least 2 words have been spoken
+            // Auto-submit after 750ms of silence once at least 2 words have been spoken
             if (clean.split(/\s+/).length >= 2) {
               silenceTimerRef.current = setTimeout(() => {
                 if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
                   mediaRecorderRef.current.stop();
                 }
-              }, 1600);
+              }, 750);
             }
           }
         };
@@ -441,6 +441,16 @@ export function FloatingVoiceAssistant() {
     startListening();
   };
 
+  const handleOpenTextMode = () => {
+    cleanupAllAudio();
+    isMutedRef.current = false;
+    historyRef.current = [];
+    sessionIdRef.current = `sess_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+    setVoiceState("listening");
+    setStatusMessage("Ask Priya anything about this screen…");
+    setShowInput(true);
+  };
+
   const handleEndCall = (e?: React.MouseEvent) => {
     if (e) {
       e.stopPropagation();
@@ -492,28 +502,42 @@ export function FloatingVoiceAssistant() {
     <div className="fixed bottom-5 right-5 z-50">
       <AnimatePresence mode="popLayout" initial={false}>
         {!active ? (
-          /* ── Collapsed: Modern Floating Button ── */
-          <motion.button
-            key="btn"
+          /* ── Collapsed: Modern Floating Button with Speak & Type Options ── */
+          <motion.div
+            key="btn-group"
             layout
             initial={{ scale: 0.85, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.85, opacity: 0 }}
-            whileTap={{ scale: 0.94 }}
             transition={{ type: "spring", stiffness: 400, damping: 28 }}
-            onClick={handleStartCall}
-            aria-label="Talk to Financial Voice Assistant"
-            className="flex items-center gap-2.5 rounded-full bg-[#C57708] hover:bg-[#A85F00] text-white pl-4 pr-5 py-3.5 shadow-2xl shadow-[#C57708]/30 transition-all border border-amber-400/20"
+            className="flex items-center rounded-full bg-[#C57708] shadow-2xl shadow-[#C57708]/35 border border-amber-400/25 p-1 transition-all"
           >
-            <span className="relative flex">
-              <MessageCircle className="w-5 h-5 text-white" />
-              <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-[#25AB21] animate-ping" />
-              <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-[#25AB21]" />
-            </span>
-            <span className="text-sm font-semibold tracking-wide">
-              {statusMessage ? statusMessage : "Talk to Voice Agent"}
-            </span>
-          </motion.button>
+            <button
+              onClick={handleStartCall}
+              aria-label="Speak to Voice Agent"
+              title="Speak to Priya using your microphone"
+              className="flex items-center gap-2 rounded-full pl-3.5 pr-3 py-2 text-white hover:bg-black/10 transition-colors"
+            >
+              <span className="relative flex">
+                <Mic className="w-4 h-4 text-white" />
+                <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-[#25AB21] animate-ping" />
+                <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-[#25AB21]" />
+              </span>
+              <span className="text-xs font-semibold tracking-wide">
+                Speak
+              </span>
+            </button>
+            <div className="w-[1px] h-4 bg-white/30" />
+            <button
+              onClick={handleOpenTextMode}
+              aria-label="Type question to Priya"
+              title="Type your question instead of speaking"
+              className="flex items-center gap-1.5 pl-2.5 pr-3.5 py-2 rounded-full text-white/95 hover:text-white hover:bg-black/10 text-xs font-semibold transition-colors"
+            >
+              <Keyboard className="w-3.5 h-3.5" />
+              <span>Type</span>
+            </button>
+          </motion.div>
         ) : (
           /* ── Active: Sleek Interactive Voice Pill with State Indication ── */
           <motion.div
@@ -669,32 +693,43 @@ export function FloatingVoiceAssistant() {
               </button>
               <button
                 type="button"
-                onClick={() => setShowInput(!showInput)}
-                className="whitespace-nowrap px-2 py-1 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 hover:bg-amber-500/20 transition-all font-medium"
+                onClick={() => handleQuickQuestion("Summarize the key risks and red flags visible.")}
+                className="whitespace-nowrap px-2 py-1 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-[#C57708]/15 hover:text-[#C57708] transition-all font-medium border border-zinc-200 dark:border-zinc-700"
               >
-                {showInput ? "Hide text" : "Type question"}
+                Key Risks
               </button>
             </div>
 
-            {/* Optional Type Query Input */}
-            {showInput && (
-              <form onSubmit={handleSendTyped} className="flex items-center gap-1.5 pt-1">
-                <input
-                  type="text"
-                  value={typedInput}
-                  onChange={(e) => setTypedInput(e.target.value)}
-                  placeholder="Ask Priya anything about this screen…"
-                  className="flex-1 px-2.5 py-1 text-xs rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-[#C57708]"
-                />
-                <button
-                  type="submit"
-                  disabled={!typedInput.trim()}
-                  className="p-1.5 rounded-lg bg-[#C57708] text-white hover:bg-[#A85F00] disabled:opacity-40 transition-all"
-                >
-                  <Send className="w-3.5 h-3.5" />
-                </button>
-              </form>
-            )}
+            {/* Type Question Input Bar (Always available) */}
+            <form onSubmit={handleSendTyped} className="flex items-center gap-1.5 pt-1.5 border-t border-zinc-200 dark:border-zinc-800">
+              <input
+                type="text"
+                value={typedInput}
+                onChange={(e) => setTypedInput(e.target.value)}
+                placeholder="Type your question (or speak into mic)…"
+                className="flex-1 px-3 py-1.5 text-xs rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 focus:outline-none focus:ring-1 focus:ring-[#C57708]"
+              />
+              <button
+                type="button"
+                onClick={voiceState === "listening" ? handleStopSpeakingAndSubmit : startListening}
+                title={voiceState === "listening" ? "Stop speaking" : "Start speaking"}
+                className={`p-1.5 rounded-xl border transition-all ${
+                  voiceState === "listening"
+                    ? "border-[#25AB21]/40 bg-[#25AB21]/15 text-[#25AB21]"
+                    : "border-zinc-200 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:text-[#C57708]"
+                }`}
+              >
+                <Mic className="w-3.5 h-3.5" />
+              </button>
+              <button
+                type="submit"
+                disabled={!typedInput.trim()}
+                title="Send question"
+                className="p-1.5 rounded-xl bg-[#C57708] text-white hover:bg-[#A85F00] disabled:opacity-40 transition-all shadow-sm"
+              >
+                <Send className="w-3.5 h-3.5" />
+              </button>
+            </form>
           </motion.div>
         )}
       </AnimatePresence>

@@ -700,8 +700,8 @@ function AllocationChart({ enriched }: { enriched: HoldingWithValue[] }) {
       </CardHeader>
       <CardContent className="p-0">
         <div className="flex flex-col items-center gap-4">
-          <div className="h-44 w-44 shrink-0">
-            <ResponsiveContainer width="100%" height="100%">
+          <div className="h-44 w-44 shrink-0 min-w-0">
+            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={160}>
               <PieChart>
                 <Pie
                   data={data}

@@ -320,12 +320,16 @@ export async function explainSmartScore(
   score: number,
   dimensions: AnyObj = {},
   weakHint?: unknown,
+  context?: AnyObj,
 ): Promise<{ aiExplanation: string; source: "gemini" | "fallback" }> {
   // Reconstruct the context shape the Python builder expects.
-  const context: AnyObj = { smartScore: { score, dimensions } };
+  const baseContext: AnyObj = {
+    ...context,
+    smartScore: { score, dimensions, ...(asObj(context?.smartScore)) },
+  };
 
   if (isGeminiConfigured()) {
-    const raw = await generateText(buildSmartScorePrompt(symbol, context));
+    const raw = await generateText(buildSmartScorePrompt(symbol, baseContext));
     if (raw) return { aiExplanation: raw, source: "gemini" };
   }
 
@@ -409,11 +413,15 @@ export async function explainRiskScore(
   score: number,
   components: AnyObj = {},
   highHint?: unknown,
+  context?: AnyObj,
 ): Promise<{ aiExplanation: string; source: "gemini" | "fallback" }> {
-  const context: AnyObj = { riskScore: { score, components } };
+  const baseContext: AnyObj = {
+    ...context,
+    riskScore: { score, components, ...(asObj(context?.riskScore)) },
+  };
 
   if (isGeminiConfigured()) {
-    const raw = await generateText(buildRiskScorePrompt(symbol, context));
+    const raw = await generateText(buildRiskScorePrompt(symbol, baseContext));
     if (raw) return { aiExplanation: raw, source: "gemini" };
   }
 
@@ -1708,15 +1716,23 @@ export async function researchReport(
   const peRatio = metrics.peRatio === null || metrics.peRatio === undefined ? null : toFloatDefault(metrics.peRatio, 0);
   const title = `${name} Research Report`;
 
-  const peLine = peRatio !== null && peRatio > 0 ? `Trailing P/E is ${fixed(peRatio, 2)}.` : "Trailing P/E is unavailable.";
+  const contextPoints: string[] = [];
+  if (peRatio !== null && peRatio > 0) contextPoints.push(`Trailing P/E: ${fixed(peRatio, 2)}`);
+  if (ctx.cmp) contextPoints.push(`CMP: ₹${toFloatDefault(ctx.cmp, 0)}`);
+  if (ctx.sector) contextPoints.push(`Sector: ${ctx.sector}`);
+  if (metrics.marketCap) contextPoints.push(`Market Cap: ₹${intComma(toFloatDefault(metrics.marketCap, 0))} Cr`);
+  if (metrics.roe) contextPoints.push(`ROE: ${fixed(toFloatDefault(metrics.roe, 0), 1)}%`);
+  if (metrics.debtToEquity !== null && metrics.debtToEquity !== undefined) contextPoints.push(`Debt/Equity: ${fixed(toFloatDefault(metrics.debtToEquity, 0), 2)}`);
+
+  const peLine = contextPoints.length ? contextPoints.join(", ") : "Trailing P/E is unavailable.";
 
   const question =
-    `You are a senior equity research analyst writing a note on ${name} (${symbol.toUpperCase()}), listed in India.\n` +
+    `You are a senior equity research analyst writing an institutional research note on ${name} (${symbol.toUpperCase()}), listed in India.\n` +
     `Known context: ${peLine}\n\n` +
     "Respond with ONLY a JSON object with keys:\n" +
     "  report (str: 3 short paragraphs — business overview, what the valuation implies, what to watch),\n" +
     "  recommendations (list of 3-5 strings: concrete, actionable checks for a retail investor),\n" +
-    "  targetPrice (number or null: only if you can justify one from the context, else null),\n" +
+    "  targetPrice (number or null: a realistic 12-month target price if justifiable from CMP/metrics, else null),\n" +
     "  riskLevel (str: 'low'|'medium'|'high').\n" +
     "Be specific and balanced — no hype, no markdown. Numbers in Indian format (Cr, L).";
 

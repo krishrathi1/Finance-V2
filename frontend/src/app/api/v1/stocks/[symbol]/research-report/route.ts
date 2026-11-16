@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { researchReport } from '@/server/ai/features';
+import { loadDashboardEnvelope } from '@/server/application/dashboard-envelope';
 import { getNseQuote } from '@/server/infrastructure/providers/nse';
 import { requireActiveUser } from '@/lib/current-user';
 
@@ -16,18 +17,34 @@ export async function GET(
   const { symbol } = await params;
 
   try {
-    // Light context: company name / P/E from a single NSE quote.
+    // Rich context: fetch from dashboard envelope or quote so Gemini has full financial depth
     const context: Record<string, unknown> = { symbol: symbol.toUpperCase() };
     try {
-      const quote = await getNseQuote(symbol);
-      if (quote) {
-        if (quote.companyName) context.companyName = quote.companyName;
-        if (quote.peRatio !== null && quote.peRatio !== undefined) {
-          context.metrics = { peRatio: quote.peRatio };
-        }
+      const envelope = await loadDashboardEnvelope(symbol);
+      const d = envelope.data;
+      if (d) {
+        if (d.companyName) context.companyName = d.companyName;
+        if (d.sector) context.sector = d.sector;
+        if (d.price?.cmp) context.cmp = d.price.cmp;
+        if (d.metrics) context.metrics = d.metrics;
+        if (d.technicals) context.technicals = d.technicals;
+        if (d.smartScore) context.smartScore = d.smartScore;
+        if (d.riskScore) context.riskScore = d.riskScore;
       }
     } catch {
-      // Ignore context-gathering failures.
+      // Fallback to light context from single quote
+      try {
+        const quote = await getNseQuote(symbol);
+        if (quote) {
+          if (quote.companyName) context.companyName = quote.companyName;
+          if (quote.cmp) context.cmp = quote.cmp;
+          if (quote.peRatio !== null && quote.peRatio !== undefined) {
+            context.metrics = { peRatio: quote.peRatio };
+          }
+        }
+      } catch {
+        // Ignore context-gathering failures.
+      }
     }
 
     const result = await researchReport(symbol, context);

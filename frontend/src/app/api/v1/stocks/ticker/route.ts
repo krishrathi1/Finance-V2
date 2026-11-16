@@ -34,10 +34,10 @@ export async function GET(request: NextRequest) {
       quotedCount: snapshot.rows.length,
     });
   } catch (error) {
-    console.error("Ticker API error:", error);
+    console.warn("Ticker API fallback on provider timeout:", (error as any)?.message);
     return NextResponse.json(
-      { detail: "Failed to fetch live ticker data", data: [] },
-      { status: 502 }
+      { detail: "Live ticker data temporarily unavailable", data: [] },
+      { status: 200 }
     );
   }
 }

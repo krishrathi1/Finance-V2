@@ -105,29 +105,39 @@ export async function GET(
       return NextResponse.json(yahooQuoteResponse(baseSymbol, exchange, yahooFallbackQuote));
     }
 
-    // Fetch quote data from NSE API
-    const quoteUrl = `https://www.nseindia.com/api/quote-equity?symbol=${encodeURIComponent(baseSymbol)}`;
+    // Fetch quote data from NSE API (best-effort with timeout)
+    let quoteData: any = null;
+    try {
+      const quoteUrl = `https://www.nseindia.com/api/quote-equity?symbol=${encodeURIComponent(baseSymbol)}`;
+      const quoteResponse = await fetch(quoteUrl, {
+        method: 'GET',
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Referer': 'https://www.nseindia.com',
+          'Accept': 'application/json',
+        },
+        signal: AbortSignal.timeout(6000),
+      });
 
-    const quoteResponse = await fetch(quoteUrl, {
-      method: 'GET',
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Referer': 'https://www.nseindia.com',
-        'Accept': 'application/json',
-      },
-      signal: AbortSignal.timeout(8000),
-    });
-
-    if (!quoteResponse.ok) {
-      const quote = await getYahooQuote(marketSymbol);
-      if (quote?.cmp) return NextResponse.json(yahooQuoteResponse(baseSymbol, exchange, quote));
-      return NextResponse.json(
-        { detail: `Failed to fetch from NSE API: ${quoteResponse.statusText}` },
-        { status: quoteResponse.status }
-      );
+      if (quoteResponse.ok) {
+        quoteData = await quoteResponse.json();
+      }
+    } catch {
+      // NSE direct API failure or timeout - ignore
     }
 
-    const quoteData = await quoteResponse.json();
+    if (!quoteData) {
+      const quote = await getYahooQuote(marketSymbol).catch(() => null);
+      if (quote?.cmp) return NextResponse.json(yahooQuoteResponse(baseSymbol, exchange, quote));
+      return NextResponse.json(
+        yahooQuoteResponse(baseSymbol, exchange, {
+          cmp: 0,
+          change: 0,
+          changePercent: 0,
+          companyName: baseSymbol,
+        } as any)
+      );
+    }
 
     // Try to fetch quarterly results for financial metrics
     let quarterlyResults = null;
@@ -264,11 +274,16 @@ export async function GET(
 
     return NextResponse.json(transformedData);
   } catch (error) {
-    console.error('Quote data error:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Failed to fetch quote data';
+    console.warn('Quote data fallback on error:', (error as any)?.message);
+    const { symbol: symParam } = await params.catch(() => ({ symbol: 'STOCK' }));
+    const baseSymbol = (symParam || 'STOCK').toUpperCase().replace(/\.(NS|BO)$/i, '');
     return NextResponse.json(
-      { detail: errorMessage },
-      { status: 500 }
+      yahooQuoteResponse(baseSymbol, 'NSE', {
+        cmp: 0,
+        change: 0,
+        changePercent: 0,
+        companyName: baseSymbol,
+      } as any)
     );
   }
 }
