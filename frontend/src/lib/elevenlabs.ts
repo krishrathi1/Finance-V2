@@ -38,6 +38,7 @@ export async function synthesizeSpeech(
   if (sarvamKey) {
     try {
       const speaker = process.env.SARVAM_SPEAKER || "priya";
+      const model = process.env.SARVAM_MODEL || "bulbul:v3";
       const res = await fetch("https://api.sarvam.ai/text-to-speech", {
         method: "POST",
         headers: {
@@ -48,8 +49,9 @@ export async function synthesizeSpeech(
           inputs: [cleanedText],
           target_language_code: "en-IN",
           speaker,
+          model,
         }),
-        signal: AbortSignal.timeout(4500),
+        signal: AbortSignal.timeout(9000),
       });
 
       if (res.ok) {

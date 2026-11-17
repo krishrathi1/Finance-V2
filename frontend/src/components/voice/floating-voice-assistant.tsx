@@ -4,7 +4,6 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Mic,
-  Square,
   X,
   AlertCircle,
   Send,
@@ -92,20 +91,32 @@ export function FloatingVoiceAssistant() {
           const clean = fullTranscript.trim();
           if (clean) {
             currentUtteranceRef.current = clean;
-            setVoiceLiveTranscript(clean);
 
             if (silenceTimerRef.current) {
               clearTimeout(silenceTimerRef.current);
             }
 
-            // Auto-submit after 750ms of silence once at least 2 words have been spoken
-            if (clean.split(/\s+/).length >= 2) {
+            // Auto-submit after 850ms of silence once speech is detected (no Done button required)
+            if (clean.length > 2) {
               silenceTimerRef.current = setTimeout(() => {
                 if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
                   mediaRecorderRef.current.stop();
                 }
-              }, 750);
+              }, 850);
             }
+          }
+        };
+
+        recognition.onspeechend = () => {
+          if (currentUtteranceRef.current && currentUtteranceRef.current.length > 2) {
+            if (silenceTimerRef.current) {
+              clearTimeout(silenceTimerRef.current);
+            }
+            silenceTimerRef.current = setTimeout(() => {
+              if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+                mediaRecorderRef.current.stop();
+              }
+            }, 500);
           }
         };
 
@@ -304,7 +315,7 @@ export function FloatingVoiceAssistant() {
   const sendVoiceUtteranceToBackend = async (audioBlob: Blob | null, textQuery: string) => {
     if (isMutedRef.current) return;
     setVoiceState("thinking");
-    setVoiceStatusMessage("Analyzing screen & query…");
+    setVoiceStatusMessage("Thinking…");
 
     try {
       abortControllerRef.current = new AbortController();
@@ -334,6 +345,7 @@ export function FloatingVoiceAssistant() {
         body: JSON.stringify({
           sessionId: voiceSessionIdRef.current,
           message: textQuery.trim(),
+          mode: "voice",
           audioData: base64Audio,
           mimeType,
           history: voiceHistoryRef.current.slice(-6),
@@ -438,18 +450,70 @@ export function FloatingVoiceAssistant() {
             : null;
 
         if (!spokenText && (!audioBlob || audioBlob.size < 1200)) {
-          setVoiceStatusMessage("Didn't catch that. Tap mic and speak.");
+          setVoiceStatusMessage("Listening…");
           setVoiceState("listening");
           startListening();
           return;
         }
 
-        setVoiceState("processing");
+        setVoiceState("thinking");
+        setVoiceStatusMessage("Thinking…");
         sendVoiceUtteranceToBackend(audioBlob, spokenText);
       };
 
       recorder.start(250);
       setVoiceState("listening");
+
+      // Auto-detect speech and silence completion via AudioContext VAD
+      try {
+        const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+        if (AudioCtx) {
+          const audioCtx = new AudioCtx();
+          const source = audioCtx.createMediaStreamSource(stream);
+          const analyser = audioCtx.createAnalyser();
+          analyser.fftSize = 256;
+          source.connect(analyser);
+
+          const bufferLength = analyser.frequencyBinCount;
+          const dataArray = new Uint8Array(bufferLength);
+          let userSpoke = false;
+          let silenceStart = 0;
+
+          const checkVAD = () => {
+            if (!mediaRecorderRef.current || mediaRecorderRef.current.state !== "recording") {
+              try { audioCtx.close(); } catch {}
+              return;
+            }
+
+            analyser.getByteFrequencyData(dataArray);
+            let sum = 0;
+            for (let i = 0; i < bufferLength; i++) {
+              sum += dataArray[i];
+            }
+            const avg = sum / bufferLength;
+
+            if (avg > 15) {
+              userSpoke = true;
+              silenceStart = 0;
+            } else if (userSpoke) {
+              if (!silenceStart) {
+                silenceStart = Date.now();
+              } else if (Date.now() - silenceStart > 1000) {
+                // User spoke and then paused for 1000ms -> automatic query completion
+                if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+                  mediaRecorderRef.current.stop();
+                }
+                try { audioCtx.close(); } catch {}
+                return;
+              }
+            }
+
+            requestAnimationFrame(checkVAD);
+          };
+
+          requestAnimationFrame(checkVAD);
+        }
+      } catch {}
 
       if (maxRecordingTimerRef.current) {
         clearTimeout(maxRecordingTimerRef.current);
@@ -573,6 +637,7 @@ export function FloatingVoiceAssistant() {
         body: JSON.stringify({
           sessionId: chatSessionIdRef.current,
           message: query,
+          mode: "chat",
           history: chatHistoryRef.current.slice(-6),
           screenSnapshot,
         }),
@@ -651,7 +716,7 @@ export function FloatingVoiceAssistant() {
           </motion.div>
         )}
 
-        {/* ── 2. Voice Mode: PURE Voice Assistant UI (No text input) ── */}
+        {/* ── 2. Voice Mode: PURE Voice Assistant UI (No text input, No prompt list) ── */}
         {mode === "voice" && (
           <motion.div
             key="voice-pill"
@@ -660,7 +725,7 @@ export function FloatingVoiceAssistant() {
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.7, opacity: 0 }}
             transition={{ type: "spring", stiffness: 380, damping: 26 }}
-            className="flex flex-col gap-2.5 rounded-2xl bg-white/95 text-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-2xl shadow-black/15 dark:bg-[#0c1017] dark:shadow-black/60 dark:text-white p-4 backdrop-blur-2xl w-80 sm:w-96"
+            className="flex flex-col gap-2 rounded-2xl bg-white/95 text-zinc-900 border border-zinc-200/90 shadow-2xl shadow-zinc-950/15 dark:bg-[#0c1017] dark:border-zinc-800 dark:shadow-black/60 dark:text-white p-3 backdrop-blur-2xl w-72 sm:w-80"
           >
             {/* Top Bar with Status and Instant Stop/Cross Button */}
             <div className="flex items-center gap-2.5">
@@ -675,7 +740,7 @@ export function FloatingVoiceAssistant() {
                 <>
                   <span className="w-4 h-4 border-2 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin" />
                   <span className="text-xs font-semibold text-zinc-800 dark:text-zinc-200 truncate">
-                    {voiceStatusMessage || "Evaluating screen data…"}
+                    {voiceStatusMessage || "Thinking…"}
                   </span>
                 </>
               ) : voiceState === "speaking" ? (
@@ -748,17 +813,6 @@ export function FloatingVoiceAssistant() {
                   <span className="text-xs font-semibold text-zinc-800 dark:text-zinc-200">
                     Listening…
                   </span>
-
-                  {/* Tap-to-done button */}
-                  <button
-                    type="button"
-                    onClick={handleStopSpeakingAndSubmit}
-                    title="Done speaking"
-                    className="ml-auto px-2.5 py-0.5 text-[10px] font-bold rounded-md bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/25 transition-all flex items-center gap-1 border border-emerald-500/30"
-                  >
-                    <Square className="w-2.5 h-2.5 fill-current" />
-                    Done
-                  </button>
                 </>
               )}
 
@@ -771,45 +825,6 @@ export function FloatingVoiceAssistant() {
                 className="ml-auto w-7 h-7 rounded-full bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400 hover:bg-red-500 hover:text-white dark:hover:bg-red-500 dark:hover:text-white flex items-center justify-center transition-all cursor-pointer shadow-xs active:scale-90 border border-zinc-200 dark:border-zinc-700"
               >
                 <X className="w-4 h-4 stroke-[2.5]" />
-              </button>
-            </div>
-
-            {/* Live Subtitle Area */}
-            {voiceLiveTranscript && (
-              <p className="text-[11px] leading-relaxed text-zinc-800 bg-zinc-100 border border-zinc-200 dark:text-zinc-200 dark:bg-[#131b2e] dark:border-white/10 p-2.5 rounded-xl max-h-24 overflow-y-auto italic">
-                &ldquo;{voiceLiveTranscript}&rdquo;
-              </p>
-            )}
-
-            {/* Quick Screen Context Voice Prompts */}
-            <div className="flex items-center gap-1.5 overflow-x-auto py-1 scrollbar-none text-[10px] pt-1">
-              <button
-                type="button"
-                onClick={() => handleQuickQuestionVoice("Is this stock safe and fundamentally sound for a beginner?")}
-                className="whitespace-nowrap px-2.5 py-1 rounded-full bg-zinc-100 text-zinc-700 hover:bg-zinc-200 border border-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700 dark:border-zinc-700 transition-all font-medium flex items-center gap-1"
-              >
-                <ShieldCheck className="w-2.5 h-2.5 text-emerald-500" /> Simple Verdict
-              </button>
-              <button
-                type="button"
-                onClick={() => handleQuickQuestionVoice("Explain the P/E ratio and valuation in simple plain words.")}
-                className="whitespace-nowrap px-2.5 py-1 rounded-full bg-zinc-100 text-zinc-700 hover:bg-zinc-200 border border-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700 dark:border-zinc-700 transition-all font-medium"
-              >
-                P/E in Plain Words
-              </button>
-              <button
-                type="button"
-                onClick={() => handleQuickQuestionVoice("Explain the Smart Score of this stock and what it means.")}
-                className="whitespace-nowrap px-2.5 py-1 rounded-full bg-zinc-100 text-zinc-700 hover:bg-zinc-200 border border-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700 dark:border-zinc-700 transition-all font-medium"
-              >
-                Smart Score
-              </button>
-              <button
-                type="button"
-                onClick={() => handleQuickQuestionVoice("What are the biggest risks or red flags in this company?")}
-                className="whitespace-nowrap px-2.5 py-1 rounded-full bg-zinc-100 text-zinc-700 hover:bg-zinc-200 border border-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700 dark:border-zinc-700 transition-all font-medium"
-              >
-                Key Risks
               </button>
             </div>
           </motion.div>
