@@ -614,7 +614,7 @@ export function FloatingVoiceAssistant() {
   return (
     <div className="fixed bottom-5 right-5 z-50">
       <AnimatePresence mode="popLayout" initial={false}>
-        {/* ── 1. Collapsed State: Sleek Floating Dock with Voice & Chat ── */}
+        {/* ── 1. Collapsed State: Sleek Floating Dock with Voice & Chat (Light & Dark Theme Synced) ── */}
         {mode === "idle" && (
           <motion.div
             key="btn-group"
@@ -623,20 +623,20 @@ export function FloatingVoiceAssistant() {
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.85, opacity: 0 }}
             transition={{ type: "spring", stiffness: 400, damping: 28 }}
-            className="flex items-center gap-1 rounded-full bg-zinc-950 text-white dark:bg-[#0f141f] shadow-2xl shadow-zinc-950/30 border border-zinc-800/80 p-1 backdrop-blur-xl transition-all"
+            className="flex items-center gap-1 rounded-full bg-white text-zinc-900 border border-zinc-200/90 shadow-xl shadow-zinc-900/10 dark:bg-[#0f141f] dark:text-zinc-100 dark:border-zinc-800 dark:shadow-zinc-950/40 p-1 backdrop-blur-xl transition-colors duration-200"
           >
             {/* Voice / Speak Button */}
             <button
               onClick={handleStartVoice}
               aria-label="Speak using microphone"
               title="Speak your question using microphone"
-              className="flex items-center gap-1.5 pl-3 pr-2.5 py-1.5 rounded-full hover:bg-zinc-800/80 text-zinc-300 hover:text-white text-xs font-medium transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 pl-3 pr-2.5 py-1.5 rounded-full text-zinc-700 hover:text-zinc-950 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:text-white dark:hover:bg-zinc-800/80 text-xs font-medium transition-colors cursor-pointer"
             >
-              <Mic className="w-3.5 h-3.5 text-emerald-400" />
+              <Mic className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
               <span>Voice</span>
             </button>
 
-            <div className="w-[1px] h-4 bg-zinc-800" />
+            <div className="w-[1px] h-4 bg-zinc-200 dark:bg-zinc-800" />
 
             {/* Type / Chat Button */}
             <button
