@@ -11,7 +11,10 @@ import {
   Sparkles,
   Keyboard,
   RotateCcw,
-  Bot,
+  TrendingUp,
+  ShieldCheck,
+  MessageSquareText,
+  HelpCircle,
 } from "lucide-react";
 import { RichMessageContent } from "./rich-message-content";
 import { extractClientScreenSnapshot } from "@/lib/voice/context-extractor";
@@ -54,7 +57,7 @@ export function FloatingVoiceAssistant() {
     {
       id: "welcome",
       role: "assistant",
-      text: "Namaste! I'm Priya, your AI financial research assistant. Ask me anything about the stock, financials, or metrics on this screen.",
+      text: "Namaste! I'm your MyStockVision Research Co-Pilot. I evaluate company financials, valuation ratios, and forensic scores in simple, plain terms. Ask me anything about this stock or the market!",
     },
   ]);
   const [chatInput, setChatInput] = useState<string>("");
@@ -611,7 +614,7 @@ export function FloatingVoiceAssistant() {
   return (
     <div className="fixed bottom-5 right-5 z-50">
       <AnimatePresence mode="popLayout" initial={false}>
-        {/* ── 1. Collapsed State: Modern Floating Pill with Speak & Type Buttons ── */}
+        {/* ── 1. Collapsed State: Sleek Floating Dock with Voice & Chat ── */}
         {mode === "idle" && (
           <motion.div
             key="btn-group"
@@ -620,36 +623,30 @@ export function FloatingVoiceAssistant() {
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.85, opacity: 0 }}
             transition={{ type: "spring", stiffness: 400, damping: 28 }}
-            className="flex items-center rounded-full bg-[#C57708] shadow-2xl shadow-[#C57708]/35 border border-amber-400/25 p-1 transition-all"
+            className="flex items-center gap-1 rounded-full bg-zinc-950 text-white dark:bg-[#0f141f] shadow-2xl shadow-zinc-950/30 border border-zinc-800/80 p-1 backdrop-blur-xl transition-all"
           >
             {/* Voice / Speak Button */}
             <button
               onClick={handleStartVoice}
-              aria-label="Speak to Voice Agent"
-              title="Speak to Priya using your microphone"
-              className="flex items-center gap-2 rounded-full pl-3.5 pr-3 py-2 text-white hover:bg-black/10 transition-colors"
+              aria-label="Speak using microphone"
+              title="Speak your question using microphone"
+              className="flex items-center gap-1.5 pl-3 pr-2.5 py-1.5 rounded-full hover:bg-zinc-800/80 text-zinc-300 hover:text-white text-xs font-medium transition-colors cursor-pointer"
             >
-              <span className="relative flex">
-                <Mic className="w-4 h-4 text-white" />
-                <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-[#25AB21] animate-ping" />
-                <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-[#25AB21]" />
-              </span>
-              <span className="text-xs font-semibold tracking-wide">
-                Speak
-              </span>
+              <Mic className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Voice</span>
             </button>
 
-            <div className="w-[1px] h-4 bg-white/30" />
+            <div className="w-[1px] h-4 bg-zinc-800" />
 
-            {/* Type / Keyboard Chatbot Button */}
+            {/* Type / Chat Button */}
             <button
               onClick={handleStartChat}
-              aria-label="Type question to Priya"
-              title="Open text chatbot"
-              className="flex items-center gap-1.5 pl-2.5 pr-3.5 py-2 rounded-full text-white/95 hover:text-white hover:bg-black/10 text-xs font-semibold transition-colors"
+              aria-label="Open text chat"
+              title="Open financial research chatbot"
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-xs transition-all cursor-pointer active:scale-95"
             >
-              <Keyboard className="w-3.5 h-3.5" />
-              <span>Type</span>
+              <MessageSquareText className="w-3.5 h-3.5" />
+              <span>Chat</span>
             </button>
           </motion.div>
         )}
@@ -663,22 +660,22 @@ export function FloatingVoiceAssistant() {
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.7, opacity: 0 }}
             transition={{ type: "spring", stiffness: 380, damping: 26 }}
-            className="flex flex-col gap-2.5 rounded-2xl bg-white/95 text-zinc-900 border border-amber-500/30 shadow-2xl shadow-black/15 dark:bg-[#0b0f19] dark:border-amber-500/35 dark:shadow-black/60 dark:text-white p-4 backdrop-blur-2xl w-80 sm:w-96"
+            className="flex flex-col gap-2.5 rounded-2xl bg-white/95 text-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-2xl shadow-black/15 dark:bg-[#0c1017] dark:shadow-black/60 dark:text-white p-4 backdrop-blur-2xl w-80 sm:w-96"
           >
             {/* Top Bar with Status and Instant Stop/Cross Button */}
             <div className="flex items-center gap-2.5">
               {voiceState === "requesting_permission" ? (
                 <>
-                  <span className="w-4 h-4 border-2 border-amber-500/30 border-t-amber-500 rounded-full animate-spin" />
+                  <span className="w-4 h-4 border-2 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin" />
                   <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
                     Connecting mic…
                   </span>
                 </>
               ) : voiceState === "processing" || voiceState === "thinking" ? (
                 <>
-                  <span className="w-4 h-4 border-2 border-amber-500/30 border-t-amber-500 rounded-full animate-spin" />
+                  <span className="w-4 h-4 border-2 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin" />
                   <span className="text-xs font-semibold text-zinc-800 dark:text-zinc-200 truncate">
-                    {voiceStatusMessage || "Priya analyzing screen…"}
+                    {voiceStatusMessage || "Evaluating screen data…"}
                   </span>
                 </>
               ) : voiceState === "speaking" ? (
@@ -686,19 +683,19 @@ export function FloatingVoiceAssistant() {
                   {/* Speaking Equalizer */}
                   <span className="relative flex items-center justify-center">
                     <motion.span
-                      className="absolute w-7 h-7 rounded-full bg-amber-500/20"
+                      className="absolute w-7 h-7 rounded-full bg-emerald-500/20"
                       animate={{ scale: [1, 1.8], opacity: [0.6, 0] }}
                       transition={{ duration: 1.2, repeat: Infinity, ease: "easeOut" }}
                     />
-                    <span className="relative w-6 h-6 rounded-full bg-amber-500/15 flex items-center justify-center">
-                      <Mic className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                    <span className="relative w-6 h-6 rounded-full bg-emerald-500/15 flex items-center justify-center">
+                      <Mic className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                     </span>
                   </span>
                   <div className="flex items-end gap-[3px] h-5">
                     {[0, 1, 2, 3, 4].map((i) => (
                       <motion.span
                         key={i}
-                        className="w-[3px] rounded-full bg-amber-500 dark:bg-amber-400"
+                        className="w-[3px] rounded-full bg-emerald-500 dark:bg-emerald-400"
                         animate={{ height: ["6px", "20px", "8px", "18px", "6px"] }}
                         transition={{
                           duration: 0.8,
@@ -710,7 +707,7 @@ export function FloatingVoiceAssistant() {
                     ))}
                   </div>
                   <span className="text-xs font-semibold text-zinc-800 dark:text-zinc-200">
-                    Priya speaking…
+                    Co-Pilot speaking…
                   </span>
                 </>
               ) : voiceState === "error" ? (
@@ -757,7 +754,7 @@ export function FloatingVoiceAssistant() {
                     type="button"
                     onClick={handleStopSpeakingAndSubmit}
                     title="Done speaking"
-                    className="ml-auto px-2.5 py-0.5 text-[10px] font-bold rounded-md bg-amber-500/15 text-amber-700 dark:text-amber-400 hover:bg-amber-500/25 transition-all flex items-center gap-1 border border-amber-500/30"
+                    className="ml-auto px-2.5 py-0.5 text-[10px] font-bold rounded-md bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/25 transition-all flex items-center gap-1 border border-emerald-500/30"
                   >
                     <Square className="w-2.5 h-2.5 fill-current" />
                     Done
@@ -771,7 +768,7 @@ export function FloatingVoiceAssistant() {
                 onClick={handleCloseVoice}
                 aria-label="Stop and exit voice mode"
                 title="Exit voice mode"
-                className="ml-auto w-7 h-7 rounded-full bg-red-500/10 text-red-500 dark:bg-red-500/15 dark:text-red-400 hover:bg-red-500 hover:text-white flex items-center justify-center transition-all cursor-pointer shadow-sm active:scale-90 border border-red-500/20"
+                className="ml-auto w-7 h-7 rounded-full bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400 hover:bg-red-500 hover:text-white dark:hover:bg-red-500 dark:hover:text-white flex items-center justify-center transition-all cursor-pointer shadow-xs active:scale-90 border border-zinc-200 dark:border-zinc-700"
               >
                 <X className="w-4 h-4 stroke-[2.5]" />
               </button>
@@ -788,29 +785,29 @@ export function FloatingVoiceAssistant() {
             <div className="flex items-center gap-1.5 overflow-x-auto py-1 scrollbar-none text-[10px] pt-1">
               <button
                 type="button"
-                onClick={() => handleQuickQuestionVoice("What is the current CMP and day change of this stock?")}
-                className="whitespace-nowrap px-2.5 py-1 rounded-full bg-zinc-100 text-zinc-700 hover:bg-amber-50 hover:text-amber-800 border border-zinc-200 dark:bg-[#151e33] dark:text-zinc-300 dark:hover:bg-amber-500/20 dark:hover:text-amber-300 dark:border-white/10 transition-all font-medium flex items-center gap-1"
+                onClick={() => handleQuickQuestionVoice("Is this stock safe and fundamentally sound for a beginner?")}
+                className="whitespace-nowrap px-2.5 py-1 rounded-full bg-zinc-100 text-zinc-700 hover:bg-zinc-200 border border-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700 dark:border-zinc-700 transition-all font-medium flex items-center gap-1"
               >
-                <Sparkles className="w-2.5 h-2.5 text-amber-600 dark:text-amber-400" /> Price & Change
+                <ShieldCheck className="w-2.5 h-2.5 text-emerald-500" /> Simple Verdict
               </button>
               <button
                 type="button"
-                onClick={() => handleQuickQuestionVoice("What is the PE ratio and valuation status?")}
-                className="whitespace-nowrap px-2.5 py-1 rounded-full bg-zinc-100 text-zinc-700 hover:bg-amber-50 hover:text-amber-800 border border-zinc-200 dark:bg-[#151e33] dark:text-zinc-300 dark:hover:bg-amber-500/20 dark:hover:text-amber-300 dark:border-white/10 transition-all font-medium"
+                onClick={() => handleQuickQuestionVoice("Explain the P/E ratio and valuation in simple plain words.")}
+                className="whitespace-nowrap px-2.5 py-1 rounded-full bg-zinc-100 text-zinc-700 hover:bg-zinc-200 border border-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700 dark:border-zinc-700 transition-all font-medium"
               >
-                P/E & Valuation
+                P/E in Plain Words
               </button>
               <button
                 type="button"
-                onClick={() => handleQuickQuestionVoice("Is this stock financially safe based on screen metrics?")}
-                className="whitespace-nowrap px-2.5 py-1 rounded-full bg-zinc-100 text-zinc-700 hover:bg-amber-50 hover:text-amber-800 border border-zinc-200 dark:bg-[#151e33] dark:text-zinc-300 dark:hover:bg-amber-500/20 dark:hover:text-amber-300 dark:border-white/10 transition-all font-medium"
+                onClick={() => handleQuickQuestionVoice("Explain the Smart Score of this stock and what it means.")}
+                className="whitespace-nowrap px-2.5 py-1 rounded-full bg-zinc-100 text-zinc-700 hover:bg-zinc-200 border border-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700 dark:border-zinc-700 transition-all font-medium"
               >
                 Smart Score
               </button>
               <button
                 type="button"
-                onClick={() => handleQuickQuestionVoice("Summarize the key risks and red flags visible.")}
-                className="whitespace-nowrap px-2.5 py-1 rounded-full bg-zinc-100 text-zinc-700 hover:bg-amber-50 hover:text-amber-800 border border-zinc-200 dark:bg-[#151e33] dark:text-zinc-300 dark:hover:bg-amber-500/20 dark:hover:text-amber-300 dark:border-white/10 transition-all font-medium"
+                onClick={() => handleQuickQuestionVoice("What are the biggest risks or red flags in this company?")}
+                className="whitespace-nowrap px-2.5 py-1 rounded-full bg-zinc-100 text-zinc-700 hover:bg-zinc-200 border border-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700 dark:border-zinc-700 transition-all font-medium"
               >
                 Key Risks
               </button>
@@ -818,7 +815,7 @@ export function FloatingVoiceAssistant() {
           </motion.div>
         )}
 
-        {/* ── 3. Chat Mode: DEDICATED Type Chatbot UI ── */}
+        {/* ── 3. Chat Mode: INSTITUTIONAL RESEARCH CO-PILOT UI ── */}
         {mode === "chat" && (
           <motion.div
             key="chat-window"
@@ -827,21 +824,26 @@ export function FloatingVoiceAssistant() {
             animate={{ scale: 1, opacity: 1, y: 0 }}
             exit={{ scale: 0.85, opacity: 0, y: 20 }}
             transition={{ type: "spring", stiffness: 350, damping: 26 }}
-            className="flex flex-col rounded-2xl bg-white text-zinc-900 border border-amber-500/30 shadow-2xl shadow-black/15 dark:bg-[#0b0f19] dark:text-zinc-100 dark:border-amber-500/35 dark:shadow-black/70 backdrop-blur-2xl w-[92vw] sm:w-[460px] md:w-[500px] h-[540px] max-h-[85vh] overflow-hidden"
+            className="flex flex-col rounded-2xl bg-white text-zinc-900 border border-zinc-200 shadow-2xl shadow-zinc-950/15 dark:bg-[#0c1017] dark:text-zinc-100 dark:border-zinc-800 dark:shadow-black/70 backdrop-blur-2xl w-[92vw] sm:w-[470px] md:w-[520px] h-[550px] max-h-[85vh] overflow-hidden"
           >
             {/* Chatbot Header */}
-            <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-200/80 bg-zinc-50 dark:border-white/10 dark:bg-[#101726]">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/80 dark:bg-[#0f141f]">
               <div className="flex items-center gap-2.5">
-                <div className="w-7 h-7 rounded-full bg-amber-500/10 border border-amber-500/25 text-amber-600 dark:bg-amber-500/15 dark:border-amber-500/30 dark:text-amber-400 flex items-center justify-center">
-                  <Sparkles className="w-3.5 h-3.5" />
+                <div className="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+                  <ShieldCheck className="w-4 h-4" />
                 </div>
                 <div>
-                  <h4 className="text-xs font-bold text-zinc-900 dark:text-white flex items-center gap-1.5">
-                    Priya AI Assistant
-                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)]" />
-                  </h4>
-                  <p className="text-[10px] text-zinc-500 dark:text-zinc-400">
-                    Screen & Market Aware
+                  <div className="flex items-center gap-1.5">
+                    <h4 className="text-xs font-bold text-zinc-900 dark:text-white tracking-tight">
+                      MyStockVision Co-Pilot
+                    </h4>
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.2 text-[9px] font-semibold rounded-md bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                      Live Verified
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-zinc-500 dark:text-zinc-400 font-medium">
+                    Institutional NSE & BSE Research
                   </p>
                 </div>
               </div>
@@ -850,16 +852,16 @@ export function FloatingVoiceAssistant() {
                 <button
                   type="button"
                   onClick={handleClearChat}
-                  title="Clear chat history"
-                  className="p-1.5 rounded-lg text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-white dark:hover:bg-white/10 transition-colors"
+                  title="Reset conversation"
+                  className="p-1.5 rounded-lg text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-white dark:hover:bg-zinc-800 transition-colors cursor-pointer"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
                 </button>
                 <button
                   type="button"
                   onClick={handleCloseChat}
-                  title="Close chatbot"
-                  className="p-1.5 rounded-lg text-zinc-500 hover:text-red-500 hover:bg-red-50 dark:text-zinc-400 dark:hover:text-red-400 dark:hover:bg-red-500/15 transition-colors"
+                  title="Close co-pilot"
+                  className="p-1.5 rounded-lg text-zinc-500 hover:text-red-500 hover:bg-red-50 dark:text-zinc-400 dark:hover:text-red-400 dark:hover:bg-red-500/15 transition-colors cursor-pointer"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -867,22 +869,22 @@ export function FloatingVoiceAssistant() {
             </div>
 
             {/* Chat Message Scrollable Area */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-3.5 bg-zinc-50/60 dark:bg-[#0b0f19]">
+            <div className="flex-1 overflow-y-auto p-4 space-y-3.5 bg-zinc-50/50 dark:bg-[#0c1017]">
               {chatMessages.map((msg) => (
                 <div
                   key={msg.id}
                   className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
                 >
                   {msg.role === "assistant" && (
-                    <div className="w-6 h-6 rounded-full bg-amber-500/10 border border-amber-500/25 text-amber-600 dark:bg-amber-500/15 dark:border-amber-500/30 dark:text-amber-400 flex items-center justify-center mr-2 flex-shrink-0 mt-0.5">
-                      <Bot className="w-3.5 h-3.5" />
+                    <div className="w-6 h-6 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mr-2 flex-shrink-0 mt-0.5">
+                      <TrendingUp className="w-3.5 h-3.5" />
                     </div>
                   )}
                   <div
-                    className={`max-w-[88%] sm:max-w-[94%] px-3.5 py-2.5 rounded-2xl text-xs leading-relaxed ${
+                    className={`max-w-[88%] sm:max-w-[94%] text-xs leading-relaxed ${
                       msg.role === "user"
-                        ? "bg-gradient-to-r from-amber-600 to-amber-500 text-white rounded-tr-xs shadow-md font-medium whitespace-pre-wrap"
-                        : "bg-white text-zinc-800 border border-zinc-200/90 shadow-xs dark:bg-[#131b2e] dark:text-zinc-100 dark:border-white/10 dark:shadow-sm rounded-tl-xs"
+                        ? "bg-zinc-900 text-white dark:bg-emerald-600 dark:text-white rounded-2xl rounded-tr-xs px-4 py-2.5 font-medium shadow-xs whitespace-pre-wrap"
+                        : "bg-white text-zinc-900 border border-zinc-200/90 shadow-2xs dark:bg-[#111622] dark:text-zinc-100 dark:border-zinc-800 rounded-2xl rounded-tl-xs px-4 py-3"
                     }`}
                   >
                     {msg.role === "user" ? (
@@ -897,14 +899,14 @@ export function FloatingVoiceAssistant() {
               {/* Typing / Thinking Indicator */}
               {chatLoading && (
                 <div className="flex justify-start items-center">
-                  <div className="w-6 h-6 rounded-full bg-amber-500/10 border border-amber-500/25 text-amber-600 dark:bg-amber-500/15 dark:border-amber-500/30 dark:text-amber-400 flex items-center justify-center mr-2 flex-shrink-0">
-                    <Bot className="w-3.5 h-3.5" />
+                  <div className="w-6 h-6 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mr-2 flex-shrink-0">
+                    <TrendingUp className="w-3.5 h-3.5 animate-pulse" />
                   </div>
-                  <div className="bg-white border border-zinc-200/90 shadow-xs dark:bg-[#131b2e] dark:border-white/10 rounded-2xl rounded-tl-xs px-3.5 py-2.5 flex items-center gap-2 shadow-sm">
-                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500 dark:bg-amber-400 animate-bounce" style={{ animationDelay: "0ms" }} />
-                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500 dark:bg-amber-400 animate-bounce" style={{ animationDelay: "150ms" }} />
-                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500 dark:bg-amber-400 animate-bounce" style={{ animationDelay: "300ms" }} />
-                    <span className="text-[10px] text-zinc-500 dark:text-zinc-400 font-medium ml-1">Priya thinking…</span>
+                  <div className="bg-white border border-zinc-200/90 shadow-2xs dark:bg-[#111622] dark:border-zinc-800 rounded-2xl rounded-tl-xs px-3.5 py-2.5 flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-bounce" style={{ animationDelay: "0ms" }} />
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-bounce" style={{ animationDelay: "150ms" }} />
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-bounce" style={{ animationDelay: "300ms" }} />
+                    <span className="text-[10px] text-zinc-500 dark:text-zinc-400 font-medium ml-1">Evaluating screen metrics & filings…</span>
                   </div>
                 </div>
               )}
@@ -919,64 +921,70 @@ export function FloatingVoiceAssistant() {
               <div ref={chatEndRef} />
             </div>
 
-            {/* Quick Context Prompt Chips */}
-            <div className="px-3.5 py-2 flex items-center gap-1.5 overflow-x-auto scrollbar-none border-t border-zinc-200/80 bg-zinc-50/80 dark:border-white/10 dark:bg-[#0e1422] text-[10px]">
+            {/* Quick Context Prompt Chips (Beginner-Friendly & Genuine) */}
+            <div className="px-3 py-2 flex items-center gap-1.5 overflow-x-auto scrollbar-none border-t border-zinc-200/80 bg-zinc-50/80 dark:border-zinc-800 dark:bg-[#0f141f] text-[10px]">
               <button
                 type="button"
                 disabled={chatLoading}
-                onClick={() => handleSendChatMessage("What is the current CMP and day change of this stock?")}
-                className="whitespace-nowrap px-2.5 py-1 rounded-full bg-white text-zinc-700 hover:bg-amber-50 hover:text-amber-800 border border-zinc-200/90 shadow-2xs dark:bg-[#151e33] dark:text-zinc-300 dark:hover:bg-amber-500/20 dark:hover:text-amber-300 dark:border-white/10 transition-all font-medium disabled:opacity-50 flex items-center gap-1"
+                onClick={() => handleSendChatMessage("Give a simple beginner-friendly verdict on this stock: Is it safe and fundamentally sound?")}
+                className="whitespace-nowrap px-2.5 py-1 rounded-full bg-white text-zinc-700 hover:bg-zinc-100 hover:text-zinc-900 border border-zinc-200/90 shadow-2xs dark:bg-zinc-800/80 dark:text-zinc-300 dark:hover:bg-zinc-700 dark:border-zinc-700 transition-all font-medium disabled:opacity-50 flex items-center gap-1 cursor-pointer"
               >
-                <Sparkles className="w-2.5 h-2.5 text-amber-600 dark:text-amber-400" /> Price & Change
+                <ShieldCheck className="w-2.5 h-2.5 text-emerald-500" /> Simple Verdict
               </button>
               <button
                 type="button"
                 disabled={chatLoading}
-                onClick={() => handleSendChatMessage("What is the PE ratio and valuation status?")}
-                className="whitespace-nowrap px-2.5 py-1 rounded-full bg-white text-zinc-700 hover:bg-amber-50 hover:text-amber-800 border border-zinc-200/90 shadow-2xs dark:bg-[#151e33] dark:text-zinc-300 dark:hover:bg-amber-500/20 dark:hover:text-amber-300 dark:border-white/10 transition-all font-medium disabled:opacity-50"
+                onClick={() => handleSendChatMessage("Explain the P/E ratio and valuation of this stock in simple plain words for a beginner.")}
+                className="whitespace-nowrap px-2.5 py-1 rounded-full bg-white text-zinc-700 hover:bg-zinc-100 hover:text-zinc-900 border border-zinc-200/90 shadow-2xs dark:bg-zinc-800/80 dark:text-zinc-300 dark:hover:bg-zinc-700 dark:border-zinc-700 transition-all font-medium disabled:opacity-50 cursor-pointer"
               >
-                P/E & Valuation
+                💰 P/E in Plain Words
               </button>
               <button
                 type="button"
                 disabled={chatLoading}
-                onClick={() => handleSendChatMessage("Is this stock financially safe based on screen metrics?")}
-                className="whitespace-nowrap px-2.5 py-1 rounded-full bg-white text-zinc-700 hover:bg-amber-50 hover:text-amber-800 border border-zinc-200/90 shadow-2xs dark:bg-[#151e33] dark:text-zinc-300 dark:hover:bg-amber-500/20 dark:hover:text-amber-300 dark:border-white/10 transition-all font-medium disabled:opacity-50"
+                onClick={() => handleSendChatMessage("Explain the Smart Score of this stock and what it means in simple terms.")}
+                className="whitespace-nowrap px-2.5 py-1 rounded-full bg-white text-zinc-700 hover:bg-zinc-100 hover:text-zinc-900 border border-zinc-200/90 shadow-2xs dark:bg-zinc-800/80 dark:text-zinc-300 dark:hover:bg-zinc-700 dark:border-zinc-700 transition-all font-medium disabled:opacity-50 cursor-pointer"
               >
-                Smart Score
+                ⭐ Smart Score Rationale
               </button>
               <button
                 type="button"
                 disabled={chatLoading}
-                onClick={() => handleSendChatMessage("Summarize the key risks and red flags visible.")}
-                className="whitespace-nowrap px-2.5 py-1 rounded-full bg-white text-zinc-700 hover:bg-amber-50 hover:text-amber-800 border border-zinc-200/90 shadow-2xs dark:bg-[#151e33] dark:text-zinc-300 dark:hover:bg-amber-500/20 dark:hover:text-amber-300 dark:border-white/10 transition-all font-medium disabled:opacity-50"
+                onClick={() => handleSendChatMessage("What are the biggest risks or red flags in this company that a beginner should know?")}
+                className="whitespace-nowrap px-2.5 py-1 rounded-full bg-white text-zinc-700 hover:bg-zinc-100 hover:text-zinc-900 border border-zinc-200/90 shadow-2xs dark:bg-zinc-800/80 dark:text-zinc-300 dark:hover:bg-zinc-700 dark:border-zinc-700 transition-all font-medium disabled:opacity-50 cursor-pointer"
               >
-                Key Risks
+                ⚠️ Top Risks for Beginners
               </button>
             </div>
 
-            {/* Type Question Input Bar (Pure Keyboard, No Mic) */}
+            {/* Type Question Input Bar */}
             <form
               onSubmit={handleChatFormSubmit}
-              className="flex items-center gap-2 p-3 border-t border-zinc-200/80 bg-white dark:border-white/10 dark:bg-[#0b0f19]"
+              className="flex items-center gap-2 p-2.5 border-t border-zinc-200/80 bg-white dark:border-zinc-800 dark:bg-[#0c1017]"
             >
               <input
                 type="text"
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
-                placeholder="Type your question about this screen…"
+                placeholder="Ask about this stock in plain words (e.g. Is this safe for a beginner?)..."
                 disabled={chatLoading}
-                className="flex-1 px-3.5 py-2 text-xs rounded-xl border border-zinc-300 bg-zinc-50 text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:border-amber-500 focus:bg-white focus:ring-1 focus:ring-amber-500 dark:border-white/15 dark:bg-[#141b2c] dark:text-white dark:placeholder:text-zinc-500 dark:focus:border-amber-500 disabled:opacity-50"
+                className="flex-1 px-3.5 py-2 text-xs rounded-xl border border-zinc-200 bg-zinc-50 text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:border-emerald-500 focus:bg-white focus:ring-1 focus:ring-emerald-500 dark:border-zinc-800 dark:bg-[#121722] dark:text-white dark:placeholder:text-zinc-500 dark:focus:border-emerald-500 disabled:opacity-50"
               />
               <button
                 type="submit"
                 disabled={!chatInput.trim() || chatLoading}
                 title="Send message"
-                className="p-2.5 rounded-xl bg-gradient-to-r from-amber-600 to-amber-500 text-white hover:from-amber-500 hover:to-amber-400 disabled:opacity-40 transition-all shadow-md active:scale-95 cursor-pointer"
+                className="p-2.5 rounded-xl bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-40 transition-all shadow-xs active:scale-95 cursor-pointer"
               >
                 <Send className="w-3.5 h-3.5" />
               </button>
             </form>
+
+            {/* Trust & Transparency Footer */}
+            <div className="px-3 pb-2 pt-0.5 text-[9.5px] text-zinc-400 dark:text-zinc-500 text-center flex items-center justify-center gap-1 bg-white dark:bg-[#0c1017]">
+              <ShieldCheck className="w-3 h-3 text-emerald-500/80" />
+              <span>Grounded in live NSE/BSE filings. Educational research only.</span>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>

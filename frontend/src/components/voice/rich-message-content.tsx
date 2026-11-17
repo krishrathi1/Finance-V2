@@ -43,7 +43,7 @@ function renderInline(text: string): React.ReactNode[] {
       return (
         <code
           key={idx}
-          className="px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-black/40 font-mono text-[10px] text-amber-700 dark:text-amber-400 border border-zinc-200 dark:border-amber-500/20"
+          className="px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 font-mono text-[10px] text-emerald-700 dark:text-emerald-400 border border-zinc-200 dark:border-zinc-700"
         >
           {part.slice(1, -1)}
         </code>
@@ -95,11 +95,11 @@ export function RichMessageContent({ content }: RichMessageContentProps) {
         elements.push(
           <div
             key={`table-${i}`}
-            className="my-3 overflow-x-auto rounded-xl border border-zinc-200 dark:border-white/15 bg-white dark:bg-[#0a0f1d] shadow-xs dark:shadow-md"
+            className="my-3 overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#0c1017] shadow-2xs"
           >
             <table className="w-full border-collapse text-[11px] text-left">
               {headerCells.length > 0 && (
-                <thead className="bg-zinc-100/90 dark:bg-[#151e33] border-b border-zinc-200 dark:border-white/15 text-amber-700 dark:text-amber-400 font-semibold tracking-wide">
+                <thead className="bg-zinc-100/90 dark:bg-zinc-800/80 border-b border-zinc-200 dark:border-zinc-800 text-zinc-900 dark:text-zinc-100 font-semibold tracking-wide">
                   <tr>
                     {headerCells.map((h, hIdx) => (
                       <th key={hIdx} className="px-3 py-2 whitespace-nowrap">
@@ -109,11 +109,11 @@ export function RichMessageContent({ content }: RichMessageContentProps) {
                   </tr>
                 </thead>
               )}
-              <tbody className="divide-y divide-zinc-100 dark:divide-white/5">
+              <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/60">
                 {rows.map((row, rIdx) => (
                   <tr
                     key={rIdx}
-                    className="hover:bg-zinc-50 dark:hover:bg-white/5 transition-colors"
+                    className="hover:bg-zinc-50 dark:hover:bg-zinc-800/40 transition-colors"
                   >
                     {row.map((cell, cIdx) => (
                       <td
@@ -141,7 +141,7 @@ export function RichMessageContent({ content }: RichMessageContentProps) {
       elements.push(
         <h4
           key={`h-${i}`}
-          className={`font-bold text-amber-700 dark:text-amber-400 ${
+          className={`font-bold text-zinc-900 dark:text-zinc-100 tracking-tight ${
             level <= 2 ? "text-xs mt-3 mb-1.5" : "text-[11px] mt-2 mb-1"
           }`}
         >
@@ -172,7 +172,7 @@ export function RichMessageContent({ content }: RichMessageContentProps) {
       elements.push(
         <blockquote
           key={`quote-${i}`}
-          className="my-2 border-l-2 border-amber-500 pl-3 text-[11px] italic text-zinc-700 dark:text-zinc-300 bg-amber-500/10 py-1.5 rounded-r-lg"
+          className="my-2 border-l-2 border-emerald-500 pl-3 text-[11px] italic text-zinc-700 dark:text-zinc-300 bg-emerald-500/5 py-1.5 rounded-r-lg"
         >
           {renderInline(quoteText)}
         </blockquote>
@@ -186,7 +186,7 @@ export function RichMessageContent({ content }: RichMessageContentProps) {
       const itemText = trimmed.replace(/^[-*•]\s+/, "");
       elements.push(
         <div key={`bullet-${i}`} className="flex items-start gap-2 my-1 ml-0.5 text-xs">
-          <span className="text-amber-600 dark:text-amber-400 mt-1 shrink-0 text-[10px] leading-none">•</span>
+          <span className="text-emerald-600 dark:text-emerald-400 mt-1 shrink-0 text-[10px] leading-none">•</span>
           <span className="text-zinc-800 dark:text-zinc-200 leading-relaxed">
             {renderInline(itemText)}
           </span>
@@ -201,7 +201,7 @@ export function RichMessageContent({ content }: RichMessageContentProps) {
     if (numMatch) {
       elements.push(
         <div key={`num-${i}`} className="flex items-start gap-2 my-1 ml-0.5 text-xs">
-          <span className="text-amber-600 dark:text-amber-400 font-bold shrink-0 text-[10px] min-w-3.5">
+          <span className="text-emerald-600 dark:text-emerald-400 font-bold shrink-0 text-[10px] min-w-3.5">
             {numMatch[1]}.
           </span>
           <span className="text-zinc-800 dark:text-zinc-200 leading-relaxed">
