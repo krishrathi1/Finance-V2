@@ -14,6 +14,7 @@ import {
   ShieldCheck,
   MessageSquareText,
   HelpCircle,
+  Volume2,
 } from "lucide-react";
 import { RichMessageContent } from "./rich-message-content";
 import { extractClientScreenSnapshot } from "@/lib/voice/context-extractor";
@@ -33,6 +34,8 @@ export function FloatingVoiceAssistant() {
   const [voiceState, setVoiceState] = useState<VoiceState>("idle");
   const [voiceStatusMessage, setVoiceStatusMessage] = useState<string>("");
   const [voiceLiveTranscript, setVoiceLiveTranscript] = useState<string>("");
+  const [latestAudioBlobUrl, setLatestAudioBlobUrl] = useState<string | null>(null);
+  const [isPlayingAudio, setIsPlayingAudio] = useState<boolean>(false);
 
   const voiceSessionIdRef = useRef<string>("");
   const voiceHistoryRef = useRef<ChatTurn[]>([]);
@@ -292,73 +295,80 @@ export function FloatingVoiceAssistant() {
         }
         const byteArray = new Uint8Array(byteNumbers);
 
-        // Priority 1: Hardware-accelerated Web Audio API (Native buffer decoding, zero autoplay restriction on mobile)
-        const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-        if (AudioContextClass) {
-          if (!audioCtxRef.current || audioCtxRef.current.state === "closed") {
-            audioCtxRef.current = new AudioContextClass();
-          }
-          const ctx = audioCtxRef.current;
-          if (ctx.state === "suspended") {
-            await ctx.resume();
-          }
-
-          const audioBuffer = await ctx.decodeAudioData(byteArray.buffer.slice(0));
-          if (audioSourceNodeRef.current) {
-            try { audioSourceNodeRef.current.stop(); } catch {}
-          }
-
-          const source = ctx.createBufferSource();
-          source.buffer = audioBuffer;
-          source.connect(ctx.destination);
-          audioSourceNodeRef.current = source;
-
-          setVoiceState("speaking");
-          setVoiceStatusMessage("Co-Pilot speaking…");
-
-          source.onended = () => {
-            audioSourceNodeRef.current = null;
-            if (isMutedRef.current || mode !== "voice") return;
-            startListening();
-          };
-
-          source.start(0);
-          return;
-        }
-
-        // Priority 2: HTML5 Audio Object fallback
+        // Generate Blob Object URL for mobile loudspeaker routing & replay
         const blob = new Blob([byteArray], { type: mimeType || "audio/wav" });
         const audioUrl = URL.createObjectURL(blob);
+        setLatestAudioBlobUrl(audioUrl);
 
         if (!audioPlayerRef.current) {
           audioPlayerRef.current = new Audio();
         }
         const audio = audioPlayerRef.current;
         audio.src = audioUrl;
+        audio.volume = 1.0;
         audio.currentTime = 0;
+
         setVoiceState("speaking");
         setVoiceStatusMessage("Co-Pilot speaking…");
+        setIsPlayingAudio(true);
 
         audio.onended = () => {
-          try { URL.revokeObjectURL(audioUrl); } catch {}
+          setIsPlayingAudio(false);
           if (isMutedRef.current || mode !== "voice") return;
           startListening();
         };
 
-        audio.onerror = (e) => {
-          console.warn("[voice] audio element error:", e);
-          try { URL.revokeObjectURL(audioUrl); } catch {}
+        audio.onerror = async () => {
+          setIsPlayingAudio(false);
+          // Secondary fallback to Web Audio API
+          try {
+            const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+            if (AudioContextClass) {
+              const ctx = audioCtxRef.current || new AudioContextClass();
+              if (ctx.state === "suspended") await ctx.resume();
+              const audioBuffer = await ctx.decodeAudioData(byteArray.buffer.slice(0));
+              const source = ctx.createBufferSource();
+              source.buffer = audioBuffer;
+              source.connect(ctx.destination);
+              audioSourceNodeRef.current = source;
+              setIsPlayingAudio(true);
+              source.onended = () => {
+                setIsPlayingAudio(false);
+                if (isMutedRef.current || mode !== "voice") return;
+                startListening();
+              };
+              source.start(0);
+              return;
+            }
+          } catch {}
           if (isMutedRef.current || mode !== "voice") return;
           fallbackSpeechSynthesis(fallbackText);
         };
 
         const playPromise = audio.play();
         if (playPromise !== undefined) {
-          playPromise.catch((err) => {
-            console.warn("[voice] audio play rejected:", err);
-            try { URL.revokeObjectURL(audioUrl); } catch {}
-            if (isMutedRef.current || mode !== "voice") return;
-            fallbackSpeechSynthesis(fallbackText);
+          playPromise.catch(async (err) => {
+            console.warn("[voice] HTML audio.play() rejected, trying Web Audio API:", err);
+            try {
+              const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+              if (AudioContextClass) {
+                const ctx = audioCtxRef.current || new AudioContextClass();
+                if (ctx.state === "suspended") await ctx.resume();
+                const audioBuffer = await ctx.decodeAudioData(byteArray.buffer.slice(0));
+                const source = ctx.createBufferSource();
+                source.buffer = audioBuffer;
+                source.connect(ctx.destination);
+                audioSourceNodeRef.current = source;
+                setIsPlayingAudio(true);
+                source.onended = () => {
+                  setIsPlayingAudio(false);
+                  if (isMutedRef.current || mode !== "voice") return;
+                  startListening();
+                };
+                source.start(0);
+                return;
+              }
+            } catch {}
           });
         }
         return;
@@ -374,6 +384,29 @@ export function FloatingVoiceAssistant() {
       startListening();
     }
   }, [mode]);
+
+  const handleManualPlayAudio = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!latestAudioBlobUrl) return;
+    try {
+      if (!audioPlayerRef.current) {
+        audioPlayerRef.current = new Audio();
+      }
+      const audio = audioPlayerRef.current;
+      audio.src = latestAudioBlobUrl;
+      audio.volume = 1.0;
+      audio.currentTime = 0;
+      setIsPlayingAudio(true);
+      setVoiceState("speaking");
+      setVoiceStatusMessage("Co-Pilot speaking…");
+      audio.onended = () => {
+        setIsPlayingAudio(false);
+      };
+      audio.play().catch(() => {
+        setIsPlayingAudio(false);
+      });
+    } catch {}
+  };
 
   const sendVoiceUtteranceToBackend = async (audioBlob: Blob | null, textQuery: string) => {
     if (isMutedRef.current) return;
@@ -933,14 +966,29 @@ export function FloatingVoiceAssistant() {
               </button>
             </div>
 
-            {/* Live Spoken Transcript / Response Preview */}
+            {/* Live Spoken Transcript / Response Preview with Loudspeaker Play Button */}
             {voiceLiveTranscript && (
               <motion.div
                 initial={{ opacity: 0, y: 4 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="text-xs text-zinc-700 dark:text-zinc-300 bg-zinc-50 dark:bg-zinc-900/90 rounded-xl p-2.5 border border-zinc-200/60 dark:border-zinc-800/80 leading-relaxed max-h-24 overflow-y-auto"
+                className="flex flex-col gap-1.5 bg-zinc-50 dark:bg-zinc-900/90 rounded-xl p-2.5 border border-zinc-200/60 dark:border-zinc-800/80"
               >
-                {voiceLiveTranscript}
+                <div className="flex items-center justify-between text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
+                  <span>Co-Pilot Answer</span>
+                  {latestAudioBlobUrl && (
+                    <button
+                      type="button"
+                      onClick={handleManualPlayAudio}
+                      className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-700 dark:text-emerald-300 text-[10px] font-semibold transition-all cursor-pointer shadow-2xs active:scale-95"
+                    >
+                      <Volume2 className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                      <span>{isPlayingAudio ? "Playing…" : "🔊 Tap to Hear"}</span>
+                    </button>
+                  )}
+                </div>
+                <div className="text-xs text-zinc-700 dark:text-zinc-300 leading-relaxed max-h-24 overflow-y-auto">
+                  {voiceLiveTranscript}
+                </div>
               </motion.div>
             )}
           </motion.div>
