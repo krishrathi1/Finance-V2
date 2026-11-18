@@ -889,6 +889,17 @@ export function FloatingVoiceAssistant() {
                 <X className="w-4 h-4 stroke-[2.5]" />
               </button>
             </div>
+
+            {/* Live Spoken Transcript / Response Preview */}
+            {voiceLiveTranscript && (
+              <motion.div
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="text-xs text-zinc-700 dark:text-zinc-300 bg-zinc-50 dark:bg-zinc-900/90 rounded-xl p-2.5 border border-zinc-200/60 dark:border-zinc-800/80 leading-relaxed max-h-24 overflow-y-auto"
+              >
+                {voiceLiveTranscript}
+              </motion.div>
+            )}
           </motion.div>
         )}
 

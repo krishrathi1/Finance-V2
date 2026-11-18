@@ -608,9 +608,14 @@ ${
       }
     }
 
-    // In voice mode, clean markdown formatting symbols before speech synthesis
+    // In voice mode, clean markdown formatting symbols and cap length for fast speech synthesis
     if (!isChatMode) {
       textReply = textReply.replace(/[*#_`~]/g, "").replace(/₹/g, " rupees ").trim();
+      if (textReply.length > 420) {
+        const trunc = textReply.slice(0, 420);
+        const lastPeriod = Math.max(trunc.lastIndexOf("."), trunc.lastIndexOf("!"), trunc.lastIndexOf("?"));
+        textReply = lastPeriod > 100 ? trunc.slice(0, lastPeriod + 1) : trunc.replace(/\s+\S*$/, "") + ".";
+      }
     }
 
     // 7. Synthesize speech ONLY in voice mode using Sarvam AI (native en-IN)

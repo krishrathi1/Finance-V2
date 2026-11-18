@@ -39,6 +39,21 @@ export async function synthesizeSpeech(
     try {
       const speaker = process.env.SARVAM_SPEAKER || "priya";
       const model = process.env.SARVAM_MODEL || "bulbul:v3";
+
+      // Enforce Sarvam AI's strict 500-character limit per input item
+      let sarvamInput = cleanedText;
+      if (sarvamInput.length > 480) {
+        const truncated = sarvamInput.slice(0, 480);
+        const lastPunct = Math.max(
+          truncated.lastIndexOf("."),
+          truncated.lastIndexOf("!"),
+          truncated.lastIndexOf("?")
+        );
+        sarvamInput = lastPunct > 120
+          ? truncated.slice(0, lastPunct + 1)
+          : truncated.replace(/\s+\S*$/, "") + ".";
+      }
+
       const res = await fetch("https://api.sarvam.ai/text-to-speech", {
         method: "POST",
         headers: {
@@ -46,7 +61,7 @@ export async function synthesizeSpeech(
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          inputs: [cleanedText],
+          inputs: [sarvamInput],
           target_language_code: "en-IN",
           speaker,
           model,
