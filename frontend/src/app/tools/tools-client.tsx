@@ -1382,8 +1382,8 @@ function OptionPayoffCalculator() {
           </div>
 
           {curve && curve.length > 1 ? (
-            <div className="mt-3 h-44 w-full">
-              <ResponsiveContainer width="100%" height="100%">
+            <div className="mt-3 h-44 w-full min-w-0">
+              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={150}>
                 <AreaChart data={curve} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
                   <defs>
                     {/* Split the fill at y=0 so profit shades green and loss

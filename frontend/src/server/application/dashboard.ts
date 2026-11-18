@@ -506,6 +506,7 @@ export async function buildDashboard(symbol: string, options: BuildOptions = {})
   data.exchange = requestedExchange;
 
   // ---- Provider fan-out (parallel, per-call timeouts) ----
+  // Critical fast-path providers (Quote + Candles) are prioritized with snappy timeouts
   const [
     nseQuote,
     nseEvents,
@@ -525,23 +526,23 @@ export async function buildDashboard(symbol: string, options: BuildOptions = {})
     fmpEstimates,
     trendlyneSupplement,
   ] = await Promise.all([
-    safeCall((signal) => getNseQuote(base, signal), 6000, "nseQuote"),
-    safeCall((signal) => getNseCorporateEvents(base, signal), 8000, "nseEvents"),
-    safeCall((signal) => getNseQuarterlyResults(base, signal), 8000, "nseQuarterly"),
-    safeCall((signal) => getNseShareholdingHistory(base, signal), 7000, "nseShareholding"),
-    safeCall((signal) => getYahooQuote(marketSymbol, signal), 6000, "yahooQuote"),
-    safeCall((signal) => getYahooCandles(marketSymbol, historyDays, signal), 8000, "yahooCandles"),
-    safeCall((signal) => getYahooBundle(marketSymbol, historyDays, signal), 11000, "yahooBundle"),
-    safeCall((signal) => getYahooTimeseriesFinancials(marketSymbol, signal), 8000, "yahooTimeseriesFinancials"),
-    safeCall((signal) => getFmpQuote(marketSymbol, signal), 6000, "fmpQuote"),
-    safeCall((signal) => getFmpCandles(marketSymbol, "5Y", signal), 8000, "fmpCandles"),
-    safeCall((signal) => getFmpQuarterlyResults(marketSymbol, signal), 7000, "fmpQuarterly"),
-    safeCall((signal) => getFmpProfile(marketSymbol, signal), 6000, "fmpProfile"),
-    safeCall((signal) => getFmpKeyMetrics(marketSymbol, signal), 6000, "fmpKeyMetrics"),
-    safeCall((signal) => getFmpFinancialStatements(marketSymbol, signal), 9000, "fmpStatements"),
-    safeCall((signal) => getFmpFinancialGrowth(marketSymbol, signal), 6000, "fmpGrowth"),
-    safeCall((signal) => getFmpAnalystEstimates(marketSymbol, signal), 6000, "fmpEstimates"),
-    safeCall((signal) => getTrendlyneSupplement(base, signal), 13_000, "trendlyneSupplement"),
+    safeCall((signal) => getNseQuote(base, signal), 3500, "nseQuote"),
+    safeCall((signal) => getNseCorporateEvents(base, signal), 4500, "nseEvents"),
+    safeCall((signal) => getNseQuarterlyResults(base, signal), 4500, "nseQuarterly"),
+    safeCall((signal) => getNseShareholdingHistory(base, signal), 4000, "nseShareholding"),
+    safeCall((signal) => getYahooQuote(marketSymbol, signal), 3500, "yahooQuote"),
+    safeCall((signal) => getYahooCandles(marketSymbol, historyDays, signal), 4500, "yahooCandles"),
+    safeCall((signal) => getYahooBundle(marketSymbol, historyDays, signal), 5500, "yahooBundle"),
+    safeCall((signal) => getYahooTimeseriesFinancials(marketSymbol, signal), 4500, "yahooTimeseriesFinancials"),
+    safeCall((signal) => getFmpQuote(marketSymbol, signal), 3500, "fmpQuote"),
+    safeCall((signal) => getFmpCandles(marketSymbol, "5Y", signal), 4500, "fmpCandles"),
+    safeCall((signal) => getFmpQuarterlyResults(marketSymbol, signal), 4000, "fmpQuarterly"),
+    safeCall((signal) => getFmpProfile(marketSymbol, signal), 3500, "fmpProfile"),
+    safeCall((signal) => getFmpKeyMetrics(marketSymbol, signal), 3500, "fmpKeyMetrics"),
+    safeCall((signal) => getFmpFinancialStatements(marketSymbol, signal), 5000, "fmpStatements"),
+    safeCall((signal) => getFmpFinancialGrowth(marketSymbol, signal), 4000, "fmpGrowth"),
+    safeCall((signal) => getFmpAnalystEstimates(marketSymbol, signal), 4000, "fmpEstimates"),
+    safeCall((signal) => getTrendlyneSupplement(base, signal), 5500, "trendlyneSupplement"),
   ]);
 
   const bundle: any = yahooBundle || {};
@@ -846,9 +847,19 @@ export async function buildDashboard(symbol: string, options: BuildOptions = {})
         (max, entry) => (max === null || entry[1] > max[1] ? entry : max),
         null as [string, number] | null
       )?.[0];
+      const aiContext = {
+        symbol: base,
+        companyName: data.companyName,
+        sector: data.sector,
+        metrics: data.metrics,
+        technicals: data.technicals,
+        news: data.news,
+        returnsSummary: data.returnsSummary,
+        brokerageResearch: data.brokerageResearch,
+      };
       const [smart, risk, profile] = await Promise.all([
-        safeCall(() => explainSmartScore(base, data.smartScore.score, data.smartScore.dimensions, weakHint), 9000, "explainSmart"),
-        safeCall(() => explainRiskScore(base, data.riskScore.score, data.riskScore.components, highHint), 9000, "explainRisk"),
+        safeCall(() => explainSmartScore(base, data.smartScore.score, data.smartScore.dimensions, weakHint, aiContext), 9000, "explainSmart"),
+        safeCall(() => explainRiskScore(base, data.riskScore.score, data.riskScore.components, highHint, aiContext), 9000, "explainRisk"),
         (!data.profile.incorporationYear || !data.profile.headquarters)
           ? safeCall(() => extractProfileDetails(base, data.companyName, data.profile.description || ""), 9000, "profile")
           : Promise.resolve(null),

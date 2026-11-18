@@ -526,6 +526,40 @@ export async function fetchSwotAnalysis(symbol: string, options: { refresh?: boo
   }
 }
 
+export type ResearchReportResponse = {
+  title: string;
+  report: string;
+  recommendations: string[];
+  targetPrice: number | null;
+  riskLevel: "low" | "medium" | "high";
+  source: "gemini" | "fallback";
+};
+
+export async function fetchResearchReport(
+  symbol: string,
+  options: { refresh?: boolean } = {}
+): Promise<ResearchReportResponse> {
+  try {
+    const url = getApiUrl(`/${symbol}/research-report`) + (options.refresh ? "?refresh=true" : "");
+    const res = await fetchWithTimeout(url, { cache: "no-store" }, 25_000);
+    if (!res.ok) throw new Error(`Research report request failed: ${res.status}`);
+    return await res.json();
+  } catch {
+    return {
+      title: `${symbol} Research Note`,
+      report: `Automated equity analysis for ${symbol}. Please review fundamental ratios, quarterly growth, and peer multiples before making investment decisions.`,
+      recommendations: [
+        "Review trailing 4 quarters revenue and operating margin momentum.",
+        "Compare valuation multiples (P/E, P/B) against sector median.",
+        "Assess leverage and debt coverage ratios.",
+      ],
+      targetPrice: null,
+      riskLevel: "medium",
+      source: "fallback",
+    };
+  }
+}
+
 export async function fetchMarketNews(options: { force?: boolean } = {}) {
   const force = Boolean(options.force);
   const key = "market-news";

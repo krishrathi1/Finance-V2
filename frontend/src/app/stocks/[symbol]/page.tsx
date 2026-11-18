@@ -8,6 +8,7 @@ import { PageHero } from "@/components/page-hero";
 import { DashboardAutoRefresh } from "@/components/sections/dashboard-auto-refresh";
 import { LiveStockDetails } from "@/components/sections/live-stock-details";
 import { StockSectionTabs } from "@/components/sections/stock-section-tabs";
+import { ViewModeProvider } from "@/context/view-mode-context";
 // Server-side data access, not the HTTP client in lib/api.ts. This page runs
 // on the server, so it calls the dashboard builder directly instead of making
 // the app issue an HTTP request to its own API — that round trip broke
@@ -380,6 +381,48 @@ export default async function StockDetailsPage({ params, searchParams }: Props) 
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(stockJsonLd) }}
       />
+      <script
+        id="stock-page-data"
+        type="application/json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            symbol,
+            companyName: data.companyName,
+            exchange: data.exchange || exchange,
+            sector: data.sector,
+            cmp: data.price?.cmp,
+            dayChange: data.price?.change,
+            dayChangePercent: data.price?.changePercent,
+            high52: data.price?.fiftyTwoWeekHigh ?? (data.price as any)?.high52,
+            low52: data.price?.fiftyTwoWeekLow ?? (data.price as any)?.low52,
+            open: (data.price as any)?.open,
+            previousClose: (data.price as any)?.previousClose,
+            volume: (data.price as any)?.volume,
+            smartScore: smartScore.score,
+            smartScoreLabel: smartScore.label,
+            smartScoreExplanation: smartScore.explanation,
+            riskScore: riskScore.score,
+            riskScoreLabel: riskScore.label,
+            riskScoreExplanation: riskScore.explanation,
+            pe: (data.metrics as any)?.pe ?? (data.price as any)?.pe,
+            pb: (data.metrics as any)?.pb,
+            marketCap: (data.metrics as any)?.marketCap ?? (data.price as any)?.marketCap,
+            dividendYield: (data.metrics as any)?.dividendYield,
+            roe: (data.metrics as any)?.roe,
+            roce: (data.metrics as any)?.roce,
+            technicals: data.technicals,
+            shareholding: data.shareholding,
+            quarterly: data.financials?.quarterly?.slice(0, 4),
+            growthSnapshot: data.financials?.growthSnapshot,
+            competitors: data.competitors?.table?.slice(0, 5),
+            news: data.news?.slice(0, 4)?.map((n: any) => ({
+              title: n.title,
+              publisher: n.publisher,
+              date: n.date,
+            })),
+          }),
+        }}
+      />
     <div className="stagger-fade space-y-4">
       <PageHero
         breadcrumbs={[{ label: "Home", href: "/" }, { label: symbol }]}
@@ -496,23 +539,25 @@ export default async function StockDetailsPage({ params, searchParams }: Props) 
 
       <DashboardAutoRefresh symbol={symbol} active={shouldAutoRefresh} warning={refreshWarning} />
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(280px,340px)_minmax(0,1fr)] 2xl:grid-cols-[minmax(300px,360px)_minmax(0,1fr)]">
-        <aside className="min-w-0">
-          <PriceSidebar data={data} />
-        </aside>
+      <ViewModeProvider>
+        <div className="grid gap-4 lg:grid-cols-[minmax(280px,340px)_minmax(0,1fr)] 2xl:grid-cols-[minmax(300px,360px)_minmax(0,1fr)]">
+          <aside className="min-w-0">
+            <PriceSidebar data={data} />
+          </aside>
 
-        <section className="min-w-0 space-y-4">
-          <StockSectionTabs />
+          <section className="min-w-0 space-y-4">
+            <StockSectionTabs />
 
-          {/* key={symbol} forces a full remount on navigation between stocks —
-              LiveStockDetails and its children (SWOT, earnings TL;DR,
-              competitor verdict, news, AI chat) all seed local state from
-              props via useState with no resync effect, so without this they
-              silently keep showing the previous symbol's content/AI answers
-              after a client-side navigation. */}
-          <LiveStockDetails key={symbol} initialData={data} symbol={symbol} exchange={data.exchange || exchange} />
-        </section>
-      </div>
+            {/* key={symbol} forces a full remount on navigation between stocks —
+                LiveStockDetails and its children (SWOT, earnings TL;DR,
+                competitor verdict, news, AI chat) all seed local state from
+                props via useState with no resync effect, so without this they
+                silently keep showing the previous symbol's content/AI answers
+                after a client-side navigation. */}
+            <LiveStockDetails key={symbol} initialData={data} symbol={symbol} exchange={data.exchange || exchange} />
+          </section>
+        </div>
+      </ViewModeProvider>
     </div>
     </>
   );

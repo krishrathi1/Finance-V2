@@ -95,7 +95,12 @@ export async function getJson<T = any>(url: string, opts: FetchOpts = {}): Promi
       lastErr = err;
     }
   }
-  if (lastErr) console.warn(`[provider] getJson failed: ${redactSecrets(lastErr)}`);
+  if (lastErr) {
+    const isAbort = (lastErr as any)?.name === "AbortError" || String(lastErr).includes("aborted");
+    if (!isAbort) {
+      console.warn(`[provider] getJson failed: ${redactSecrets(lastErr)}`);
+    }
+  }
   return null;
 }
 
@@ -120,7 +125,12 @@ export async function getText(url: string, opts: FetchOpts = {}): Promise<string
       lastErr = err;
     }
   }
-  if (lastErr) console.warn(`[provider] getText failed: ${redactSecrets(lastErr)}`);
+  if (lastErr) {
+    const isAbort = (lastErr as any)?.name === "AbortError" || String(lastErr).includes("aborted");
+    if (!isAbort) {
+      console.warn(`[provider] getText failed: ${redactSecrets(lastErr)}`);
+    }
+  }
   return null;
 }
 

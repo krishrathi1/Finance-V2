@@ -69,7 +69,7 @@ export interface VoiceTalkResponse {
   sessionId: string;
   userQuery: string;
   textReply: string;
-  provider: "elevenlabs" | "fallback";
+  provider: "elevenlabs" | "sarvam" | "fallback";
   audioBase64: string | null;
   audioMimeType: string;
   retrievedChunksCount?: number;

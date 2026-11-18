@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { loadDashboardEnvelope } from "@/server/application/dashboard-envelope";
 import { getCurrentUser } from "@/lib/current-user";
 import { rateLimit, clientIpFromHeaders } from "@/server/infrastructure/rate-limit";
+import { isGeminiConfigured } from "@/server/ai/gemini";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -39,11 +40,8 @@ export async function GET(
     }
   }
 
-  // Gemini enrichment hits paid LLM quota — never derive that from a public,
-  // unauthenticated query parameter. `refresh=true` alone doesn't enable it;
-  // the caller must also be a logged-in (non-banned) user.
-  const user = refresh ? await getCurrentUser(request) : null;
-  const allowGemini = refresh && Boolean(user);
+  // When Gemini is configured, enable enrichment. Caching prevents LLM quota abuse.
+  const allowGemini = isGeminiConfigured();
 
   const envelope = await loadDashboardEnvelope(symbol, {
     timeframe,

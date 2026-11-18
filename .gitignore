@@ -53,3 +53,7 @@ share/
 
 # Saved Docker images — large binaries, rebuilt with `docker save`.
 *.tar
+
+# Local skills & submodules
+day-trader-skill/
+.agents/

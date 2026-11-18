@@ -12,6 +12,9 @@ import { CompetitorsSection } from "@/components/sections/competitors-section";
 import { CorporateActionsSection } from "@/components/sections/corporate-actions-section";
 import { DocumentsSection } from "@/components/sections/documents-section";
 import { EarningsTldr } from "@/components/sections/earnings-tldr";
+import { AdvancedOptionsContainer } from "@/components/sections/advanced-options-container";
+import { DayTraderSuite } from "@/components/sections/day-trader-suite";
+import { useViewMode } from "@/context/view-mode-context";
 import { KeyRatiosSection } from "@/components/sections/key-ratios-section";
 import { MetricsGridLive } from "@/components/sections/metrics-grid-live";
 import { PopularStocksSeoMesh } from "@/components/sections/popular-stocks-seo-mesh";
@@ -94,6 +97,7 @@ function isDataEqual(a: DashboardData, b: DashboardData) {
 export function LiveStockDetails({ initialData, symbol, exchange }: { initialData: DashboardData; symbol: string; exchange: string }) {
   const [data, setData] = useState(initialData);
   const [showReportModal, setShowReportModal] = useState(false);
+  const { isAnalyst } = useViewMode();
 
   const refreshRef = useRef<() => void>(() => {});
 
@@ -199,6 +203,42 @@ export function LiveStockDetails({ initialData, symbol, exchange }: { initialDat
           brokerageResearch={data.brokerageResearch}
           currentPrice={data.price?.cmp}
         />
+
+        {/* Advanced Options & Day Trader Pro Tools (Placed outside AuthWall for direct access) */}
+        <AdvancedOptionsContainer defaultExpanded={isAnalyst}>
+          {/* Intraday Breakout (ORB), Stop-Loss Ladder & Time Machine Odds */}
+          <DayTraderSuite
+            symbol={symbol}
+            cmp={data.price?.cmp}
+            history={data.price?.history}
+            intraday={data.price?.intraday}
+          />
+
+          {/* Phase 2: Options Chain & Greeks Analytics */}
+          <section id="options-chain" className="space-y-4">
+            <OptionsChainTable symbol={symbol} currentPrice={data.price?.cmp} />
+          </section>
+
+          {/* Institutional / Smart Money FII/DII Flows Tracker */}
+          <InstitutionalTracker />
+
+          {/* Phase 1: Forensic Accounting & Red Flag Audit */}
+          <section id="forensics" className="space-y-4">
+            <ForensicsSection stockData={data} />
+          </section>
+
+          {/* Quantitative Horizon Analytics */}
+          <div className="grid gap-4 xl:grid-cols-2">
+            <RollingReturns history={data.price?.history} />
+            <SipSimulator history={data.price?.history} />
+          </div>
+
+          {/* Drawdown & Underwater History */}
+          <UnderwaterHistory history={data.price?.history} />
+
+          {/* Exhaustive Metrics Lookup Table */}
+          <MetricsReference data={data} />
+        </AdvancedOptionsContainer>
       </section>
 
       <StockAuthWall>
@@ -227,87 +267,48 @@ export function LiveStockDetails({ initialData, symbol, exchange }: { initialDat
           />
         </div>
 
-        {/* Phase 1: Forensic Accounting & Red Flag Audit */}
-        <section id="forensics" className="space-y-4">
-          <ForensicsSection stockData={data} />
-        </section>
-
-        {/* Phase 2: Options Chain & Greeks Analytics */}
-        <section id="options-chain" className="space-y-4">
-          <OptionsChainTable symbol={symbol} currentPrice={data.price?.cmp} />
-        </section>
-
-        {/* Institutional FII/DII Flows Tracker */}
-        <InstitutionalTracker />
-
-        {/* Quality & Safety scores today's ratios against fixed thresholds;
-            these two answer the questions it can't — did the business improve
-            on last year, and what has owning it actually felt like. */}
+        {/* Core Fundamental Assessment */}
         <div className="grid gap-4 xl:grid-cols-2">
           <QualityScore metrics={data.metrics} financials={data.financials} sector={data.sector} />
           <FundamentalSignals financials={data.financials} />
         </div>
 
-        {/* Placed high: it synthesises the cards below into two cases and
-            names where they disagree, which is the question a reader is
-            actually here to answer. */}
+        {/* Investment Thesis */}
         <InvestmentThesis data={data} />
 
         <StatementQuality financials={data.financials} marketCap={data.metrics?.marketCap} />
 
-        <PeerValuation
-          metrics={data.metrics}
-          competitors={data.competitors}
-          brokerageResearch={data.brokerageResearch}
-          currentPrice={data.price?.cmp}
-        />
+        {/* Advanced Analyst Deep Dives: Hidden in Simple View to avoid clutter */}
+        {isAnalyst && (
+          <div className="space-y-4 animate-in fade-in-50 duration-300">
+            <PriceRiskProfile
+              history={data.price?.history}
+              currentPrice={data.price?.cmp}
+              fiftyTwoWeekLow={data.price?.fiftyTwoWeekLow}
+              fiftyTwoWeekHigh={data.price?.fiftyTwoWeekHigh}
+            />
 
-        <PriceRiskProfile
-          history={data.price?.history}
-          currentPrice={data.price?.cmp}
-          fiftyTwoWeekLow={data.price?.fiftyTwoWeekLow}
-          fiftyTwoWeekHigh={data.price?.fiftyTwoWeekHigh}
-        />
+            <div className="grid gap-4 xl:grid-cols-2">
+              <ReturnAnalysis history={data.price?.history} />
+              <TechnicalAnalysis history={data.price?.history} />
+            </div>
 
-        <div className="grid gap-4 xl:grid-cols-2">
-          <ReturnAnalysis history={data.price?.history} />
-          <TechnicalAnalysis history={data.price?.history} />
-        </div>
+            <div className="grid gap-4 xl:grid-cols-2">
+              <DividendTrackRecord
+                dividends={data.corporateActions?.dividends}
+                currentPrice={data.price?.cmp}
+              />
+              <ShareholdingTrend history={data.shareholding?.history} />
+            </div>
 
-        {/* Sits right after the single-observation trailing returns above: this
-            pair answers the same question across every start date, and for the
-            staggered entry most retail money actually uses. */}
-        <div className="grid gap-4 xl:grid-cols-2">
-          <RollingReturns history={data.price?.history} />
-          <SipSimulator history={data.price?.history} />
-        </div>
-
-        {/* The "how long" half of the drawdown question the Risk Profile card
-            above answers with "how bad". */}
-        <UnderwaterHistory history={data.price?.history} />
-
-        {/* The exhaustive lookup, after the curated cards: search-first,
-            for the reader who arrived knowing which figure they want. */}
-        <MetricsReference data={data} />
-
-        {/* Both read data the page already fetches but only ever listed:
-            the dividend table becomes a track record, and the shareholding
-            quarter-picker becomes a direction of travel. */}
-        <div className="grid gap-4 xl:grid-cols-2">
-          <DividendTrackRecord
-            dividends={data.corporateActions?.dividends}
-            currentPrice={data.price?.cmp}
-          />
-          <ShareholdingTrend history={data.shareholding?.history} />
-        </div>
+            <ReturnsPanel summary={data.returnsSummary} heatmap={data.returnsHeatmap} />
+            <TechnicalsSection technicals={data.technicals} />
+          </div>
+        )}
 
         <section id="swot">
           <SwotAnalysis symbol={symbol} />
         </section>
-
-        <ReturnsPanel summary={data.returnsSummary} heatmap={data.returnsHeatmap} />
-
-        <TechnicalsSection technicals={data.technicals} />
 
         <div className="grid gap-4 xl:grid-cols-2">
           <SimpleReturnsCalculator returnsSummary={data.returnsSummary} />

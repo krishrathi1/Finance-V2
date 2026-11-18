@@ -9,14 +9,14 @@
 :root {
   --font-manrope: "Segoe UI", Arial, sans-serif;
   --font-space: "Trebuchet MS", "Segoe UI", Arial, sans-serif;
-  --bg: 225 40% 97%;
-  --panel: 225 35% 100%;
-  --border: 226 24% 83%;
-  --text: 226 36% 16%;
-  --muted: 227 15% 44%;
-  --accent: 26 90% 58%;
-  --success: 146 65% 42%;
-  --danger: 4 74% 56%;
+  --bg: 220 25% 98%;
+  --panel: 0 0% 100%;
+  --border: 220 18% 88%;
+  --text: 224 45% 12%;
+  --muted: 220 14% 46%;
+  --accent: 162 88% 38%;
+  --success: 154 75% 38%;
+  --danger: 352 82% 52%;
   --control-height: 2.5rem;
   --panel-padding: 1rem;
   --panel-padding-lg: 1.25rem;
@@ -28,24 +28,24 @@
   --duration-fast: 120ms;
   --duration-ui: 220ms;
   --duration-slow: 360ms;
-  --glow-accent: rgba(245, 143, 51, 0.15);
-  --glow-success: rgba(34, 197, 94, 0.12);
-  --glow-danger: rgba(239, 68, 68, 0.12);
+  --glow-accent: rgba(16, 185, 129, 0.16);
+  --glow-success: rgba(16, 185, 129, 0.14);
+  --glow-danger: rgba(244, 63, 94, 0.14);
   color-scheme: light;
 }
 
 .dark {
-  --bg: 228 38% 7%;
-  --panel: 226 36% 11%;
-  --border: 224 30% 19%;
-  --text: 220 35% 95%;
-  --muted: 219 16% 68%;
-  --accent: 29 86% 61%;
-  --success: 146 72% 56%;
-  --danger: 4 81% 61%;
-  --glow-accent: rgba(245, 163, 71, 0.22);
-  --glow-success: rgba(34, 197, 94, 0.18);
-  --glow-danger: rgba(239, 68, 68, 0.18);
+  --bg: 224 45% 5%;
+  --panel: 223 35% 8.5%;
+  --border: 223 25% 16%;
+  --text: 210 40% 98%;
+  --muted: 215 20% 65%;
+  --accent: 162 88% 46%;
+  --success: 154 75% 48%;
+  --danger: 352 82% 58%;
+  --glow-accent: rgba(16, 185, 129, 0.25);
+  --glow-success: rgba(16, 185, 129, 0.2);
+  --glow-danger: rgba(244, 63, 94, 0.2);
   color-scheme: dark;
 }
 

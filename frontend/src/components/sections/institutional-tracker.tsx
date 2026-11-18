@@ -53,9 +53,9 @@ export function InstitutionalTracker() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border/50 pb-4">
         <div>
           <div className="flex items-center gap-2">
-            <Building2 className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-bold text-fg">Institutional Cash &amp; Derivatives Tracker</h3>
-            <span className="px-2 py-0.5 text-[10px] uppercase font-bold rounded-full bg-primary/10 text-primary">
+            <Building2 className="h-5 w-5 text-accent" />
+            <h3 className="text-lg font-bold text-fg">Smart Money &amp; Institutional Flow Tracker</h3>
+            <span className="px-2 py-0.5 text-[10px] uppercase font-bold rounded-full bg-accent/15 text-accent border border-accent/25">
               FII / DII Live
             </span>
           </div>

@@ -29,19 +29,18 @@ export async function POST(req: NextRequest) {
 
     // Retrieve screen memory grounding
     const retrieved = sessionId
-      ? screenMemoryStore.retrieveRelevant(sessionId, message, 6)
+      ? screenMemoryStore.retrieveRelevant(sessionId, message, 3)
       : { groundingContext: "No active screen memory recorded." };
 
-    const systemInstruction = `You are Priya, a real-time conversational financial voice co-pilot for Indian markets (NSE/BSE).
+    let systemInstruction = `You are Priya, a real-time conversational financial voice co-pilot for Indian markets (NSE/BSE).
 Guidelines:
 1. Speak naturally like a sharp, friendly financial expert in a voice call.
 2. Keep replies strictly to 1-2 short sentences (under 30-40 words).
-3. The context describes the user's current page, which may be a stock, portfolio, watchlist, screener, calculator, or another page. Answer page-specific questions only from facts present there; do not invent missing values. If a requested detail is not shown, say so briefly.
-4. Ground your answer in the current page context below:
+3. Ground your answer in the verified screen context provided below:
 
-=== CURRENT PAGE CONTEXT ===
+=== SCREEN CONTEXT ===
 ${retrieved.groundingContext}
-=== END OF CURRENT PAGE CONTEXT ===`;
+=== END OF CONTEXT ===`;
 
     // Format conversation history
     const contents: any[] = [];

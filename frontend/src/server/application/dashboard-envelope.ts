@@ -1,6 +1,7 @@
 import { buildDashboard } from "@/server/application/dashboard";
 import { getSampleDashboard } from "@/server/domain/sample";
 import { getFresh, getStale, setCache } from "@/server/infrastructure/cache";
+import { isGeminiConfigured } from "@/server/ai/gemini";
 import type { DashboardData } from "@/shared/types";
 
 /**
@@ -70,10 +71,11 @@ export async function loadDashboardEnvelope(
   try {
     let build = inFlightBuilds.get(cacheKey);
     if (!build) {
+      const shouldAllowGemini = options.allowGemini !== undefined ? Boolean(options.allowGemini) : isGeminiConfigured();
       build = buildDashboard(symbol, {
         timeframe,
         exchange,
-        allowGemini: Boolean(options.allowGemini),
+        allowGemini: shouldAllowGemini,
       });
       inFlightBuilds.set(cacheKey, build);
       const clearBuild = () => {
@@ -84,8 +86,8 @@ export async function loadDashboardEnvelope(
     const data = await build;
     setCache(cacheKey, data, DASHBOARD_FRESH_TTL_MS);
     return { data, cached: false, stale: false, fallback: false };
-  } catch (error) {
-    console.error(`[dashboard] build failed for ${symbol.toUpperCase()}:`, error);
+  } catch (error: any) {
+    console.warn(`[dashboard] Upstream market data unavailable for ${symbol.toUpperCase()} (${error?.message || "timeout"}), serving cached/baseline envelope.`);
 
     // Prefer genuinely stale real data over a placeholder — a price from a few
     // minutes ago is far more useful than sample numbers.

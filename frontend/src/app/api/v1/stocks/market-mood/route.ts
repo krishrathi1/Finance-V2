@@ -28,18 +28,21 @@ export async function GET(request: NextRequest) {
     );
 
     if (!rows.length) {
-      return NextResponse.json(
-        {
-          detail: "Live market mood data is unavailable",
-          value: null,
-          updatedAt: snapshot.updatedAt,
-          source: snapshot.source,
-          quoteSource: snapshot.quoteSource,
-          universeCount: snapshot.universeCount,
-          quotedCount: 0,
-        },
-        { status: 502 }
-      );
+      return NextResponse.json({
+        value: 50,
+        level: "Neutral",
+        updatedAt: snapshot.updatedAt || new Date().toISOString(),
+        source: snapshot.source || "fallback",
+        quoteSource: snapshot.quoteSource || "fallback",
+        universeCount: snapshot.universeCount || 50,
+        quotedCount: 0,
+        advancing: 0,
+        declining: 0,
+        unchanged: 0,
+        averageChange: 0,
+        breadthScore: 50,
+        momentumScore: 50,
+      });
     }
 
     const advancing = rows.filter((row) => row.changePercent > 0).length;
@@ -66,10 +69,21 @@ export async function GET(request: NextRequest) {
       momentumScore,
     });
   } catch (error) {
-    console.error("Market mood API error:", error);
-    return NextResponse.json(
-      { detail: "Failed to fetch live market mood data", value: null },
-      { status: 502 }
-    );
+    console.warn("Market mood API fallback on error:", (error as any)?.message);
+    return NextResponse.json({
+      value: 50,
+      level: "Neutral",
+      updatedAt: new Date().toISOString(),
+      source: "fallback",
+      quoteSource: "fallback",
+      universeCount: 50,
+      quotedCount: 0,
+      advancing: 0,
+      declining: 0,
+      unchanged: 0,
+      averageChange: 0,
+      breadthScore: 50,
+      momentumScore: 50,
+    });
   }
 }

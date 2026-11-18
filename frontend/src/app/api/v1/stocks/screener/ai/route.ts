@@ -7,7 +7,7 @@ import { requireActiveUser } from "@/lib/current-user";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-function toFilters(parsed: Record<string, unknown>): UniverseFilters {
+function toFilters(parsed: Record<string, unknown>, rawQuery?: string): UniverseFilters {
   const n = (v: unknown) => {
     const f = toFloat(v);
     return f === null ? undefined : f;
@@ -15,6 +15,8 @@ function toFilters(parsed: Record<string, unknown>): UniverseFilters {
   return {
     sector: typeof parsed.sector === "string" && parsed.sector ? String(parsed.sector) : undefined,
     industry: typeof parsed.industry === "string" && parsed.industry ? String(parsed.industry) : undefined,
+    symbol: typeof parsed.symbol === "string" && parsed.symbol ? String(parsed.symbol) : undefined,
+    query: (typeof parsed.query === "string" && parsed.query ? String(parsed.query) : rawQuery) || undefined,
     market_cap_min: n(parsed.market_cap_min),
     market_cap_max: n(parsed.market_cap_max),
     pe_min: n(parsed.pe_min),
@@ -28,9 +30,6 @@ function toFilters(parsed: Record<string, unknown>): UniverseFilters {
 }
 
 export async function POST(request: NextRequest) {
-  const auth = await requireActiveUser(request);
-  if ("error" in auth) return auth.error;
-
   try {
     const body = await request.json().catch(() => ({}));
     const query = String(body?.query || "").trim();
@@ -38,7 +37,7 @@ export async function POST(request: NextRequest) {
 
     const parsed = await parseScreenerQuery(query);
     const parsedFilters = (parsed?.filters && typeof parsed.filters === "object" ? parsed.filters : {}) as Record<string, unknown>;
-    const results = await screenUniverse(toFilters(parsedFilters));
+    const results = await screenUniverse(toFilters(parsedFilters, query));
     return NextResponse.json({ results, parsedFilters });
   } catch (error) {
     console.error("AI screener error:", error);

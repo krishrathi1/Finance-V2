@@ -19,6 +19,11 @@ function apiKey(): string {
   return (process.env.GEMINI_API_KEY || "").trim();
 }
 
+/** The configured Groq API key, or empty string if unset. */
+function groqApiKey(): string {
+  return (process.env.GROQ_API_KEY || "").trim();
+}
+
 /** Ordered, de-duped list of model ids to try (configured first). */
 function modelCandidates(): string[] {
   const configured = (process.env.GEMINI_MODEL || "").trim();
@@ -28,9 +33,54 @@ function modelCandidates(): string[] {
 /** The first model id confirmed working this process, to skip dead candidates. */
 let workingModel: string | null = null;
 
-/** Whether a Gemini API key is present in the environment. */
+/** Whether an LLM provider (Gemini or Groq) is present in the environment. */
 export function isGeminiConfigured(): boolean {
-  return apiKey().length > 0;
+  return apiKey().length > 0 || groqApiKey().length > 0;
+}
+
+export function isGroqConfigured(): boolean {
+  return groqApiKey().length > 0;
+}
+
+/**
+ * Generate text using Groq's high-speed inference engine.
+ */
+async function generateWithGroq(prompt: string, signal?: AbortSignal): Promise<string | null> {
+  const key = groqApiKey();
+  if (!key) return null;
+  const models = [
+    (process.env.GROQ_MODEL || "").trim(),
+    "llama-3.3-70b-versatile",
+    "llama-3.1-8b-instant",
+    "mixtral-8x7b-32768",
+  ].filter(Boolean);
+
+  for (const model of models) {
+    if (signal?.aborted) break;
+    try {
+      const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${key}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model,
+          messages: [{ role: "user", content: prompt }],
+          temperature: 0.3,
+        }),
+        signal,
+      });
+      if (res.ok) {
+        const json = await res.json();
+        const text = json?.choices?.[0]?.message?.content?.trim() || "";
+        if (text) return text;
+      }
+    } catch {
+      // try next Groq model
+    }
+  }
+  return null;
 }
 
 /**
@@ -77,32 +127,39 @@ export async function generateText(
   const timeoutMs = opts?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
   return withTimeout(async (signal) => {
-    const client = new GoogleGenerativeAI(apiKey());
-    const candidates = workingModel ? [workingModel, ...modelCandidates().filter((m) => m !== workingModel)] : modelCandidates();
-    let lastErr: unknown = null;
-    for (const id of candidates) {
-      if (signal.aborted) break;
-      try {
-        const model = client.getGenerativeModel({ model: id });
-        let result;
+    // 1. Try Gemini first if key is present
+    if (apiKey().length > 0) {
+      const client = new GoogleGenerativeAI(apiKey());
+      const candidates = workingModel ? [workingModel, ...modelCandidates().filter((m) => m !== workingModel)] : modelCandidates();
+      for (const id of candidates) {
+        if (signal.aborted) break;
         try {
-          result = await model.generateContent(prompt, { signal });
-        } catch (firstError) {
-          if (!/429|quota|rate.?limit/i.test(String(firstError))) throw firstError;
-          await new Promise((resolve) => setTimeout(resolve, 500));
-          result = await model.generateContent(prompt, { signal });
+          const model = client.getGenerativeModel({ model: id });
+          let result;
+          try {
+            result = await model.generateContent(prompt, { signal });
+          } catch (firstError) {
+            if (!/429|quota|rate.?limit/i.test(String(firstError))) throw firstError;
+            await new Promise((resolve) => setTimeout(resolve, 500));
+            result = await model.generateContent(prompt, { signal });
+          }
+          const text = (result.response.text() || "").trim();
+          if (text.length > 0) {
+            workingModel = id; // cache the first model that works for this process
+            return text;
+          }
+        } catch {
+          // Try the next candidate
         }
-        const text = (result.response.text() || "").trim();
-        if (text.length > 0) {
-          workingModel = id; // cache the first model that works for this process
-          return text;
-        }
-      } catch (err) {
-        lastErr = err;
-        // Try the next candidate (model-not-found / invalid-model errors fail fast).
       }
     }
-    if (lastErr) console.warn(`[gemini] all models failed: ${String(lastErr)}`);
+
+    // 2. Fall back to Groq high-speed inference if Gemini fails or is not configured
+    if (groqApiKey().length > 0) {
+      const groqText = await generateWithGroq(prompt, signal);
+      if (groqText) return groqText;
+    }
+
     return null;
   }, timeoutMs);
 }

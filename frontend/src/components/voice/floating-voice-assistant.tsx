@@ -2,27 +2,44 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { MessageCircle, Mic, Square, X, AlertCircle, Send, Sparkles } from "lucide-react";
+import {
+  Mic,
+  X,
+  AlertCircle,
+  Send,
+  Sparkles,
+  Keyboard,
+  RotateCcw,
+  TrendingUp,
+  ShieldCheck,
+  MessageSquareText,
+  HelpCircle,
+} from "lucide-react";
+import { RichMessageContent } from "./rich-message-content";
 import { extractClientScreenSnapshot } from "@/lib/voice/context-extractor";
 import { ChatTurn, ScreenSnapshot, VoiceState, VoiceTalkResponse } from "@/lib/voice/types";
 
-export function FloatingVoiceAssistant() {
-  const [voiceState, setVoiceState] = useState<VoiceState>("idle");
-  const [statusMessage, setStatusMessage] = useState<string>("");
-  const [liveTranscript, setLiveTranscript] = useState<string>("");
-  const [typedInput, setTypedInput] = useState<string>("");
-  const [showInput, setShowInput] = useState<boolean>(false);
+interface ChatBubbleMessage {
+  id: string;
+  role: "user" | "assistant";
+  text: string;
+}
 
-  const sessionIdRef = useRef<string>("");
-  const historyRef = useRef<ChatTurn[]>([]);
-  const lastRouteRef = useRef<string>("");
-  const speechRecognitionFailedRef = useRef<boolean>(false);
+export function FloatingVoiceAssistant() {
+  // Mode: "idle" (collapsed pill) | "voice" (pure voice UI) | "chat" (dedicated chatbot UI)
+  const [mode, setMode] = useState<"idle" | "voice" | "chat">("idle");
+
+  // ── Voice Specific State ──
+  const [voiceState, setVoiceState] = useState<VoiceState>("idle");
+  const [voiceStatusMessage, setVoiceStatusMessage] = useState<string>("");
+  const [voiceLiveTranscript, setVoiceLiveTranscript] = useState<string>("");
+
+  const voiceSessionIdRef = useRef<string>("");
+  const voiceHistoryRef = useRef<ChatTurn[]>([]);
   const isMutedRef = useRef<boolean>(false);
 
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const audioMeterIntervalRef = useRef<any>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
   const speechRecognitionRef = useRef<any>(null);
@@ -33,6 +50,22 @@ export function FloatingVoiceAssistant() {
   const silenceTimerRef = useRef<any>(null);
   const maxRecordingTimerRef = useRef<any>(null);
   const isSpeakingSpeechSynthRef = useRef<boolean>(false);
+
+  // ── Chat Specific State ──
+  const [chatMessages, setChatMessages] = useState<ChatBubbleMessage[]>([
+    {
+      id: "welcome",
+      role: "assistant",
+      text: "Namaste! I'm your MyStockVision Research Co-Pilot. I evaluate company financials, valuation ratios, and forensic scores in simple, plain terms. Ask me anything about this stock or the market!",
+    },
+  ]);
+  const [chatInput, setChatInput] = useState<string>("");
+  const [chatLoading, setChatLoading] = useState<boolean>(false);
+  const [chatError, setChatError] = useState<string>("");
+
+  const chatSessionIdRef = useRef<string>("");
+  const chatHistoryRef = useRef<ChatTurn[]>([]);
+  const chatEndRef = useRef<HTMLDivElement | null>(null);
 
   // Initialize SpeechRecognition & cache voices on load
   useEffect(() => {
@@ -58,29 +91,38 @@ export function FloatingVoiceAssistant() {
           const clean = fullTranscript.trim();
           if (clean) {
             currentUtteranceRef.current = clean;
-            setLiveTranscript(clean);
 
-            // Reset silence timer on every new word
             if (silenceTimerRef.current) {
               clearTimeout(silenceTimerRef.current);
             }
 
-            // Auto-submit after 1.6s of silence once at least 2 words have been spoken
-            if (clean.split(/\s+/).length >= 2) {
+            // Auto-submit after 850ms of silence once speech is detected (no Done button required)
+            if (clean.length > 2) {
               silenceTimerRef.current = setTimeout(() => {
                 if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
                   mediaRecorderRef.current.stop();
                 }
-              }, 1600);
+              }, 850);
             }
           }
         };
 
+        recognition.onspeechend = () => {
+          if (currentUtteranceRef.current && currentUtteranceRef.current.length > 2) {
+            if (silenceTimerRef.current) {
+              clearTimeout(silenceTimerRef.current);
+            }
+            silenceTimerRef.current = setTimeout(() => {
+              if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+                mediaRecorderRef.current.stop();
+              }
+            }, 500);
+          }
+        };
+
         recognition.onend = () => {
-          // Keep recognition alive if still recording and not muted
           if (
             !isMutedRef.current &&
-            !speechRecognitionFailedRef.current &&
             mediaRecorderRef.current &&
             mediaRecorderRef.current.state === "recording"
           ) {
@@ -91,13 +133,9 @@ export function FloatingVoiceAssistant() {
         };
 
         recognition.onerror = (e: any) => {
-          if (e.error === "no-speech" || speechRecognitionFailedRef.current) return;
-          console.warn("[voice] speech recognition error:", e.error);
-          // Keep MediaRecorder running: the browser can report `network`
-          // before the user has finished speaking. Audio-level silence
-          // detection below will submit a complete clip to Groq Whisper.
-          speechRecognitionFailedRef.current = true;
-          setStatusMessage("Listening for your question; Whisper will transcribe it.");
+          if (e.error !== "no-speech") {
+            console.warn("[voice] speech recognition error:", e.error);
+          }
         };
 
         speechRecognitionRef.current = recognition;
@@ -115,6 +153,13 @@ export function FloatingVoiceAssistant() {
       cleanupAllAudio();
     };
   }, []);
+
+  // Scroll to bottom of chat when new message arrives
+  useEffect(() => {
+    if (mode === "chat") {
+      chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [chatMessages, chatLoading, mode]);
 
   // Helper to pick natural Indian Female voice for local speech fallback
   const getIndianFemaleVoice = (): SpeechSynthesisVoice | null => {
@@ -145,15 +190,6 @@ export function FloatingVoiceAssistant() {
     if (silenceTimerRef.current) {
       clearTimeout(silenceTimerRef.current);
       silenceTimerRef.current = null;
-    }
-
-    if (audioMeterIntervalRef.current) {
-      clearInterval(audioMeterIntervalRef.current);
-      audioMeterIntervalRef.current = null;
-    }
-    if (audioContextRef.current) {
-      void audioContextRef.current.close().catch(() => {});
-      audioContextRef.current = null;
     }
 
     if (maxRecordingTimerRef.current) {
@@ -199,7 +235,7 @@ export function FloatingVoiceAssistant() {
 
   const fallbackSpeechSynthesis = (text?: string) => {
     if (isMutedRef.current || !text || typeof window === "undefined" || !("speechSynthesis" in window)) {
-      if (!isMutedRef.current) {
+      if (!isMutedRef.current && mode === "voice") {
         startListening();
       }
       return;
@@ -221,13 +257,13 @@ export function FloatingVoiceAssistant() {
 
     utterance.onend = () => {
       isSpeakingSpeechSynthRef.current = false;
-      if (isMutedRef.current) return;
+      if (isMutedRef.current || mode !== "voice") return;
       startListening();
     };
 
     utterance.onerror = () => {
       isSpeakingSpeechSynthRef.current = false;
-      if (isMutedRef.current) return;
+      if (isMutedRef.current || mode !== "voice") return;
       startListening();
     };
 
@@ -235,7 +271,7 @@ export function FloatingVoiceAssistant() {
   };
 
   const playAudio = useCallback((base64Data: string | null, mimeType = "audio/mpeg", fallbackText?: string) => {
-    if (isMutedRef.current) return;
+    if (isMutedRef.current || mode !== "voice") return;
 
     if (base64Data) {
       try {
@@ -249,17 +285,17 @@ export function FloatingVoiceAssistant() {
         setVoiceState("speaking");
 
         audio.onended = () => {
-          if (isMutedRef.current) return;
+          if (isMutedRef.current || mode !== "voice") return;
           startListening();
         };
 
         audio.onerror = () => {
-          if (isMutedRef.current) return;
+          if (isMutedRef.current || mode !== "voice") return;
           fallbackSpeechSynthesis(fallbackText);
         };
 
         audio.play().catch(() => {
-          if (isMutedRef.current) return;
+          if (isMutedRef.current || mode !== "voice") return;
           fallbackSpeechSynthesis(fallbackText);
         });
         return;
@@ -271,20 +307,19 @@ export function FloatingVoiceAssistant() {
     if (fallbackText) {
       fallbackSpeechSynthesis(fallbackText);
     } else {
-      if (isMutedRef.current) return;
+      if (isMutedRef.current || mode !== "voice") return;
       startListening();
     }
-  }, []);
+  }, [mode]);
 
-  const sendUtteranceToBackend = async (audioBlob: Blob | null, textQuery: string) => {
+  const sendVoiceUtteranceToBackend = async (audioBlob: Blob | null, textQuery: string) => {
     if (isMutedRef.current) return;
     setVoiceState("thinking");
-    setStatusMessage("Analyzing screen & query…");
+    setVoiceStatusMessage("Thinking…");
 
     try {
       abortControllerRef.current = new AbortController();
 
-      // Convert audioBlob to base64 if available
       let base64Audio: string | undefined = undefined;
       let mimeType: string | undefined = undefined;
 
@@ -301,25 +336,19 @@ export function FloatingVoiceAssistant() {
         });
       }
 
-      // Extract fresh page context for every question, not only when the call
-      // starts. If navigation changed during the call, drop old-page history
-      // so answers stay grounded in the page the user is looking at now.
-      const screenSnapshot: ScreenSnapshot = extractClientScreenSnapshot(sessionIdRef.current);
-      if (lastRouteRef.current && lastRouteRef.current !== screenSnapshot.route) {
-        historyRef.current = [];
-      }
-      lastRouteRef.current = screenSnapshot.route;
+      const screenSnapshot: ScreenSnapshot = extractClientScreenSnapshot(voiceSessionIdRef.current);
 
       const res = await fetch("/api/v1/voice/talk", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         signal: abortControllerRef.current.signal,
         body: JSON.stringify({
-          sessionId: sessionIdRef.current,
+          sessionId: voiceSessionIdRef.current,
           message: textQuery.trim(),
+          mode: "voice",
           audioData: base64Audio,
           mimeType,
-          history: historyRef.current.slice(-6),
+          history: voiceHistoryRef.current.slice(-6),
           screenSnapshot,
         }),
       });
@@ -332,23 +361,22 @@ export function FloatingVoiceAssistant() {
         throw new Error(data.error || `Server responded with ${res.status}`);
       }
 
-      // Append verified turn to history
       const queryUsed = data.userQuery || textQuery.trim();
       if (queryUsed) {
-        historyRef.current.push({ role: "user", text: queryUsed });
+        voiceHistoryRef.current.push({ role: "user", text: queryUsed });
       }
       if (data.textReply) {
-        historyRef.current.push({ role: "assistant", text: data.textReply });
+        voiceHistoryRef.current.push({ role: "assistant", text: data.textReply });
       }
 
-      setLiveTranscript(data.textReply);
+      setVoiceLiveTranscript(data.textReply);
       playAudio(data.audioBase64, data.audioMimeType || "audio/mpeg", data.textReply);
     } catch (err: any) {
       if (err.name === "AbortError" || isMutedRef.current) {
         return;
       }
       console.error("[voice] process error:", err);
-      setStatusMessage(err?.message || "Failed to process voice request");
+      setVoiceStatusMessage(err?.message || "Failed to process voice request");
       setVoiceState("error");
     }
   };
@@ -357,56 +385,18 @@ export function FloatingVoiceAssistant() {
     if (isMutedRef.current) return;
 
     setVoiceState("requesting_permission");
-    setStatusMessage("Listening…");
-    setLiveTranscript("");
+    setVoiceStatusMessage("Listening…");
+    setVoiceLiveTranscript("");
     currentUtteranceRef.current = "";
     finalTranscriptRef.current = "";
 
     try {
-      // 1. Acquire microphone stream
-      if (!window.isSecureContext) {
-        throw new Error("Microphone access requires HTTPS or localhost.");
-      }
-      if (!navigator.mediaDevices?.getUserMedia) {
-        throw new Error("This browser does not support microphone capture. Try Chrome or Edge.");
-      }
-      if (typeof MediaRecorder === "undefined") {
-        throw new Error("This browser cannot record microphone audio. Try Chrome or Edge.");
-      }
-
-      let permissionTimedOut = false;
-      const micRequest = navigator.mediaDevices.getUserMedia({
+      const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true,
         },
-      });
-      const stream = await new Promise<MediaStream>((resolve, reject) => {
-        const timeout = setTimeout(() => {
-          permissionTimedOut = true;
-          reject(new Error("Microphone request timed out. Check the browser permission prompt and try again."));
-        }, 8000);
-
-        micRequest.then(
-          (receivedStream) => {
-            clearTimeout(timeout);
-            // A browser can resolve getUserMedia after our timeout or after
-            // the user ended the call. In either case, release the late stream.
-            if (permissionTimedOut) {
-              receivedStream.getTracks().forEach((track) => track.stop());
-              return;
-            }
-            if (isMutedRef.current) {
-              receivedStream.getTracks().forEach((track) => track.stop());
-            }
-            resolve(receivedStream);
-          },
-          (error) => {
-            clearTimeout(timeout);
-            reject(error);
-          }
-        );
       });
 
       if (isMutedRef.current) {
@@ -416,8 +406,12 @@ export function FloatingVoiceAssistant() {
 
       mediaStreamRef.current = stream;
 
-      // 2. Start MediaRecorder before SpeechRecognition so recognition's
-      // onend handler can always see an active recorder and restart itself.
+      if (speechRecognitionRef.current) {
+        try {
+          speechRecognitionRef.current.start();
+        } catch {}
+      }
+
       audioChunksRef.current = [];
       const supportedMime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
         ? "audio/webm;codecs=opus"
@@ -438,15 +432,6 @@ export function FloatingVoiceAssistant() {
       };
 
       recorder.onstop = async () => {
-        // Clean up speech recognition & tracks
-        if (audioMeterIntervalRef.current) {
-          clearInterval(audioMeterIntervalRef.current);
-          audioMeterIntervalRef.current = null;
-        }
-        if (audioContextRef.current) {
-          void audioContextRef.current.close().catch(() => {});
-          audioContextRef.current = null;
-        }
         if (speechRecognitionRef.current) {
           try {
             speechRecognitionRef.current.stop();
@@ -464,84 +449,72 @@ export function FloatingVoiceAssistant() {
             ? new Blob(audioChunksRef.current, { type: recorder.mimeType || "audio/webm" })
             : null;
 
-        // Validation: verify that the user actually spoke something
         if (!spokenText && (!audioBlob || audioBlob.size < 1200)) {
-          setStatusMessage("Didn't catch that. Tap mic and speak.");
+          setVoiceStatusMessage("Listening…");
           setVoiceState("listening");
           startListening();
           return;
         }
 
-        setVoiceState("processing");
-        sendUtteranceToBackend(audioBlob, spokenText);
+        setVoiceState("thinking");
+        setVoiceStatusMessage("Thinking…");
+        sendVoiceUtteranceToBackend(audioBlob, spokenText);
       };
 
-      recorder.start(250); // Emit chunks every 250ms
+      recorder.start(250);
       setVoiceState("listening");
-      setStatusMessage("Listening…");
 
-      // Detect the end of speech from the microphone signal as well as from
-      // SpeechRecognition. This keeps Whisper usable when the browser's
-      // recognition service is unavailable or offline.
-      const AudioContextConstructor = window.AudioContext || (window as any).webkitAudioContext;
-      if (AudioContextConstructor) {
-        try {
-          const audioContext: AudioContext = new AudioContextConstructor();
-          audioContextRef.current = audioContext;
-          const source = audioContext.createMediaStreamSource(stream);
-          const analyser = audioContext.createAnalyser();
-          analyser.fftSize = 512;
+      // Auto-detect speech and silence completion via AudioContext VAD
+      try {
+        const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+        if (AudioCtx) {
+          const audioCtx = new AudioCtx();
+          const source = audioCtx.createMediaStreamSource(stream);
+          const analyser = audioCtx.createAnalyser();
+          analyser.fftSize = 256;
           source.connect(analyser);
-          const samples = new Uint8Array(analyser.fftSize);
-          let speechStartedAt = 0;
-          let lastVoiceAt = 0;
-          void audioContext.resume().catch(() => {});
 
-          audioMeterIntervalRef.current = setInterval(() => {
-            if (recorder.state !== "recording" || isMutedRef.current) {
-              if (audioMeterIntervalRef.current) clearInterval(audioMeterIntervalRef.current);
-              audioMeterIntervalRef.current = null;
+          const bufferLength = analyser.frequencyBinCount;
+          const dataArray = new Uint8Array(bufferLength);
+          let userSpoke = false;
+          let silenceStart = 0;
+
+          const checkVAD = () => {
+            if (!mediaRecorderRef.current || mediaRecorderRef.current.state !== "recording") {
+              try { audioCtx.close(); } catch {}
               return;
             }
 
-            analyser.getByteTimeDomainData(samples);
-            const sumSquares = samples.reduce((sum, sample) => {
-              const centered = (sample - 128) / 128;
-              return sum + centered * centered;
-            }, 0);
-            const rms = Math.sqrt(sumSquares / samples.length);
-            const now = Date.now();
-
-            if (rms >= 0.025) {
-              if (!speechStartedAt) speechStartedAt = now;
-              lastVoiceAt = now;
-            } else if (
-              speechStartedAt &&
-              now - speechStartedAt >= 500 &&
-              now - lastVoiceAt >= 1800
-            ) {
-              if (audioMeterIntervalRef.current) clearInterval(audioMeterIntervalRef.current);
-              audioMeterIntervalRef.current = null;
-              if (recorder.state === "recording") recorder.stop();
+            analyser.getByteFrequencyData(dataArray);
+            let sum = 0;
+            for (let i = 0; i < bufferLength; i++) {
+              sum += dataArray[i];
             }
-          }, 100);
-        } catch (error) {
-          console.warn("[voice] audio-level detection unavailable; use Done or the recording limit:", error);
-        }
-      }
+            const avg = sum / bufferLength;
 
-      // 3. Start SpeechRecognition only after the recorder is ready. If the
-      // browser speech service is unavailable, audio-level detection still
-      // ends the recording and lets the server transcribe it with Whisper.
-      if (speechRecognitionRef.current && !speechRecognitionFailedRef.current) {
-        try {
-          speechRecognitionRef.current.start();
-        } catch {
-          // It may already be active; MediaRecorder still provides audio STT.
-        }
-      }
+            if (avg > 15) {
+              userSpoke = true;
+              silenceStart = 0;
+            } else if (userSpoke) {
+              if (!silenceStart) {
+                silenceStart = Date.now();
+              } else if (Date.now() - silenceStart > 1000) {
+                // User spoke and then paused for 1000ms -> automatic query completion
+                if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+                  mediaRecorderRef.current.stop();
+                }
+                try { audioCtx.close(); } catch {}
+                return;
+              }
+            }
 
-      // Safety guard: max 12 seconds per utterance
+            requestAnimationFrame(checkVAD);
+          };
+
+          requestAnimationFrame(checkVAD);
+        }
+      } catch {}
+
       if (maxRecordingTimerRef.current) {
         clearTimeout(maxRecordingTimerRef.current);
       }
@@ -550,43 +523,32 @@ export function FloatingVoiceAssistant() {
           recorder.stop();
         }
       }, 12000);
-    } catch (error: any) {
-      const errorName = String(error?.name || "");
-      const errorMessage = String(error?.message || "");
-      if (/timed out/i.test(errorMessage)) {
-        setStatusMessage(errorMessage);
-      } else if (["NotAllowedError", "PermissionDeniedError", "SecurityError"].includes(errorName)) {
-        setStatusMessage("Microphone access is blocked. Allow it for this site in your browser settings.");
-      } else if (errorName === "NotFoundError" || errorName === "DevicesNotFoundError") {
-        setStatusMessage("No microphone was found. Connect a microphone and try again.");
-      } else if (["NotReadableError", "TrackStartError", "AbortError"].includes(errorName)) {
-        setStatusMessage("The microphone is busy or unavailable. Close other apps using it and try again.");
-      } else {
-        setStatusMessage(errorMessage || "Could not open the microphone. Check browser permissions and try again.");
-      }
+    } catch {
+      setVoiceStatusMessage("Microphone permission denied");
       setVoiceState("error");
     }
   }, []);
 
-  const handleStartCall = async () => {
+  // ── Handlers for Voice Mode ──
+  const handleStartVoice = async () => {
     cleanupAllAudio();
     isMutedRef.current = false;
-    historyRef.current = [];
-    lastRouteRef.current = "";
-    speechRecognitionFailedRef.current = false;
-    sessionIdRef.current = `sess_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+    voiceHistoryRef.current = [];
+    voiceSessionIdRef.current = `sess_voice_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+    setMode("voice");
     startListening();
   };
 
-  const handleEndCall = (e?: React.MouseEvent) => {
+  const handleCloseVoice = (e?: React.MouseEvent) => {
     if (e) {
       e.stopPropagation();
       e.preventDefault();
     }
     cleanupAllAudio();
+    setMode("idle");
     setVoiceState("idle");
-    setLiveTranscript("");
-    setStatusMessage("");
+    setVoiceLiveTranscript("");
+    setVoiceStatusMessage("");
   };
 
   const handleStopSpeakingAndSubmit = (e: React.MouseEvent) => {
@@ -596,7 +558,7 @@ export function FloatingVoiceAssistant() {
     }
   };
 
-  const handleQuickQuestion = (queryText: string) => {
+  const handleQuickQuestionVoice = (queryText: string) => {
     if (speechRecognitionRef.current) {
       try {
         speechRecognitionRef.current.stop();
@@ -612,70 +574,173 @@ export function FloatingVoiceAssistant() {
         mediaStreamRef.current.getTracks().forEach((t) => t.stop());
       } catch {}
     }
-    sendUtteranceToBackend(null, queryText);
+    sendVoiceUtteranceToBackend(null, queryText);
   };
 
-  const handleSendTyped = (e: React.FormEvent) => {
+  // ── Handlers for Chat Mode ──
+  const handleStartChat = () => {
+    cleanupAllAudio();
+    if (!chatSessionIdRef.current) {
+      chatSessionIdRef.current = `sess_chat_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+    }
+    setMode("chat");
+    setChatError("");
+  };
+
+  const handleCloseChat = (e?: React.MouseEvent) => {
+    if (e) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+    setMode("idle");
+  };
+
+  const handleClearChat = (e?: React.MouseEvent) => {
+    if (e) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+    chatHistoryRef.current = [];
+    chatSessionIdRef.current = `sess_chat_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+    setChatMessages([
+      {
+        id: `cleared_${Date.now()}`,
+        role: "assistant",
+        text: "Conversation reset! How can I assist you with this stock or screen?",
+      },
+    ]);
+    setChatError("");
+  };
+
+  const handleSendChatMessage = async (textToSend: string) => {
+    const query = textToSend.trim();
+    if (!query || chatLoading) return;
+
+    setChatInput("");
+    setChatError("");
+
+    // Append user message to chat UI
+    const userMsgId = `user_${Date.now()}`;
+    setChatMessages((prev) => [
+      ...prev,
+      { id: userMsgId, role: "user", text: query },
+    ]);
+    chatHistoryRef.current.push({ role: "user", text: query });
+    setChatLoading(true);
+
+    try {
+      const screenSnapshot: ScreenSnapshot = extractClientScreenSnapshot(chatSessionIdRef.current);
+
+      const res = await fetch("/api/v1/voice/talk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId: chatSessionIdRef.current,
+          message: query,
+          mode: "chat",
+          history: chatHistoryRef.current.slice(-6),
+          screenSnapshot,
+        }),
+      });
+
+      const data: VoiceTalkResponse = await res.json();
+
+      if (!res.ok || !data.success || !data.textReply) {
+        throw new Error(data.error || "Unable to formulate a response.");
+      }
+
+      const botReply = data.textReply;
+      chatHistoryRef.current.push({ role: "assistant", text: botReply });
+      setChatMessages((prev) => [
+        ...prev,
+        { id: `assistant_${Date.now()}`, role: "assistant", text: botReply },
+      ]);
+    } catch (err: any) {
+      console.error("[chat] error:", err);
+      setChatError(err?.message || "Failed to get response. Please try again.");
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          id: `err_${Date.now()}`,
+          role: "assistant",
+          text: "I couldn't process that query right now. Please ensure your screen or stock data is loaded and try again.",
+        },
+      ]);
+    } finally {
+      setChatLoading(false);
+    }
+  };
+
+  const handleChatFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const query = typedInput.trim();
-    if (!query) return;
-    setTypedInput("");
-    handleQuickQuestion(query);
+    handleSendChatMessage(chatInput);
   };
-
-  const active = voiceState !== "idle";
 
   return (
     <div className="fixed bottom-5 right-5 z-50">
       <AnimatePresence mode="popLayout" initial={false}>
-        {!active ? (
-          /* ── Collapsed: Modern Floating Button ── */
-          <motion.button
-            key="btn"
+        {/* ── 1. Collapsed State: Sleek Floating Dock with Voice & Chat (Light & Dark Theme Synced) ── */}
+        {mode === "idle" && (
+          <motion.div
+            key="btn-group"
             layout
             initial={{ scale: 0.85, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.85, opacity: 0 }}
-            whileTap={{ scale: 0.94 }}
             transition={{ type: "spring", stiffness: 400, damping: 28 }}
-            onClick={handleStartCall}
-            aria-label="Talk to Financial Voice Assistant"
-            className="flex items-center gap-2.5 rounded-full bg-[#C57708] hover:bg-[#A85F00] text-white pl-4 pr-5 py-3.5 shadow-2xl shadow-[#C57708]/30 transition-all border border-amber-400/20"
+            className="flex items-center gap-1 rounded-full bg-white text-zinc-900 border border-zinc-200/90 shadow-xl shadow-zinc-900/10 dark:bg-[#0f141f] dark:text-zinc-100 dark:border-zinc-800 dark:shadow-zinc-950/40 p-1 backdrop-blur-xl transition-colors duration-200"
           >
-            <span className="relative flex">
-              <MessageCircle className="w-5 h-5 text-white" />
-              <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-[#25AB21] animate-ping" />
-              <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-[#25AB21]" />
-            </span>
-            <span className="text-sm font-semibold tracking-wide">
-              {statusMessage ? statusMessage : "Talk to Voice Agent"}
-            </span>
-          </motion.button>
-        ) : (
-          /* ── Active: Sleek Interactive Voice Pill with State Indication ── */
+            {/* Voice / Speak Button */}
+            <button
+              onClick={handleStartVoice}
+              aria-label="Speak using microphone"
+              title="Speak your question using microphone"
+              className="flex items-center gap-1.5 pl-3 pr-2.5 py-1.5 rounded-full text-zinc-700 hover:text-zinc-950 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:text-white dark:hover:bg-zinc-800/80 text-xs font-medium transition-colors cursor-pointer"
+            >
+              <Mic className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+              <span>Voice</span>
+            </button>
+
+            <div className="w-[1px] h-4 bg-zinc-200 dark:bg-zinc-800" />
+
+            {/* Type / Chat Button */}
+            <button
+              onClick={handleStartChat}
+              aria-label="Open text chat"
+              title="Open financial research chatbot"
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-xs transition-all cursor-pointer active:scale-95"
+            >
+              <MessageSquareText className="w-3.5 h-3.5" />
+              <span>Chat</span>
+            </button>
+          </motion.div>
+        )}
+
+        {/* ── 2. Voice Mode: PURE Voice Assistant UI (No text input, No prompt list) ── */}
+        {mode === "voice" && (
           <motion.div
-            key="pill"
+            key="voice-pill"
             layout
             initial={{ scale: 0.7, opacity: 0, originX: 1, originY: 1 }}
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.7, opacity: 0 }}
             transition={{ type: "spring", stiffness: 380, damping: 26 }}
-            className="flex flex-col gap-2 rounded-2xl bg-white/95 dark:bg-zinc-900/95 border border-[#C57708]/40 shadow-2xl shadow-black/25 p-3.5 backdrop-blur-xl w-80 sm:w-96"
+            className="flex flex-col gap-2 rounded-2xl bg-white/95 text-zinc-900 border border-zinc-200/90 shadow-2xl shadow-zinc-950/15 dark:bg-[#0c1017] dark:border-zinc-800 dark:shadow-black/60 dark:text-white p-3 backdrop-blur-2xl w-72 sm:w-80"
           >
             {/* Top Bar with Status and Instant Stop/Cross Button */}
             <div className="flex items-center gap-2.5">
               {voiceState === "requesting_permission" ? (
                 <>
-                  <span className="w-4 h-4 border-2 border-[#C57708]/30 border-t-[#C57708] rounded-full animate-spin" />
+                  <span className="w-4 h-4 border-2 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin" />
                   <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
                     Connecting mic…
                   </span>
                 </>
               ) : voiceState === "processing" || voiceState === "thinking" ? (
                 <>
-                  <span className="w-4 h-4 border-2 border-[#C57708]/30 border-t-[#C57708] rounded-full animate-spin" />
+                  <span className="w-4 h-4 border-2 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin" />
                   <span className="text-xs font-semibold text-zinc-800 dark:text-zinc-200 truncate">
-                    {statusMessage || "Priya analyzing screen…"}
+                    {voiceStatusMessage || "Thinking…"}
                   </span>
                 </>
               ) : voiceState === "speaking" ? (
@@ -683,19 +748,19 @@ export function FloatingVoiceAssistant() {
                   {/* Speaking Equalizer */}
                   <span className="relative flex items-center justify-center">
                     <motion.span
-                      className="absolute w-7 h-7 rounded-full bg-[#C57708]/20"
+                      className="absolute w-7 h-7 rounded-full bg-emerald-500/20"
                       animate={{ scale: [1, 1.8], opacity: [0.6, 0] }}
                       transition={{ duration: 1.2, repeat: Infinity, ease: "easeOut" }}
                     />
-                    <span className="relative w-6 h-6 rounded-full bg-[#C57708]/15 flex items-center justify-center">
-                      <Mic className="w-3.5 h-3.5 text-[#C57708]" />
+                    <span className="relative w-6 h-6 rounded-full bg-emerald-500/15 flex items-center justify-center">
+                      <Mic className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                     </span>
                   </span>
                   <div className="flex items-end gap-[3px] h-5">
                     {[0, 1, 2, 3, 4].map((i) => (
                       <motion.span
                         key={i}
-                        className="w-[3px] rounded-full bg-[#C57708]"
+                        className="w-[3px] rounded-full bg-emerald-500 dark:bg-emerald-400"
                         animate={{ height: ["6px", "20px", "8px", "18px", "6px"] }}
                         transition={{
                           duration: 0.8,
@@ -706,15 +771,15 @@ export function FloatingVoiceAssistant() {
                       />
                     ))}
                   </div>
-                  <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
-                    Priya speaking…
+                  <span className="text-xs font-semibold text-zinc-800 dark:text-zinc-200">
+                    Co-Pilot speaking…
                   </span>
                 </>
               ) : voiceState === "error" ? (
                 <>
                   <AlertCircle className="w-4 h-4 text-red-500" />
-                  <span className="text-xs font-semibold text-red-500 truncate">
-                    {statusMessage || "Error"}
+                  <span className="text-xs font-semibold text-red-500 dark:text-red-400 truncate">
+                    {voiceStatusMessage || "Error"}
                   </span>
                 </>
               ) : (
@@ -722,19 +787,19 @@ export function FloatingVoiceAssistant() {
                 <>
                   <span className="relative flex items-center justify-center">
                     <motion.span
-                      className="absolute w-7 h-7 rounded-full bg-[#25AB21]/20"
+                      className="absolute w-7 h-7 rounded-full bg-emerald-500/20"
                       animate={{ scale: [1, 1.6], opacity: [0.55, 0] }}
                       transition={{ duration: 1.4, repeat: Infinity, ease: "easeOut" }}
                     />
-                    <span className="relative w-6 h-6 rounded-full bg-[#25AB21]/15 flex items-center justify-center">
-                      <Mic className="w-3.5 h-3.5 text-[#25AB21]" />
+                    <span className="relative w-6 h-6 rounded-full bg-emerald-500/15 flex items-center justify-center">
+                      <Mic className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                     </span>
                   </span>
                   <div className="flex items-end gap-[2px] h-4">
                     {[0, 1, 2].map((i) => (
                       <motion.span
                         key={i}
-                        className="w-[2.5px] rounded-full bg-[#25AB21]"
+                        className="w-[2.5px] rounded-full bg-emerald-500 dark:bg-emerald-400"
                         animate={{ height: ["4px", "14px", "6px", "12px", "4px"] }}
                         transition={{
                           duration: 1.1,
@@ -745,93 +810,196 @@ export function FloatingVoiceAssistant() {
                       />
                     ))}
                   </div>
-                  <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+                  <span className="text-xs font-semibold text-zinc-800 dark:text-zinc-200">
                     Listening…
                   </span>
-
-                  {/* Tap-to-done button */}
-                  <button
-                    type="button"
-                    onClick={handleStopSpeakingAndSubmit}
-                    title="Done speaking"
-                    className="ml-auto px-2 py-0.5 text-[10px] font-bold rounded bg-amber-500/10 text-amber-600 hover:bg-amber-500/20 transition-all flex items-center gap-1"
-                  >
-                    <Square className="w-2.5 h-2.5 fill-current" />
-                    Done
-                  </button>
                 </>
               )}
 
               {/* Instant Cut-off Stop / Cross Button */}
               <button
                 type="button"
-                onClick={handleEndCall}
-                aria-label="Stop and end call"
-                title="Stop voice assistant"
-                className="ml-auto w-7 h-7 rounded-full bg-red-500/15 text-red-500 hover:bg-red-500 hover:text-white flex items-center justify-center transition-all cursor-pointer shadow-sm active:scale-90"
+                onClick={handleCloseVoice}
+                aria-label="Stop and exit voice mode"
+                title="Exit voice mode"
+                className="ml-auto w-7 h-7 rounded-full bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400 hover:bg-red-500 hover:text-white dark:hover:bg-red-500 dark:hover:text-white flex items-center justify-center transition-all cursor-pointer shadow-xs active:scale-90 border border-zinc-200 dark:border-zinc-700"
               >
                 <X className="w-4 h-4 stroke-[2.5]" />
               </button>
             </div>
+          </motion.div>
+        )}
 
-            {/* Live Subtitle Area */}
-            {liveTranscript && (
-              <p className="text-[11px] leading-relaxed text-zinc-600 dark:text-zinc-300 bg-zinc-100 dark:bg-zinc-800/70 p-2 rounded-lg max-h-24 overflow-y-auto italic">
-                &ldquo;{liveTranscript}&rdquo;
-              </p>
-            )}
+        {/* ── 3. Chat Mode: INSTITUTIONAL RESEARCH CO-PILOT UI ── */}
+        {mode === "chat" && (
+          <motion.div
+            key="chat-window"
+            layout
+            initial={{ scale: 0.85, opacity: 0, y: 20 }}
+            animate={{ scale: 1, opacity: 1, y: 0 }}
+            exit={{ scale: 0.85, opacity: 0, y: 20 }}
+            transition={{ type: "spring", stiffness: 350, damping: 26 }}
+            className="flex flex-col rounded-2xl bg-white text-zinc-900 border border-zinc-200 shadow-2xl shadow-zinc-950/15 dark:bg-[#0c1017] dark:text-zinc-100 dark:border-zinc-800 dark:shadow-black/70 backdrop-blur-2xl w-[92vw] sm:w-[470px] md:w-[520px] h-[550px] max-h-[85vh] overflow-hidden"
+          >
+            {/* Chatbot Header */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/80 dark:bg-[#0f141f]">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+                  <ShieldCheck className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <h4 className="text-xs font-bold text-zinc-900 dark:text-white tracking-tight">
+                      MyStockVision Co-Pilot
+                    </h4>
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.2 text-[9px] font-semibold rounded-md bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                      Live Verified
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-zinc-500 dark:text-zinc-400 font-medium">
+                    Institutional NSE & BSE Research
+                  </p>
+                </div>
+              </div>
 
-            {/* Quick Screen Context Questions */}
-            <div className="flex items-center gap-1.5 overflow-x-auto py-1 scrollbar-none text-[10px]">
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={handleClearChat}
+                  title="Reset conversation"
+                  className="p-1.5 rounded-lg text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-white dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCloseChat}
+                  title="Close co-pilot"
+                  className="p-1.5 rounded-lg text-zinc-500 hover:text-red-500 hover:bg-red-50 dark:text-zinc-400 dark:hover:text-red-400 dark:hover:bg-red-500/15 transition-colors cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Chat Message Scrollable Area */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-3.5 bg-zinc-50/50 dark:bg-[#0c1017]">
+              {chatMessages.map((msg) => (
+                <div
+                  key={msg.id}
+                  className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+                >
+                  {msg.role === "assistant" && (
+                    <div className="w-6 h-6 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mr-2 flex-shrink-0 mt-0.5">
+                      <TrendingUp className="w-3.5 h-3.5" />
+                    </div>
+                  )}
+                  <div
+                    className={`max-w-[88%] sm:max-w-[94%] text-xs leading-relaxed ${
+                      msg.role === "user"
+                        ? "bg-zinc-900 text-white dark:bg-emerald-600 dark:text-white rounded-2xl rounded-tr-xs px-4 py-2.5 font-medium shadow-xs whitespace-pre-wrap"
+                        : "bg-white text-zinc-900 border border-zinc-200/90 shadow-2xs dark:bg-[#111622] dark:text-zinc-100 dark:border-zinc-800 rounded-2xl rounded-tl-xs px-4 py-3"
+                    }`}
+                  >
+                    {msg.role === "user" ? (
+                      <p className="whitespace-pre-line">{msg.text}</p>
+                    ) : (
+                      <RichMessageContent content={msg.text} />
+                    )}
+                  </div>
+                </div>
+              ))}
+
+              {/* Typing / Thinking Indicator */}
+              {chatLoading && (
+                <div className="flex justify-start items-center">
+                  <div className="w-6 h-6 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mr-2 flex-shrink-0">
+                    <TrendingUp className="w-3.5 h-3.5 animate-pulse" />
+                  </div>
+                  <div className="bg-white border border-zinc-200/90 shadow-2xs dark:bg-[#111622] dark:border-zinc-800 rounded-2xl rounded-tl-xs px-3.5 py-2.5 flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-bounce" style={{ animationDelay: "0ms" }} />
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-bounce" style={{ animationDelay: "150ms" }} />
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-bounce" style={{ animationDelay: "300ms" }} />
+                    <span className="text-[10px] text-zinc-500 dark:text-zinc-400 font-medium ml-1">Evaluating screen metrics & filings…</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Chat Error Notice */}
+              {chatError && (
+                <p className="text-[10px] text-red-600 bg-red-50 border border-red-200 dark:text-red-400 dark:bg-red-500/10 dark:border-red-500/20 p-2.5 rounded-xl text-center">
+                  {chatError}
+                </p>
+              )}
+
+              <div ref={chatEndRef} />
+            </div>
+
+            {/* Quick Context Prompt Chips (Beginner-Friendly & Genuine) */}
+            <div className="px-3 py-2 flex items-center gap-1.5 overflow-x-auto scrollbar-none border-t border-zinc-200/80 bg-zinc-50/80 dark:border-zinc-800 dark:bg-[#0f141f] text-[10px]">
               <button
                 type="button"
-                onClick={() => handleQuickQuestion("What is the current CMP and day change of this stock?")}
-                className="whitespace-nowrap px-2 py-1 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-[#C57708]/15 hover:text-[#C57708] transition-all font-medium border border-zinc-200 dark:border-zinc-700 flex items-center gap-1"
+                disabled={chatLoading}
+                onClick={() => handleSendChatMessage("Give a simple beginner-friendly verdict on this stock: Is it safe and fundamentally sound?")}
+                className="whitespace-nowrap px-2.5 py-1 rounded-full bg-white text-zinc-700 hover:bg-zinc-100 hover:text-zinc-900 border border-zinc-200/90 shadow-2xs dark:bg-zinc-800/80 dark:text-zinc-300 dark:hover:bg-zinc-700 dark:border-zinc-700 transition-all font-medium disabled:opacity-50 flex items-center gap-1 cursor-pointer"
               >
-                <Sparkles className="w-2.5 h-2.5 text-[#C57708]" /> Price & Change
+                <ShieldCheck className="w-2.5 h-2.5 text-emerald-500" /> Simple Verdict
               </button>
               <button
                 type="button"
-                onClick={() => handleQuickQuestion("What is the PE ratio and valuation status?")}
-                className="whitespace-nowrap px-2 py-1 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-[#C57708]/15 hover:text-[#C57708] transition-all font-medium border border-zinc-200 dark:border-zinc-700"
+                disabled={chatLoading}
+                onClick={() => handleSendChatMessage("Explain the P/E ratio and valuation of this stock in simple plain words for a beginner.")}
+                className="whitespace-nowrap px-2.5 py-1 rounded-full bg-white text-zinc-700 hover:bg-zinc-100 hover:text-zinc-900 border border-zinc-200/90 shadow-2xs dark:bg-zinc-800/80 dark:text-zinc-300 dark:hover:bg-zinc-700 dark:border-zinc-700 transition-all font-medium disabled:opacity-50 cursor-pointer"
               >
-                P/E & Valuation
+                💰 P/E in Plain Words
               </button>
               <button
                 type="button"
-                onClick={() => handleQuickQuestion("Is this stock financially safe based on screen metrics?")}
-                className="whitespace-nowrap px-2 py-1 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-[#C57708]/15 hover:text-[#C57708] transition-all font-medium border border-zinc-200 dark:border-zinc-700"
+                disabled={chatLoading}
+                onClick={() => handleSendChatMessage("Explain the Smart Score of this stock and what it means in simple terms.")}
+                className="whitespace-nowrap px-2.5 py-1 rounded-full bg-white text-zinc-700 hover:bg-zinc-100 hover:text-zinc-900 border border-zinc-200/90 shadow-2xs dark:bg-zinc-800/80 dark:text-zinc-300 dark:hover:bg-zinc-700 dark:border-zinc-700 transition-all font-medium disabled:opacity-50 cursor-pointer"
               >
-                Smart Score
+                ⭐ Smart Score Rationale
               </button>
               <button
                 type="button"
-                onClick={() => setShowInput(!showInput)}
-                className="whitespace-nowrap px-2 py-1 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 hover:bg-amber-500/20 transition-all font-medium"
+                disabled={chatLoading}
+                onClick={() => handleSendChatMessage("What are the biggest risks or red flags in this company that a beginner should know?")}
+                className="whitespace-nowrap px-2.5 py-1 rounded-full bg-white text-zinc-700 hover:bg-zinc-100 hover:text-zinc-900 border border-zinc-200/90 shadow-2xs dark:bg-zinc-800/80 dark:text-zinc-300 dark:hover:bg-zinc-700 dark:border-zinc-700 transition-all font-medium disabled:opacity-50 cursor-pointer"
               >
-                {showInput ? "Hide text" : "Type question"}
+                ⚠️ Top Risks for Beginners
               </button>
             </div>
 
-            {/* Optional Type Query Input */}
-            {showInput && (
-              <form onSubmit={handleSendTyped} className="flex items-center gap-1.5 pt-1">
-                <input
-                  type="text"
-                  value={typedInput}
-                  onChange={(e) => setTypedInput(e.target.value)}
-                  placeholder="Ask Priya anything about this screen…"
-                  className="flex-1 px-2.5 py-1 text-xs rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-[#C57708]"
-                />
-                <button
-                  type="submit"
-                  disabled={!typedInput.trim()}
-                  className="p-1.5 rounded-lg bg-[#C57708] text-white hover:bg-[#A85F00] disabled:opacity-40 transition-all"
-                >
-                  <Send className="w-3.5 h-3.5" />
-                </button>
-              </form>
-            )}
+            {/* Type Question Input Bar */}
+            <form
+              onSubmit={handleChatFormSubmit}
+              className="flex items-center gap-2 p-2.5 border-t border-zinc-200/80 bg-white dark:border-zinc-800 dark:bg-[#0c1017]"
+            >
+              <input
+                type="text"
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                placeholder="Ask about this stock in plain words (e.g. Is this safe for a beginner?)..."
+                disabled={chatLoading}
+                className="flex-1 px-3.5 py-2 text-xs rounded-xl border border-zinc-200 bg-zinc-50 text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:border-emerald-500 focus:bg-white focus:ring-1 focus:ring-emerald-500 dark:border-zinc-800 dark:bg-[#121722] dark:text-white dark:placeholder:text-zinc-500 dark:focus:border-emerald-500 disabled:opacity-50"
+              />
+              <button
+                type="submit"
+                disabled={!chatInput.trim() || chatLoading}
+                title="Send message"
+                className="p-2.5 rounded-xl bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-40 transition-all shadow-xs active:scale-95 cursor-pointer"
+              >
+                <Send className="w-3.5 h-3.5" />
+              </button>
+            </form>
+
+            {/* Trust & Transparency Footer */}
+            <div className="px-3 pb-2 pt-0.5 text-[9.5px] text-zinc-400 dark:text-zinc-500 text-center flex items-center justify-center gap-1 bg-white dark:bg-[#0c1017]">
+              <ShieldCheck className="w-3 h-3 text-emerald-500/80" />
+              <span>Grounded in live NSE/BSE filings. Educational research only.</span>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>

@@ -43,34 +43,43 @@ export function ReturnsPanel({
       </Card>
 
       <Card className="overflow-auto p-4">
-        <h3 className="text-lg font-semibold">Stock Heatmap</h3>
-        <table className="mt-3 w-full min-w-[760px] border-collapse text-sm">
-          <thead>
-            <tr>
-              <th className="border border-border p-2 text-left">Year</th>
-              {months.map((month) => (
-                <th key={month} className="border border-border p-2 text-left">
-                  {month}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {heatmap.map((row) => (
-              <tr key={row.year}>
-                <td className="border border-border p-2 font-semibold">{row.year}</td>
-                {Array.from({ length: 12 }, (_, idx) => {
-                  const value = row[String(idx + 1)] as number | null;
-                  return (
-                    <td key={idx} className={`border border-border p-2 ${cellColor(value)}`}>
-                      {value === null ? "-" : formatPercent(value)}
-                    </td>
-                  );
-                })}
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg font-semibold">Stock Heatmap</h3>
+          <span className="text-xs text-muted">Monthly Historical Performance</span>
+        </div>
+        {!heatmap || heatmap.length === 0 ? (
+          <div className="py-8 text-center text-xs text-muted">
+            Historical monthly return heatmap is not available for this ticker yet.
+          </div>
+        ) : (
+          <table className="mt-3 w-full min-w-[760px] border-collapse text-sm">
+            <thead>
+              <tr>
+                <th className="border border-border p-2 text-left">Year</th>
+                {months.map((month) => (
+                  <th key={month} className="border border-border p-2 text-left">
+                    {month}
+                  </th>
+                ))}
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {heatmap.map((row) => (
+                <tr key={row.year}>
+                  <td className="border border-border p-2 font-semibold">{row.year}</td>
+                  {Array.from({ length: 12 }, (_, idx) => {
+                    const value = row[String(idx + 1)] as number | null;
+                    return (
+                      <td key={idx} className={`border border-border p-2 text-center text-xs ${cellColor(value)}`}>
+                        {value === null ? "-" : formatPercent(value)}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </Card>
     </div>
   );

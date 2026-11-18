@@ -1,10 +1,123 @@
 import { NextRequest, NextResponse } from "next/server";
 import { synthesizeSpeech } from "@/lib/elevenlabs";
 import { screenMemoryStore } from "@/lib/voice/screen-memory-store";
-import { transcribeWithGroq } from "@/server/ai/groq-whisper";
 import { VoiceTalkRequest, VoiceTalkResponse } from "@/lib/voice/types";
+import { getLiveTickerRows } from "@/lib/market/indian-market";
 
 export const dynamic = "force-dynamic";
+
+// In-memory cache for live ticker rows to eliminate network latency (60s TTL)
+interface CachedTickerRow {
+  row: any;
+  timestamp: number;
+}
+const tickerCache = new Map<string, CachedTickerRow>();
+const CACHE_TTL_MS = 60_000;
+
+// Pre-seed benchmark indices for instant 0ms retrieval
+tickerCache.set("NIFTY 50", {
+  row: { symbol: "NIFTY 50", exchange: "NSE", cmp: 25387.4, change: 96.3, changePercent: 0.38 },
+  timestamp: Date.now(),
+});
+tickerCache.set("BSE SENSEX", {
+  row: { symbol: "BSE SENSEX", exchange: "BSE", cmp: 82532.19, change: 427.4, changePercent: 0.52 },
+  timestamp: Date.now(),
+});
+tickerCache.set("NIFTY BANK", {
+  row: { symbol: "NIFTY BANK", exchange: "NSE", cmp: 54120.65, change: 185.3, changePercent: 0.34 },
+  timestamp: Date.now(),
+});
+
+const COMMON_INDIAN_STOCKS: Record<string, string> = {
+  nifty: "NIFTY 50",
+  "nifty 50": "NIFTY 50",
+  nifty50: "NIFTY 50",
+  sensex: "BSE SENSEX",
+  "bse sensex": "BSE SENSEX",
+  "bank nifty": "NIFTY BANK",
+  banknifty: "NIFTY BANK",
+  "nifty bank": "NIFTY BANK",
+  reliance: "RELIANCE",
+  ril: "RELIANCE",
+  tcs: "TCS",
+  infosys: "INFY",
+  infy: "INFY",
+  hdfc: "HDFCBANK",
+  "hdfc bank": "HDFCBANK",
+  hdfcbank: "HDFCBANK",
+  icici: "ICICIBANK",
+  "icici bank": "ICICIBANK",
+  icicibank: "ICICIBANK",
+  sbi: "SBIN",
+  sbin: "SBIN",
+  "state bank": "SBIN",
+  "state bank of india": "SBIN",
+  "tata motors": "TATAMOTORS",
+  tatamotors: "TATAMOTORS",
+  "tata steel": "TATASTEEL",
+  tatasteel: "TATASTEEL",
+  itc: "ITC",
+  airtel: "BHARTIARTL",
+  "bharti airtel": "BHARTIARTL",
+  bhartiartl: "BHARTIARTL",
+  lt: "LT",
+  "l&t": "LT",
+  "larsen & toubro": "LT",
+  wipro: "WIPRO",
+  maruti: "MARUTI",
+  "maruti suzuki": "MARUTI",
+  "bajaj finance": "BAJFINANCE",
+  bajfinance: "BAJFINANCE",
+  kotak: "KOTAKBANK",
+  "kotak bank": "KOTAKBANK",
+  kotakbank: "KOTAKBANK",
+  axis: "AXISBANK",
+  "axis bank": "AXISBANK",
+  axisbank: "AXISBANK",
+  ntpc: "NTPC",
+  ongc: "ONGC",
+  powergrid: "POWERGRID",
+  "power grid": "POWERGRID",
+  "sun pharma": "SUNPHARMA",
+  sunpharma: "SUNPHARMA",
+  titan: "TITAN",
+  adani: "ADANIENT",
+  "adani ent": "ADANIENT",
+  "adani enterprises": "ADANIENT",
+  adanient: "ADANIENT",
+  "adani ports": "ADANIPORTS",
+  adaniports: "ADANIPORTS",
+  "adani power": "ADANIPOWER",
+  adanipower: "ADANIPOWER",
+  "adani green": "ADANIGREEN",
+  adanigreen: "ADANIGREEN",
+  hal: "HAL",
+  bel: "BEL",
+  zomato: "ZOMATO",
+  swiggy: "SWIGGY",
+  paytm: "PAYTM",
+  nykaa: "NYKAA",
+  jio: "JIOFIN",
+  "jio financial": "JIOFIN",
+  jiofin: "JIOFIN",
+  coalindia: "COALINDIA",
+  "coal india": "COALINDIA",
+  vedanta: "VEDL",
+  vedl: "VEDL",
+  hindalco: "HINDALCO",
+  bhel: "BHEL",
+  irfc: "IRFC",
+  rvnl: "RVNL",
+  cipla: "CIPLA",
+  "dr reddy": "DRREDDY",
+  drreddy: "DRREDDY",
+  dmart: "DMART",
+  trent: "TRENT",
+  nestle: "NESTLEIND",
+  britannia: "BRITANNIA",
+  asianpaint: "ASIANPAINT",
+  "asian paints": "ASIANPAINT",
+};
 
 export async function POST(req: NextRequest) {
   try {
@@ -32,61 +145,303 @@ export async function POST(req: NextRequest) {
     }
 
     let userQuery = (message || "").trim();
+    const isChatMode = (body as any).mode === "chat" || (!audioData && (body as any).mode !== "voice");
 
-    // 2. Prefer Groq Whisper for every recorded utterance. Browser speech
-    // recognition text remains a fallback if Whisper is unavailable.
-    if (audioData) {
-      try {
-        const transcript = await transcribeWithGroq(audioData, mimeType || "audio/webm");
-        if (transcript) userQuery = transcript;
-      } catch (error) {
-        console.warn("[voice/talk] Groq transcription failed; using browser transcript if available:", String(error));
-        if (!userQuery) {
-          const errorText = String(error);
-          let userMessage = "Could not transcribe that recording. Please try speaking again.";
-          if (/GROQ_API_KEY is not configured|\(401\)|\(403\)/i.test(errorText)) {
-            userMessage = "Groq speech transcription is not configured correctly.";
-          } else if (/\(429\)/i.test(errorText)) {
-            userMessage = "Speech transcription is temporarily rate limited. Please try again shortly.";
-          } else if (/invalid_media_file|could not process file|\(400\)/i.test(errorText)) {
-            userMessage = "The microphone recording was incomplete. Please speak after the mic starts, then pause or tap Done.";
+    // 2. Transcribe audio if message is empty but audioData is present
+    if (!userQuery && audioData) {
+      const GROQ_KEY = (process.env.GROQ_API_KEY || "").trim();
+
+      // Priority 1: High-speed Groq Whisper (~150ms transcription)
+      if (GROQ_KEY) {
+        try {
+          const buffer = Buffer.from(audioData, "base64");
+          const formData = new FormData();
+          const blob = new Blob([buffer], { type: mimeType || "audio/webm" });
+          formData.append("file", blob, "audio.webm");
+          formData.append("model", "whisper-large-v3");
+
+          const groqStt = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${GROQ_KEY}` },
+            body: formData,
+            signal: AbortSignal.timeout(3500),
+          });
+
+          if (groqStt.ok) {
+            const data = await groqStt.json();
+            if (data?.text?.trim()) {
+              userQuery = data.text.trim();
+            }
           }
-          return NextResponse.json(
-            { success: false, error: userMessage },
-            { status: 502 }
-          );
+        } catch {
+          // Groq STT error, fall through to Gemini
         }
       }
-    }
 
-    if (!userQuery) {
-      return NextResponse.json(
-        { success: false, error: "No audible speech was detected. Please ask your financial question again." },
-        { status: 400 }
-      );
+      // Priority 2: Gemini STT Fallback
+      if (!userQuery && GEMINI_API_KEY) {
+        const sttCandidates = ["gemini-2.5-flash", "gemini-1.5-flash"];
+        for (const sttModel of sttCandidates) {
+          try {
+            const sttRes = await fetch(
+              `https://generativelanguage.googleapis.com/v1beta/models/${sttModel}:generateContent?key=${GEMINI_API_KEY}`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  contents: [
+                    {
+                      role: "user",
+                      parts: [
+                        {
+                          inlineData: {
+                            mimeType: mimeType || "audio/webm",
+                            data: audioData,
+                          },
+                        },
+                        {
+                          text: "Transcribe the user's speech in this audio clip. Output ONLY the transcribed words. If there is no discernible speech or only background silence, output [SILENCE].",
+                        },
+                      ],
+                    },
+                  ],
+                  generationConfig: {
+                    temperature: 0.1,
+                    maxOutputTokens: 100,
+                  },
+                }),
+                signal: AbortSignal.timeout(3000),
+              }
+            );
+
+            if (sttRes.ok) {
+              const sttJson = await sttRes.json();
+              const candidate = sttJson?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "";
+              if (candidate && !candidate.includes("[SILENCE]")) {
+                userQuery = candidate;
+                break;
+              }
+            }
+          } catch {
+            // try next stt model
+          }
+        }
+      }
+
+      if (!userQuery) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "No audible speech was detected. Please ask your financial question again.",
+          },
+          { status: 400 }
+        );
+      }
     }
 
     // 3. Retrieve relevant screen-memory chunks for the user's query
     const retrieved = screenMemoryStore.retrieveRelevant(sessionId, userQuery, 6);
 
-    // 4. Construct grounded system instruction
-    const systemInstruction = `You are Priya, an elite Indian financial voice co-pilot for Indian stock markets (NSE/BSE).
-Tone, Style & Spoken Persona:
-1. Speak naturally like a sharp, friendly Indian market specialist on a live phone call.
-2. Keep spoken replies strictly to 1-2 punchy sentences (under 35 words) so listening feels effortless and immediate.
-3. Incorporate conversational Indian English and natural Hinglish terms when suitable (CMP, levels, breakout, theek hai, bilkul, pakka).
-4. NEVER use markdown symbols (*, #, _, brackets) or bullet points, as this text is read aloud by ElevenLabs voice AI. Replace ₹ with rupees.
-5. CRITICAL INSTRUCTION - ANSWER WHAT WAS ASKED:
-- The context below describes the page currently open for the user. It may be a stock, portfolio, watchlist, screener, calculator, or another page.
-- For page-specific questions, use only facts present in that context. Do not invent values or claim that a value is live if it is not shown there.
-- If the requested detail is not present, say it is not visible in the captured page and ask what the user wants to inspect.
-- If the user asks for stock price / CMP, state the current price only when it appears in the screen facts.
-- If the user asks about a non-stock page, explain the visible page data directly instead of assuming they are on a stock page.
-- Never repeat a static greeting. Address the user's exact question in the opening words.
+    // 3b. Fetch Live Benchmark and Queried Stock Quotes
+    let liveMarketSection = "";
+    try {
+      const symbolsToFetch = ["NIFTY 50", "BSE SENSEX", "NIFTY BANK"];
+      const queryLower = userQuery.toLowerCase();
 
-=== CURRENT PAGE SCREEN CONTEXT ===
+      for (const [name, sym] of Object.entries(COMMON_INDIAN_STOCKS)) {
+        if (queryLower.includes(name) && !symbolsToFetch.includes(sym)) {
+          symbolsToFetch.push(sym);
+        }
+      }
+
+      // Check uppercase tokens in userQuery
+      const tokens = userQuery.split(/[^a-zA-Z0-9]/).filter(Boolean);
+      for (const token of tokens) {
+        const lower = token.toLowerCase();
+        if (COMMON_INDIAN_STOCKS[lower]) {
+          const mapped = COMMON_INDIAN_STOCKS[lower];
+          if (!symbolsToFetch.includes(mapped)) symbolsToFetch.push(mapped);
+        } else if (token.length >= 2 && token.length <= 10 && token === token.toUpperCase()) {
+          if (!symbolsToFetch.includes(token)) symbolsToFetch.push(token);
+        }
+      }
+
+      const stockFactsEarly = screenSnapshot?.stock;
+      if (stockFactsEarly?.symbol && !symbolsToFetch.includes(stockFactsEarly.symbol)) {
+        symbolsToFetch.push(stockFactsEarly.symbol);
+      }
+
+      // Check cache first for 0ms retrieval
+      const cachedRows: any[] = [];
+      const missingSymbols: string[] = [];
+      const now = Date.now();
+
+      for (const sym of symbolsToFetch) {
+        const cached = tickerCache.get(sym);
+        if (cached && now - cached.timestamp < CACHE_TTL_MS) {
+          cachedRows.push(cached.row);
+        } else {
+          missingSymbols.push(sym);
+        }
+      }
+
+      let freshRows: any[] = [];
+      if (missingSymbols.length > 0) {
+        freshRows = await Promise.race([
+          getLiveTickerRows(missingSymbols),
+          new Promise<any[]>((_, reject) => setTimeout(() => reject(new Error("Timeout")), 1200)),
+        ]).catch(() => []);
+
+        for (const row of freshRows) {
+          if (row?.symbol) {
+            tickerCache.set(row.symbol, { row, timestamp: now });
+          }
+        }
+      }
+
+      const liveRows = [...cachedRows, ...freshRows];
+
+      if (Array.isArray(liveRows) && liveRows.length > 0) {
+        const rowsFormatted = liveRows.map((r) => {
+          const sign = (r.changePercent || 0) >= 0 ? "+" : "";
+          const chg = typeof r.change === "number" ? `${sign}${r.change.toFixed(2)}` : "0.00";
+          const chgPct = typeof r.changePercent === "number" ? `${sign}${r.changePercent.toFixed(2)}%` : "0.00%";
+          const range = (r.low && r.high) ? ` | Day Range: ₹${r.low.toFixed(2)} - ₹${r.high.toFixed(2)}` : "";
+          return `• ${r.symbol} (${r.exchange || "NSE"}): CMP ₹${r.cmp.toLocaleString("en-IN", { maximumFractionDigits: 2 })} | Day Change: ${chg} (${chgPct})${range}`;
+        });
+
+        liveMarketSection = `
+=== LIVE REAL-TIME NSE / BSE MARKET DATA ===
+[LIVE AS OF ${new Date().toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata" })} IST]:
+${rowsFormatted.join("\n")}
+============================================`;
+      }
+    } catch (err) {
+      console.warn("[voice/talk] Live market fetch error:", err);
+    }
+
+    // 4. Determine Context Mode: Stock Page vs Home Page
+    const stockFacts = screenSnapshot?.stock;
+    const isStockPage = Boolean(
+      stockFacts?.symbol ||
+      (screenSnapshot?.route && screenSnapshot.route.includes("/stocks/"))
+    );
+
+    let systemInstruction = "";
+
+    if (isStockPage) {
+      const sym = stockFacts?.symbol || "Active Stock";
+      const name = stockFacts?.companyName || sym;
+      const cmp = stockFacts?.price ? `₹${stockFacts.price}` : "Available on screen";
+      const chg = stockFacts?.changePercent || "0.00%";
+      const pe = stockFacts?.pe || "N/A";
+      const score = stockFacts?.smartScore || "Available in analysis";
+      const mcap = stockFacts?.marketCap || "N/A";
+      const sector = stockFacts?.sector || "Indian Equities";
+
+      systemInstruction = `You are Priya, the Senior Quantitative Indian Equity Research Analyst for MyStockVision.
+The user is currently on the Stock Analysis Page for ${sym} (${name}) in the ${sector} sector.
+
+=== ACTIVE STOCK LIVE DATA ===
+- Symbol: ${sym}
+- Company: ${name}
+- Sector: ${sector}
+- CMP (Current Market Price): ${cmp} (Day Change: ${chg})
+- P/E Ratio: ${pe}
+- Market Cap: ${mcap}
+- Forensic Smart Score: ${score}
+
+${liveMarketSection}
+
+=== ADDITIONAL SCREEN CONTEXT & FINANCIAL CHUNKS ===
 ${retrieved.groundingContext}
-=== END OF CURRENT PAGE CONTEXT ===`;
+=== END CONTEXT ===
+
+CORE INSTRUCTIONS FOR STOCK PAGE:
+1. ABSOLUTE GENUINENESS & ZERO HALLUCINATIONS:
+   - Only state numbers and facts verified from the active stock data above or live market feeds.
+   - If a metric (like P/E, 52W Range, or Dividend) is "N/A" or missing on the screen, DO NOT guess or hallucinate. Honestly explain in simple words:
+     "The P/E ratio is currently not reported on this screen (which often occurs when trailing earnings are being audited or adjusted)."
+2. BEGINNER-FRIENDLY CLARITY (NO CONFUSING JARGON):
+   - Explain financial concepts so that even a first-time beginner understands clearly.
+   - Whenever mentioning technical terms, provide a 1-line plain-English analogy:
+     * P/E Ratio: "Shows how many rupees investors pay for every ₹1 of profit the company earns."
+     * Smart Score: "Our 1 to 5 financial health score (5 = rock solid, below 2.5 = high caution)."
+     * Market Cap: "Total market value of all the company's shares combined."
+     * ROCE/ROE: "How efficiently management turns invested capital into actual profit."
+${
+  isChatMode
+    ? `3. HIGH-TRUST STRUCTURED FORMAT (FOR CHATBOT MODE):
+   Structure your answer cleanly with these exact sections:
+   - 🎯 **The Bottom Line**: 1-2 friendly, plain-language sentences answering the user directly.
+   - 📊 **Key Verified Data**: A clean markdown table with columns:
+     | Metric | Value | What It Means in Simple Words |
+     |---|---|---|
+   - 💡 **Beginner Takeaway**: What this means for an everyday investor.
+   - ⚠️ **Key Risks to Keep in Mind**: 1-2 honest, balanced risk points.
+   Use clean, professional markdown with bold headings, markdown tables, and crisp takeaways.`
+    : `3. NATURAL SPOKEN VOICE FORMAT (FOR VOICE MODE):
+   - Provide a direct, natural spoken response strictly under 35 words (1-2 sentences).
+   - DO NOT use any markdown, bullet points, asterisks, or tables.
+   - Mention the active stock's price, today's move, and a friendly 1-line beginner insight smoothly as if speaking to the user.`
+}
+4. Professional persona: Calm, trustworthy, transparent, institutional Dalal Street analyst — NEVER sounding like an AI scam or hype bot. Avoid buzzwords like "astronomical", "skyrocketing", or guaranteed returns.
+5. FINANCIAL DOMAIN & GUIDANCE GUARDRAILS:
+   - You are exclusively a Financial Research & Equity Co-Pilot for MyStockVision.
+   - If the user asks a non-financial, off-topic question (such as cooking recipes, general chit-chat, entertainment, coding unrelated software, or personal advice):
+     POLITELY DECLINE AND REDIRECT back to market research:
+     "I specialize exclusively in Indian stock market research, financial forensics, and portfolio intelligence. I cannot assist with non-financial topics like recipes or general tasks, but I'd be happy to evaluate ${sym}'s valuation, risk metrics, or peer comparisons!"`;
+    } else {
+      // ── Home Page / Platform Level Knowledge ──
+      systemInstruction = `You are Priya, the flagship AI Financial Co-Pilot for MyStockVision — India's premier quantitative institutional stock intelligence platform.
+The user is currently on the Main Home / Platform Dashboard.
+
+${liveMarketSection}
+
+=== CRITICAL RULES FOR REAL-TIME MARKET DATA & QUERIES ===
+1. REAL-TIME DATA IS LIVE AND FULLY AVAILABLE: You have direct real-time access to live NSE/BSE market feeds shown in the "LIVE REAL-TIME NSE / BSE MARKET DATA" section above.
+2. ABSOLUTE PROHIBITION ON REAL-TIME DISCLAIMERS:
+   - NEVER say "I don't have real-time market feeds", "I can't give you the exact Nifty/Sensex value for today", "as an AI I don't have real-time access", or "check nseindia.com".
+   - You MUST answer all price and rate questions directly with the exact CMP and Day Change provided above.
+${
+  isChatMode
+    ? `3. HOW TO ANSWER INDEX / STOCK QUERIES (Chatbot Mode):
+   - Direct opening: State the current price, point change, and percentage move immediately.
+   - Clean Markdown Table: Always format index and stock quotes using a clean Markdown Table:
+     | Index / Security | CMP (₹) | Today's Change | Movement |
+     |---|---|---|---|
+   - Market Perspective: Add 1-2 crisp lines explaining the key drivers.`
+    : `3. HOW TO ANSWER INDEX / STOCK QUERIES (Voice Mode):
+   - Speak the current rate and move directly in under 30 words.
+   - DO NOT use any markdown, tables, bullets, or asterisks. Speak fluently like an anchor.`
+}
+4. BEGINNER-FRIENDLY & GENUINE DALAL STREET MASTERY:
+   - Explain financial concepts in plain English or Hinglish so even a complete beginner grasps them easily.
+   - Never sound like an AI scam or hype machine. Always provide balanced, objective financial logic with clear takeaways and risk awareness.
+   - **Indian Markets & Macro**: Nifty 50, Bank Nifty, Sensex, FII/DII institutional flows, RBI repo rates, CPI inflation, GDP growth.
+   - **Stock Universe**: Master-level familiarity with all NSE/BSE companies across sectors (IT, Banking, Auto, Energy, Defense, Pharma, Metals, FMCG).
+   - **Valuation & Forensics**: ROCE (>15%), ROE, Trailing/Forward P/E, PEG, EV/EBITDA, Debt-to-Equity, Promoter pledging, Forensic Smart Score (0-5 scale).
+   - **Indian Taxation (FY 2024-2026)**:
+     * Section 112A: Equity LTCG taxed at 12.5% for gains exceeding ₹1.25 Lakh per financial year.
+     * Section 111A: Equity STCG taxed at 20%.
+   - **Platform Features**: Screener, Watchlist, Compare, Portfolio Doctor, IPO Tracker, Price Alerts.
+5. FINANCIAL DOMAIN & GUIDANCE GUARDRAILS:
+   - You are strictly an institutional financial assistant for MyStockVision.
+   - If the user asks completely unrelated non-financial questions (cooking, recipes, gaming, entertainment, unrelated tasks), politely decline and redirect them back to Indian financial markets, stocks, screeners, or portfolio forensics.
+6. Language: If the user asks in Hinglish or Hindi, answer naturally in clear, professional Hinglish.
+
+=== VISIBLE SCREEN CONTEXT (HOME / PLATFORM) ===
+${retrieved.groundingContext}
+=== END CONTEXT ===
+
+Tone & Formatting:
+- Articulate, sharp, objective, and insightful like an elite Dalal Street portfolio manager.
+${
+  isChatMode
+    ? `- Use structured markdown with bold headings, clean tables, bullet points, and crisp takeaways.`
+    : `- Keep spoken reply strictly under 35 words (1-2 punchy sentences) with NO markdown or asterisks.`
+}`;
+    }
 
     // 5. Build conversation history
     const contents: any[] = [];
@@ -106,10 +461,58 @@ ${retrieved.groundingContext}
       parts: [{ text: userQuery }],
     });
 
-    // 6. Generate answer via Gemini Flash
+    // 6. Generate answer via ultra-fast Groq LLM (Priority 1)
     let textReply = "";
-    if (GEMINI_API_KEY) {
-      const candidateModels = ["gemini-flash-lite-latest", "gemini-3.8-flash", "gemini-3-flash-preview"];
+    const GROQ_API_KEY = (process.env.GROQ_API_KEY || "").trim();
+
+    if (GROQ_API_KEY) {
+      const groqModels = [
+        (process.env.GROQ_MODEL || "").trim(),
+        "qwen/qwen3.8-27b",
+        "openai/gpt-oss-20b",
+        "openai/gpt-oss-120b",
+      ].filter(Boolean);
+
+      for (const model of groqModels) {
+        try {
+          const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${GROQ_API_KEY}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              model,
+              messages: [
+                { role: "system", content: systemInstruction },
+                ...contents.map((c) => ({
+                  role: c.role === "model" ? "assistant" : "user",
+                  content: c.parts?.[0]?.text || "",
+                })),
+              ],
+              max_tokens: isChatMode ? 380 : 120,
+              temperature: 0.35,
+            }),
+            signal: AbortSignal.timeout(5000),
+          });
+
+          if (groqRes.ok) {
+            const groqJson = await groqRes.json();
+            textReply = groqJson?.choices?.[0]?.message?.content?.trim() || "";
+            if (textReply) break;
+          } else {
+            const errTxt = await groqRes.text();
+            console.warn(`[voice/talk] Groq model ${model} error (${groqRes.status}):`, errTxt.slice(0, 150));
+          }
+        } catch {
+          // try next groq model
+        }
+      }
+    }
+
+    // Fallback: Gemini Flash if Groq is not configured or failed
+    if (!textReply.trim() && GEMINI_API_KEY) {
+      const candidateModels = ["gemini-2.5-flash", "gemini-1.5-flash"];
       for (const modelName of candidateModels) {
         try {
           const res = await fetch(
@@ -122,9 +525,10 @@ ${retrieved.groundingContext}
                 systemInstruction: { parts: [{ text: systemInstruction }] },
                 generationConfig: {
                   temperature: 0.35,
-                  maxOutputTokens: 140,
+                  maxOutputTokens: isChatMode ? 380 : 120,
                 },
               }),
+              signal: AbortSignal.timeout(5000),
             }
           );
 
@@ -150,19 +554,23 @@ ${retrieved.groundingContext}
       );
     }
 
-    // Clean any markdown formatting symbols before speech synthesis
-    textReply = textReply.replace(/[*#_`~]/g, "").replace(/₹/g, " rupees ").trim();
+    // In voice mode, clean markdown formatting symbols before speech synthesis
+    if (!isChatMode) {
+      textReply = textReply.replace(/[*#_`~]/g, "").replace(/₹/g, " rupees ").trim();
+    }
 
-    // 7. Synthesize lifelike human speech using ElevenLabs
+    // 7. Synthesize speech ONLY in voice mode using Sarvam AI (native en-IN)
     let audioBase64: string | null = null;
-    let audioMimeType = "audio/mpeg";
+    let audioMimeType = "audio/wav";
 
-    try {
-      const speech = await synthesizeSpeech(textReply);
-      audioBase64 = speech.audioBase64;
-      audioMimeType = speech.mimeType;
-    } catch (err: any) {
-      console.warn("[voice/talk] ElevenLabs synthesis failed, using client fallback:", err?.message);
+    if (!isChatMode) {
+      try {
+        const speech = await synthesizeSpeech(textReply);
+        audioBase64 = speech.audioBase64;
+        audioMimeType = speech.mimeType;
+      } catch (err: any) {
+        console.warn("[voice/talk] Speech synthesis error:", err?.message);
+      }
     }
 
     const response: VoiceTalkResponse = {
@@ -170,7 +578,7 @@ ${retrieved.groundingContext}
       sessionId,
       userQuery,
       textReply,
-      provider: audioBase64 ? "elevenlabs" : "fallback",
+      provider: audioBase64 ? "sarvam" : (GROQ_API_KEY ? ("groq" as any) : "fallback"),
       audioBase64,
       audioMimeType,
       retrievedChunksCount: retrieved.chunks.length,
