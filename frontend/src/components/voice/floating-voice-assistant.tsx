@@ -42,6 +42,8 @@ export function FloatingVoiceAssistant() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const audioSourceNodeRef = useRef<AudioBufferSourceNode | null>(null);
   const speechRecognitionRef = useRef<any>(null);
 
   const currentUtteranceRef = useRef<string>("");
@@ -217,6 +219,14 @@ export function FloatingVoiceAssistant() {
       mediaStreamRef.current = null;
     }
 
+    if (audioSourceNodeRef.current) {
+      try {
+        audioSourceNodeRef.current.stop();
+        audioSourceNodeRef.current.disconnect();
+      } catch {}
+      audioSourceNodeRef.current = null;
+    }
+
     if (audioPlayerRef.current) {
       try {
         audioPlayerRef.current.pause();
@@ -270,7 +280,7 @@ export function FloatingVoiceAssistant() {
     window.speechSynthesis.speak(utterance);
   };
 
-  const playAudio = useCallback((base64Data: string | null, mimeType = "audio/wav", fallbackText?: string) => {
+  const playAudio = useCallback(async (base64Data: string | null, mimeType = "audio/wav", fallbackText?: string) => {
     if (isMutedRef.current || mode !== "voice") return;
 
     if (base64Data) {
@@ -281,6 +291,42 @@ export function FloatingVoiceAssistant() {
           byteNumbers[i] = byteCharacters.charCodeAt(i);
         }
         const byteArray = new Uint8Array(byteNumbers);
+
+        // Priority 1: Hardware-accelerated Web Audio API (Native buffer decoding, zero autoplay restriction on mobile)
+        const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+        if (AudioContextClass) {
+          if (!audioCtxRef.current || audioCtxRef.current.state === "closed") {
+            audioCtxRef.current = new AudioContextClass();
+          }
+          const ctx = audioCtxRef.current;
+          if (ctx.state === "suspended") {
+            await ctx.resume();
+          }
+
+          const audioBuffer = await ctx.decodeAudioData(byteArray.buffer.slice(0));
+          if (audioSourceNodeRef.current) {
+            try { audioSourceNodeRef.current.stop(); } catch {}
+          }
+
+          const source = ctx.createBufferSource();
+          source.buffer = audioBuffer;
+          source.connect(ctx.destination);
+          audioSourceNodeRef.current = source;
+
+          setVoiceState("speaking");
+          setVoiceStatusMessage("Co-Pilot speaking…");
+
+          source.onended = () => {
+            audioSourceNodeRef.current = null;
+            if (isMutedRef.current || mode !== "voice") return;
+            startListening();
+          };
+
+          source.start(0);
+          return;
+        }
+
+        // Priority 2: HTML5 Audio Object fallback
         const blob = new Blob([byteArray], { type: mimeType || "audio/wav" });
         const audioUrl = URL.createObjectURL(blob);
 
@@ -291,6 +337,7 @@ export function FloatingVoiceAssistant() {
         audio.src = audioUrl;
         audio.currentTime = 0;
         setVoiceState("speaking");
+        setVoiceStatusMessage("Co-Pilot speaking…");
 
         audio.onended = () => {
           try { URL.revokeObjectURL(audioUrl); } catch {}
@@ -316,7 +363,7 @@ export function FloatingVoiceAssistant() {
         }
         return;
       } catch (err) {
-        console.warn("[voice] blob audio creation failed:", err);
+        console.warn("[voice] audio playback error, trying fallback:", err);
       }
     }
 
@@ -399,7 +446,9 @@ export function FloatingVoiceAssistant() {
       }
 
       setVoiceLiveTranscript(data.textReply);
-      playAudio(data.audioBase64, data.audioMimeType || "audio/mpeg", data.textReply);
+      setVoiceStatusMessage("Co-Pilot speaking…");
+      setVoiceState("speaking");
+      playAudio(data.audioBase64, data.audioMimeType || "audio/wav", data.textReply);
     } catch (err: any) {
       if (err.name === "AbortError" || isMutedRef.current) {
         return;
@@ -565,22 +614,16 @@ export function FloatingVoiceAssistant() {
     voiceHistoryRef.current = [];
     voiceSessionIdRef.current = `sess_voice_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
 
-    // Prime audio element on user gesture to grant permanent browser autoplay permission
-    if (!audioPlayerRef.current) {
-      audioPlayerRef.current = new Audio();
-    }
+    // Prime Web Audio AudioContext synchronously on user click gesture (bypasses mobile browser autoplay restrictions)
     try {
-      audioPlayerRef.current.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
-      const primePromise = audioPlayerRef.current.play();
-      if (primePromise !== undefined) {
-        primePromise
-          .then(() => {
-            if (audioPlayerRef.current) {
-              audioPlayerRef.current.pause();
-              audioPlayerRef.current.currentTime = 0;
-            }
-          })
-          .catch(() => {});
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      if (AudioContextClass) {
+        if (!audioCtxRef.current || audioCtxRef.current.state === "closed") {
+          audioCtxRef.current = new AudioContextClass();
+        }
+        if (audioCtxRef.current && audioCtxRef.current.state === "suspended") {
+          audioCtxRef.current.resume();
+        }
       }
     } catch {}
 
