@@ -286,6 +286,8 @@ export function FloatingVoiceAssistant() {
   const playAudio = useCallback(async (base64Data: string | null, mimeType = "audio/wav", fallbackText?: string) => {
     if (isMutedRef.current || mode !== "voice") return;
 
+    let playedSuccessfully = false;
+
     if (base64Data) {
       try {
         const byteCharacters = atob(base64Data);
@@ -300,112 +302,108 @@ export function FloatingVoiceAssistant() {
         const audioUrl = URL.createObjectURL(blob);
         setLatestAudioBlobUrl(audioUrl);
 
-        if (!audioPlayerRef.current) {
-          audioPlayerRef.current = new Audio();
-        }
-        const audio = audioPlayerRef.current;
-        audio.src = audioUrl;
-        audio.volume = 1.0;
-        audio.currentTime = 0;
-
-        setVoiceState("speaking");
-        setVoiceStatusMessage("Co-Pilot speaking…");
-        setIsPlayingAudio(true);
-
-        audio.onended = () => {
+        const onAudioEnd = () => {
           setIsPlayingAudio(false);
-          if (isMutedRef.current || mode !== "voice") return;
-          startListening();
+          setVoiceState("idle");
+          setVoiceStatusMessage("Tap mic to speak again");
         };
 
-        audio.onerror = async () => {
-          setIsPlayingAudio(false);
-          // Secondary fallback to Web Audio API
+        // Engine 1: HTML5 Audio Element (unlocked on gesture, routes to mobile loudspeaker at volume 1.0)
+        try {
+          if (!audioPlayerRef.current) {
+            audioPlayerRef.current = new Audio();
+          }
+          const audio = audioPlayerRef.current;
+          audio.src = audioUrl;
+          audio.volume = 1.0;
+          audio.currentTime = 0;
+          audio.onended = onAudioEnd;
+
+          setVoiceState("speaking");
+          setVoiceStatusMessage("Co-Pilot speaking…");
+          setIsPlayingAudio(true);
+
+          await audio.play();
+          playedSuccessfully = true;
+        } catch (htmlErr) {
+          console.warn("[voice] HTML audio.play() rejected, attempting Web Audio API:", htmlErr);
+        }
+
+        // Engine 2: Pre-unlocked Web Audio API buffer decoding (bypasses all mobile autoplay restrictions)
+        if (!playedSuccessfully) {
           try {
             const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
             if (AudioContextClass) {
               const ctx = audioCtxRef.current || new AudioContextClass();
-              if (ctx.state === "suspended") await ctx.resume();
+              if (ctx.state === "suspended") {
+                await ctx.resume().catch(() => {});
+              }
               const audioBuffer = await ctx.decodeAudioData(byteArray.buffer.slice(0));
+              if (audioSourceNodeRef.current) {
+                try { audioSourceNodeRef.current.stop(); } catch {}
+              }
               const source = ctx.createBufferSource();
               source.buffer = audioBuffer;
               source.connect(ctx.destination);
               audioSourceNodeRef.current = source;
-              setIsPlayingAudio(true);
-              source.onended = () => {
-                setIsPlayingAudio(false);
-                if (isMutedRef.current || mode !== "voice") return;
-                startListening();
-              };
-              source.start(0);
-              return;
-            }
-          } catch {}
-          if (isMutedRef.current || mode !== "voice") return;
-          fallbackSpeechSynthesis(fallbackText);
-        };
+              source.onended = onAudioEnd;
 
-        const playPromise = audio.play();
-        if (playPromise !== undefined) {
-          playPromise.catch(async (err) => {
-            console.warn("[voice] HTML audio.play() rejected, trying Web Audio API:", err);
-            try {
-              const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-              if (AudioContextClass) {
-                const ctx = audioCtxRef.current || new AudioContextClass();
-                if (ctx.state === "suspended") await ctx.resume();
-                const audioBuffer = await ctx.decodeAudioData(byteArray.buffer.slice(0));
-                const source = ctx.createBufferSource();
-                source.buffer = audioBuffer;
-                source.connect(ctx.destination);
-                audioSourceNodeRef.current = source;
-                setIsPlayingAudio(true);
-                source.onended = () => {
-                  setIsPlayingAudio(false);
-                  if (isMutedRef.current || mode !== "voice") return;
-                  startListening();
-                };
-                source.start(0);
-                return;
-              }
-            } catch {}
-          });
+              setVoiceState("speaking");
+              setVoiceStatusMessage("Co-Pilot speaking…");
+              setIsPlayingAudio(true);
+
+              source.start(0);
+              playedSuccessfully = true;
+            }
+          } catch (webAudioErr) {
+            console.warn("[voice] Web Audio API failed:", webAudioErr);
+          }
         }
-        return;
       } catch (err) {
-        console.warn("[voice] audio playback error, trying fallback:", err);
+        console.warn("[voice] audio data decoding error:", err);
       }
     }
 
-    if (fallbackText) {
+    // Engine 3: Native Browser SpeechSynthesis Fallback if both audio streams were blocked
+    if (!playedSuccessfully && fallbackText) {
       fallbackSpeechSynthesis(fallbackText);
-    } else {
-      if (isMutedRef.current || mode !== "voice") return;
-      startListening();
     }
   }, [mode]);
 
   const handleManualPlayAudio = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!latestAudioBlobUrl) return;
+    if (!latestAudioBlobUrl && !voiceLiveTranscript) return;
+
     try {
       if (!audioPlayerRef.current) {
         audioPlayerRef.current = new Audio();
       }
       const audio = audioPlayerRef.current;
-      audio.src = latestAudioBlobUrl;
-      audio.volume = 1.0;
-      audio.currentTime = 0;
-      setIsPlayingAudio(true);
-      setVoiceState("speaking");
-      setVoiceStatusMessage("Co-Pilot speaking…");
-      audio.onended = () => {
+
+      const onAudioEnd = () => {
         setIsPlayingAudio(false);
+        setVoiceState("idle");
+        setVoiceStatusMessage("Tap mic to speak again");
       };
-      audio.play().catch(() => {
-        setIsPlayingAudio(false);
-      });
-    } catch {}
+
+      if (latestAudioBlobUrl) {
+        audio.src = latestAudioBlobUrl;
+        audio.volume = 1.0;
+        audio.currentTime = 0;
+        audio.onended = onAudioEnd;
+        setIsPlayingAudio(true);
+        setVoiceState("speaking");
+        setVoiceStatusMessage("Co-Pilot speaking…");
+
+        audio.play().catch(() => {
+          fallbackSpeechSynthesis(voiceLiveTranscript);
+        });
+      } else if (voiceLiveTranscript) {
+        fallbackSpeechSynthesis(voiceLiveTranscript);
+      }
+    } catch {
+      fallbackSpeechSynthesis(voiceLiveTranscript);
+    }
   };
 
   const sendVoiceUtteranceToBackend = async (audioBlob: Blob | null, textQuery: string) => {
@@ -560,10 +558,9 @@ export function FloatingVoiceAssistant() {
             ? new Blob(audioChunksRef.current, { type: recorder.mimeType || "audio/webm" })
             : null;
 
-        if (!spokenText && (!audioBlob || audioBlob.size < 1200)) {
-          setVoiceStatusMessage("Listening…");
-          setVoiceState("listening");
-          startListening();
+        if (!spokenText && (!audioBlob || audioBlob.size < 6000)) {
+          setVoiceStatusMessage("Tap mic to speak");
+          setVoiceState("idle");
           return;
         }
 
@@ -647,16 +644,44 @@ export function FloatingVoiceAssistant() {
     voiceHistoryRef.current = [];
     voiceSessionIdRef.current = `sess_voice_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
 
-    // Prime Web Audio AudioContext synchronously on user click gesture (bypasses mobile browser autoplay restrictions)
+    // 1. Prime & unlock Web Audio AudioContext synchronously on user click gesture
     try {
       const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
       if (AudioContextClass) {
         if (!audioCtxRef.current || audioCtxRef.current.state === "closed") {
           audioCtxRef.current = new AudioContextClass();
         }
-        if (audioCtxRef.current && audioCtxRef.current.state === "suspended") {
-          audioCtxRef.current.resume();
+        if (audioCtxRef.current.state === "suspended") {
+          audioCtxRef.current.resume().catch(() => {});
         }
+        const silentBuffer = audioCtxRef.current.createBuffer(1, 1, 22050);
+        const dummySource = audioCtxRef.current.createBufferSource();
+        dummySource.buffer = silentBuffer;
+        dummySource.connect(audioCtxRef.current.destination);
+        dummySource.start(0);
+      }
+    } catch {}
+
+    // 2. Prime & unlock HTML5 Audio element synchronously on user click gesture
+    try {
+      if (!audioPlayerRef.current) {
+        audioPlayerRef.current = new Audio();
+      }
+      const audio = audioPlayerRef.current;
+      audio.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA";
+      audio.load();
+      audio.play().then(() => {
+        audio.pause();
+        audio.currentTime = 0;
+      }).catch(() => {});
+    } catch {}
+
+    // 3. Prime speech synthesis synchronously on user click gesture
+    try {
+      if (typeof window !== "undefined" && "speechSynthesis" in window) {
+        const u = new SpeechSynthesisUtterance(" ");
+        u.volume = 0.01;
+        window.speechSynthesis.speak(u);
       }
     } catch {}
 
@@ -920,6 +945,19 @@ export function FloatingVoiceAssistant() {
                     {voiceStatusMessage || "Error"}
                   </span>
                 </>
+              ) : voiceState === "idle" ? (
+                /* Ready State: 1-Tap to Speak Next Question */
+                <button
+                  type="button"
+                  onClick={() => {
+                    isMutedRef.current = false;
+                    startListening();
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-xs transition-all cursor-pointer active:scale-95"
+                >
+                  <Mic className="w-3.5 h-3.5" />
+                  <span>Tap to Speak</span>
+                </button>
               ) : (
                 /* Listening State */
                 <>
@@ -975,13 +1013,13 @@ export function FloatingVoiceAssistant() {
               >
                 <div className="flex items-center justify-between text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
                   <span>Co-Pilot Answer</span>
-                  {latestAudioBlobUrl && (
+                  {(latestAudioBlobUrl || voiceLiveTranscript) && (
                     <button
                       type="button"
                       onClick={handleManualPlayAudio}
-                      className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-700 dark:text-emerald-300 text-[10px] font-semibold transition-all cursor-pointer shadow-2xs active:scale-95"
+                      className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-700 dark:text-emerald-300 text-xs font-bold transition-all cursor-pointer shadow-xs active:scale-95 animate-pulse"
                     >
-                      <Volume2 className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                      <Volume2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                       <span>{isPlayingAudio ? "Playing…" : "🔊 Tap to Hear"}</span>
                     </button>
                   )}
