@@ -50,8 +50,9 @@ export async function synthesizeSpeech(
           target_language_code: "en-IN",
           speaker,
           model,
+          pace: 1.05,
         }),
-        signal: AbortSignal.timeout(9000),
+        signal: AbortSignal.timeout(25000),
       });
 
       if (res.ok) {

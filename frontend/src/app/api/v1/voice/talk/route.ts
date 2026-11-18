@@ -159,13 +159,14 @@ export async function POST(req: NextRequest) {
           const formData = new FormData();
           const blob = new Blob([buffer], { type: mimeType || "audio/webm" });
           formData.append("file", blob, "audio.webm");
-          formData.append("model", "whisper-large-v3");
+          const whisperModel = (process.env.GROQ_WHISPER_MODEL || "whisper-large-v3-turbo").trim();
+          formData.append("model", whisperModel);
 
           const groqStt = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", {
             method: "POST",
             headers: { Authorization: `Bearer ${GROQ_KEY}` },
             body: formData,
-            signal: AbortSignal.timeout(3500),
+            signal: AbortSignal.timeout(15000),
           });
 
           if (groqStt.ok) {
@@ -330,7 +331,31 @@ ${rowsFormatted.join("\n")}
 
     let systemInstruction = "";
 
-    if (isStockPage) {
+    if (!isChatMode) {
+      // ── ULTRA-LEAN VOICE MODE PROMPT (Prevents token rate limits, ultra-fast 150ms inference) ──
+      if (isStockPage) {
+        const sym = stockFacts?.symbol || "Active Stock";
+        const name = stockFacts?.companyName || sym;
+        const cmp = stockFacts?.price ? `₹${stockFacts.price}` : "Available on screen";
+        const chg = stockFacts?.changePercent || "0.00%";
+        const pe = stockFacts?.pe || "N/A";
+        const score = stockFacts?.smartScore || "Moderate";
+
+        systemInstruction = `You are Priya, friendly Indian equity voice co-pilot for MyStockVision.
+Current Stock: ${sym} (${name}) | CMP: ${cmp} (${chg}) | P/E: ${pe} | Forensic Score: ${score}
+Rules:
+1. Speak a natural, conversational reply strictly under 30 words (1-2 sentences).
+2. NO markdown, NO asterisks, NO bullet points, NO tables.
+3. Answer accurately for beginners. If a metric is N/A, say it simply without guessing.`;
+      } else {
+        systemInstruction = `You are Priya, friendly Indian market voice co-pilot for MyStockVision.
+Benchmark Rates: NIFTY 50 around 25,387 | SENSEX around 82,532 | BANK NIFTY around 54,120.
+Rules:
+1. Speak a natural, conversational reply strictly under 30 words (1-2 sentences).
+2. NO markdown, NO asterisks, NO bullet points, NO tables.
+3. Answer accurately for beginners.`;
+      }
+    } else if (isStockPage) {
       const sym = stockFacts?.symbol || "Active Stock";
       const name = stockFacts?.companyName || sym;
       const cmp = stockFacts?.price ? `₹${stockFacts.price}` : "Available on screen";
@@ -491,7 +516,7 @@ ${
                   content: c.parts?.[0]?.text || "",
                 })),
               ],
-              max_tokens: isChatMode ? 380 : 120,
+              max_tokens: isChatMode ? 380 : 70,
               temperature: 0.35,
             }),
             signal: AbortSignal.timeout(5000),
@@ -526,7 +551,7 @@ ${
                 systemInstruction: { parts: [{ text: systemInstruction }] },
                 generationConfig: {
                   temperature: 0.35,
-                  maxOutputTokens: isChatMode ? 380 : 120,
+                  maxOutputTokens: isChatMode ? 380 : 70,
                 },
               }),
               signal: AbortSignal.timeout(5000),

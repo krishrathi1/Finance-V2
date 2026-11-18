@@ -270,12 +270,20 @@ export function FloatingVoiceAssistant() {
     window.speechSynthesis.speak(utterance);
   };
 
-  const playAudio = useCallback((base64Data: string | null, mimeType = "audio/mpeg", fallbackText?: string) => {
+  const playAudio = useCallback((base64Data: string | null, mimeType = "audio/wav", fallbackText?: string) => {
     if (isMutedRef.current || mode !== "voice") return;
 
     if (base64Data) {
       try {
-        const audioUrl = `data:${mimeType};base64,${base64Data}`;
+        const byteCharacters = atob(base64Data);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+          byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        const blob = new Blob([byteArray], { type: mimeType || "audio/wav" });
+        const audioUrl = URL.createObjectURL(blob);
+
         if (!audioPlayerRef.current) {
           audioPlayerRef.current = new Audio();
         }
@@ -285,22 +293,30 @@ export function FloatingVoiceAssistant() {
         setVoiceState("speaking");
 
         audio.onended = () => {
+          try { URL.revokeObjectURL(audioUrl); } catch {}
           if (isMutedRef.current || mode !== "voice") return;
           startListening();
         };
 
-        audio.onerror = () => {
+        audio.onerror = (e) => {
+          console.warn("[voice] audio element error:", e);
+          try { URL.revokeObjectURL(audioUrl); } catch {}
           if (isMutedRef.current || mode !== "voice") return;
           fallbackSpeechSynthesis(fallbackText);
         };
 
-        audio.play().catch(() => {
-          if (isMutedRef.current || mode !== "voice") return;
-          fallbackSpeechSynthesis(fallbackText);
-        });
+        const playPromise = audio.play();
+        if (playPromise !== undefined) {
+          playPromise.catch((err) => {
+            console.warn("[voice] audio play rejected:", err);
+            try { URL.revokeObjectURL(audioUrl); } catch {}
+            if (isMutedRef.current || mode !== "voice") return;
+            fallbackSpeechSynthesis(fallbackText);
+          });
+        }
         return;
-      } catch {
-        // fallback to speech synthesis
+      } catch (err) {
+        console.warn("[voice] blob audio creation failed:", err);
       }
     }
 
@@ -548,6 +564,26 @@ export function FloatingVoiceAssistant() {
     isMutedRef.current = false;
     voiceHistoryRef.current = [];
     voiceSessionIdRef.current = `sess_voice_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+
+    // Prime audio element on user gesture to grant permanent browser autoplay permission
+    if (!audioPlayerRef.current) {
+      audioPlayerRef.current = new Audio();
+    }
+    try {
+      audioPlayerRef.current.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
+      const primePromise = audioPlayerRef.current.play();
+      if (primePromise !== undefined) {
+        primePromise
+          .then(() => {
+            if (audioPlayerRef.current) {
+              audioPlayerRef.current.pause();
+              audioPlayerRef.current.currentTime = 0;
+            }
+          })
+          .catch(() => {});
+      }
+    } catch {}
+
     setMode("voice");
     startListening();
   };
