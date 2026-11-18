@@ -36,6 +36,7 @@ export function FloatingVoiceAssistant() {
   const [voiceLiveTranscript, setVoiceLiveTranscript] = useState<string>("");
   const [latestAudioBlobUrl, setLatestAudioBlobUrl] = useState<string | null>(null);
   const [isPlayingAudio, setIsPlayingAudio] = useState<boolean>(false);
+  const [selectedSpeaker, setSelectedSpeaker] = useState<"shreya" | "aditya" | "kavya">("shreya");
 
   const voiceSessionIdRef = useRef<string>("");
   const voiceHistoryRef = useRef<ChatTurn[]>([]);
@@ -440,6 +441,7 @@ export function FloatingVoiceAssistant() {
           sessionId: voiceSessionIdRef.current,
           message: textQuery.trim(),
           mode: "voice",
+          speaker: selectedSpeaker,
           audioData: base64Audio,
           mimeType,
           history: voiceHistoryRef.current.slice(-6),
@@ -1002,6 +1004,39 @@ export function FloatingVoiceAssistant() {
               >
                 <X className="w-4 h-4 stroke-[2.5]" />
               </button>
+            </div>
+
+            {/* Human Voice Persona Selector */}
+            <div className="flex items-center justify-between px-1 text-[11px] font-medium text-zinc-500 dark:text-zinc-400">
+              <span className="flex items-center gap-1">
+                <Sparkles className="w-3 h-3 text-emerald-500" />
+                <span>Voice Persona:</span>
+              </span>
+              <div className="flex items-center gap-1 bg-zinc-100 dark:bg-zinc-800/80 p-0.5 rounded-lg border border-zinc-200/50 dark:border-zinc-700/60">
+                {(
+                  [
+                    { id: "shreya", label: "Shreya (Warm)" },
+                    { id: "aditya", label: "Aditya (Male)" },
+                    { id: "kavya", label: "Kavya" },
+                  ] as const
+                ).map((v) => (
+                  <button
+                    key={v.id}
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedSpeaker(v.id);
+                    }}
+                    className={`px-2 py-0.5 rounded-md text-[10px] transition-all cursor-pointer ${
+                      selectedSpeaker === v.id
+                        ? "bg-white dark:bg-zinc-900 text-emerald-600 dark:text-emerald-400 font-bold shadow-2xs"
+                        : "hover:text-zinc-800 dark:hover:text-zinc-200"
+                    }`}
+                  >
+                    {v.label}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* Live Spoken Transcript / Response Preview with Loudspeaker Play Button */}

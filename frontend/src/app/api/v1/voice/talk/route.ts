@@ -624,7 +624,8 @@ ${
 
     if (!isChatMode) {
       try {
-        const speech = await synthesizeSpeech(textReply);
+        const requestedSpeaker = (body as any).speaker || undefined;
+        const speech = await synthesizeSpeech(textReply, { speaker: requestedSpeaker });
         audioBase64 = speech.audioBase64;
         audioMimeType = speech.mimeType;
       } catch (err: any) {

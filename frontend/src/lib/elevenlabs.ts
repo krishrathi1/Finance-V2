@@ -6,26 +6,49 @@
 export interface SynthesizeOptions {
   voiceId?: string;
   modelId?: string;
+  speaker?: string;
   stability?: number;
   similarityBoost?: number;
+  temperature?: number;
+  pace?: number;
+}
+
+/**
+ * Normalizes raw financial terms, symbols, and abbreviations into natural spoken human speech.
+ * Prevents mechanical readouts like "P slash E", "C-M-P", or "plus zero point four percent".
+ */
+export function normalizeTextForNaturalSpeech(raw: string): string {
+  return raw
+    .replace(/[*#_`~]/g, "")
+    .replace(/\[.*?\]/g, "")
+    .replace(/\bCMP\b/gi, "current price")
+    .replace(/\bP\/E\b/gi, "P E ratio")
+    .replace(/\bPE\b/g, "P E")
+    .replace(/\bEPS\b/g, "E P S")
+    .replace(/\bROCE\b/g, "R O C E")
+    .replace(/\bROE\b/g, "R O E")
+    .replace(/\bYoY\b/gi, "year on year")
+    .replace(/\bQoQ\b/gi, "quarter on quarter")
+    .replace(/\bFII\b/g, "F I I")
+    .replace(/\bDII\b/g, "D I I")
+    .replace(/\bCr\b/g, "crore")
+    .replace(/₹\s*/g, " rupees ")
+    .replace(/%\s*/g, " percent ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 /**
  * Converts text into natural, lifelike conversational speech.
- * Primary: Sarvam AI Indian Text-to-Speech (native en-IN, speaker 'priya').
+ * Primary: Sarvam AI Indian Text-to-Speech (native en-IN, expressive conversational speaker 'shreya').
  * Fallback: ElevenLabs ('eleven_multilingual_v2', Lily / custom voice).
  */
 export async function synthesizeSpeech(
   text: string,
   options?: SynthesizeOptions
 ): Promise<{ audioBase64: string; mimeType: string }> {
-  // Clean markdown and non-verbal tokens for crisp, natural human speech
-  const cleanedText = text
-    .replace(/[*#_`~]/g, "")
-    .replace(/\[.*?\]/g, "")
-    .replace(/₹/g, " rupees ")
-    .replace(/\s+/g, " ")
-    .trim();
+  // Convert financial symbols & jargon into natural conversational human speech
+  const cleanedText = normalizeTextForNaturalSpeech(text);
 
   if (!cleanedText) {
     throw new Error("Cannot synthesize empty text");
@@ -34,11 +57,14 @@ export async function synthesizeSpeech(
   const sarvamKey = (process.env.SARVAM_API_KEY || "").trim();
   const elevenlabsKey = (process.env.ELEVENLABS_API_KEY || "").trim();
 
-  // 1. Try Sarvam AI Indian Text-to-Speech if configured
+  // 1. Try Sarvam AI Indian Text-to-Speech with ultra-natural human conversational voice
   if (sarvamKey) {
     try {
-      const speaker = process.env.SARVAM_SPEAKER || "priya";
+      // 'shreya' is Sarvam AI's warmest, most expressive conversational human voice
+      const speaker = options?.speaker || process.env.SARVAM_SPEAKER || "shreya";
       const model = process.env.SARVAM_MODEL || "bulbul:v3";
+      const pace = options?.pace ?? 0.98; // Natural conversational human breathing pace
+      const temperature = options?.temperature ?? 0.65; // Dynamic prosody & inflection (eliminates robotic monotony)
 
       // Enforce Sarvam AI's strict 500-character limit per input item
       let sarvamInput = cleanedText;
@@ -65,7 +91,9 @@ export async function synthesizeSpeech(
           target_language_code: "en-IN",
           speaker,
           model,
-          pace: 1.05,
+          pace,
+          temperature,
+          speech_sample_rate: 24000, // 24kHz studio broadcast fidelity (eliminates hollow telephone sound)
         }),
         signal: AbortSignal.timeout(25000),
       });
