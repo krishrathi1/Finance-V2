@@ -5,6 +5,7 @@ import { VoiceTalkRequest, VoiceTalkResponse } from "@/lib/voice/types";
 import { getLiveTickerRows } from "@/lib/market/indian-market";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60; // Allow full execution window for LLM & TTS inference on Vercel
 
 // In-memory cache for live ticker rows to eliminate network latency (60s TTL)
 interface CachedTickerRow {

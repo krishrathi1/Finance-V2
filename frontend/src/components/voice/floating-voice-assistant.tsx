@@ -355,7 +355,20 @@ export function FloatingVoiceAssistant() {
 
       if (isMutedRef.current) return;
 
-      const data: VoiceTalkResponse = await res.json();
+      const contentType = res.headers.get("content-type") || "";
+      let data: VoiceTalkResponse;
+      if (contentType.includes("application/json")) {
+        data = await res.json();
+      } else {
+        const rawText = await res.text();
+        if (res.status === 504) {
+          throw new Error("Server response timed out (504). Please try speaking again.");
+        } else if (res.status === 404) {
+          throw new Error("Endpoint /api/v1/voice/talk not found (404). Check Vercel root directory.");
+        } else {
+          throw new Error(`Server returned error (${res.status}). Verify GROQ_API_KEY in Vercel settings.`);
+        }
+      }
 
       if (!res.ok || !data.success) {
         throw new Error(data.error || `Server responded with ${res.status}`);
@@ -643,7 +656,20 @@ export function FloatingVoiceAssistant() {
         }),
       });
 
-      const data: VoiceTalkResponse = await res.json();
+      const contentType = res.headers.get("content-type") || "";
+      let data: VoiceTalkResponse;
+      if (contentType.includes("application/json")) {
+        data = await res.json();
+      } else {
+        const rawText = await res.text();
+        if (res.status === 504) {
+          throw new Error("Server response timed out (504). Please try your question again.");
+        } else if (res.status === 404) {
+          throw new Error("API route not found (404). Check Vercel root directory setting.");
+        } else {
+          throw new Error(`Server returned error (${res.status}). Verify GROQ_API_KEY in Vercel settings.`);
+        }
+      }
 
       if (!res.ok || !data.success || !data.textReply) {
         throw new Error(data.error || "Unable to formulate a response.");
